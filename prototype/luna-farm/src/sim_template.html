@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Luna Farm</title>
+<style>
+  html,body{margin:0;background:#2f4a2a;font-family:ui-monospace,Menlo,monospace;color:#f3efe4}
+  #wrap{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px}
+  #stage{position:relative;width:min(96vw,1120px);aspect-ratio:640/400;border:4px solid #2b1d17;overflow:hidden;background:#5e9a4d}
+  #stage canvas{position:absolute;inset:0;width:100%;height:100%}
+  #world{image-rendering:pixelated;image-rendering:crisp-edges}
+  p{margin:0;font-size:12px;opacity:.8;max-width:760px;text-align:center;line-height:1.5}
+  button{font:inherit;font-size:13px;background:#2b1d17;color:#f3efe4;border:0;padding:5px 9px;border-radius:3px;margin:2px}
+  button[data-dl]{background:#5e4030} button[data-ev]{background:#2b3d2a} button.on{outline:2px solid #ffd75e}
+  .row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px}
+  .lbl{font-size:12px;opacity:.85;margin-right:4px;min-width:70px;text-align:right}
+  input[type=range]{width:200px} label{font-size:12px;opacity:.85}
+  #pins{position:absolute;inset:0;pointer-events:none}
+  #stage.commenting{cursor:crosshair} #stage.commenting #pins{pointer-events:auto}
+  .pin{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;cursor:pointer;font-size:12px;font-weight:bold;color:#2b1d17;background:#ffd75e;border:2px solid #2b1d17;border-radius:12px 12px 12px 2px;padding:1px 6px;box-shadow:0 2px 0 #2b1d17}
+  .pin.active{background:#fff}
+  #notes{width:min(96vw,1120px);display:none;gap:8px;flex-direction:column;background:#243a20;border:2px solid #2b1d17;border-radius:4px;padding:8px}
+  #notes.show{display:flex}
+  .note{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+  .note b{background:#ffd75e;color:#2b1d17;border-radius:10px;padding:0 6px;min-width:18px;text-align:center}
+  .note textarea{flex:1;font:inherit;font-size:13px;background:#1b2c18;color:#f3efe4;border:1px solid #3d5a38;border-radius:3px;padding:4px;min-height:34px;resize:vertical}
+  .note button{padding:2px 6px}
+  #frozen{position:absolute;top:8px;right:8px;background:rgba(43,29,23,.85);color:#ffd75e;font-size:12px;padding:3px 8px;border-radius:3px;display:none}
+  #modal{position:fixed;inset:0;background:rgba(20,30,18,.85);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+  #modal.show{display:flex}
+  #modalBox{background:#243a20;border:2px solid #2b1d17;border-radius:6px;max-width:min(94vw,900px);max-height:90vh;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+  #modalBox textarea{width:100%;min-height:180px;font:inherit;font-size:13px;background:#1b2c18;color:#f3efe4;border:1px solid #3d5a38;border-radius:3px;padding:6px;box-sizing:border-box}
+  #modalBox img{max-width:100%;image-rendering:pixelated;border:2px solid #2b1d17}
+  #modalBox .hint{font-size:12px;opacity:.8}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage"><canvas id="world" width="640" height="400"></canvas><canvas id="ui"></canvas><div id="pins"></div><div id="frozen">frozen for comments</div></div>
+  <div class="row"><span class="lbl">Comments:</span>
+    <button id="cmode">add comments</button><button id="cfreeze">freeze</button><button id="cexport">copy as markdown</button><button id="cpng">download annotated PNG</button><button id="cclear">clear</button>
+  </div>
+  <div id="notes"></div>
+  <div id="modal"><div id="modalBox"></div></div>
+  <div class="row">
+    <label>time <input id="time" type="range" min="0" max="1000" value="180"></label>
+    <button id="pause">pause clock</button>
+    <label>day <select id="period"><option value="60">1 min</option><option value="180" selected>3 min</option><option value="600">10 min</option><option value="86400">real time</option></select></label>
+  </div>
+  <div class="row"><span class="lbl">Weather:</span>
+    <button data-w="sun">☀ sun</button><button data-w="rain" id="rain">☂ rain</button><button data-w="snow">❄ snow</button>
+    <label>mode <select id="wmode"><option value="season" selected>seasonal</option><option value="manual">manual</option><option value="live">live location</option></select></label>
+    <label>season <select id="season"><option value="auto" selected>auto</option><option>spring</option><option>summer</option><option>autumn</option><option>winter</option></select></label>
+    <input id="city" placeholder="city for live weather" style="font:inherit;font-size:12px;background:#1b2c18;color:#f3efe4;border:1px solid #3d5a38;border-radius:3px;padding:4px 6px;width:150px;display:none">
+    <button id="cityGo" style="display:none">go</button><span id="wnote" style="font-size:11px;opacity:.75"></span>
+  </div>
+  <div class="row"><span class="lbl">Farm:</span>
+    <button data-ev="reset">reset farm</button>
+  </div>
+  <div class="row"><span class="lbl">Actions:</span>
+    <select id="actionSel" style="font:inherit;font-size:13px;background:#1b2c18;color:#f3efe4;border:1px solid #3d5a38;border-radius:3px;padding:4px"></select>
+    <button id="actionGo">do it</button>
+    <button id="actionList">show all</button>
+  </div>
+  <div id="actionLinks" class="row" style="display:none;max-width:1000px;font-size:12px;line-height:2"></div>
+  <p>Click a sheep to pet it — if its wool is long you shear it instead and bank the wool. Click Digital Luna to pet her. Click empty grass to throw a stick for her. Rain comes on its own now and then; everyone piles into the barn and DL goes in last.</p>
+</div>
+<script>
+// ------------------------------------------------------------------
+// RULES: every tunable in one place. Change numbers here, not in the code.
+// ------------------------------------------------------------------
+const RULES = {
+  flockCap: 9,             // max sheep + lambs on the farm
+  woolGrowSec: 150,        // seconds for a fleece to grow from shorn to full
+  shearReadyAt: .8,        // wool level where a click shears instead of pets
+  lambChancePerSec: .002,  // per-sheep chance of a lamb each second (when settled)
+  lambGrowMs: 90000,       // lamb -> named sheep
+  tuftRegrowPerSec: .018,  // grass regrowth
+  tuftBitePerSec: .07,     // how fast a sheep eats a tuft
+  rain: { rollEveryMs: [60000, 180000], chance: .35, lengthMs: [20000, 45000] },
+  season: { realDays: 9 },   // one in-world season lasts ~9 real days (10% of a real season)
+  speed: { sheepWander: 9, sheepWalk: 16, lunaRun: 80, lunaFetchBack: 45, lunaCarry: 34 },
+  rideMs: 6000, rideManualMs: 8000,
+  farmer: { visitsAt: [.06, .38], shearAt: .6 },          // clock.t fractions when he comes; shears sheep at this wool
+  merchant: { everyMs: 240000, stayMs: 30000, woolPrice: 3 },
+  upgrades: [["flowerbed", 12], ["hay2", 30], ["scarecrow", 60]],   // auto-bought in order
+
+  petTagMs: 1800,
+};
+const META = __META__;
+const PHASES = __PHASES__;
+const sheetImg = new Image(); sheetImg.src = "__SHEET__";
+const BG = {};
+for (const [k, src] of Object.entries({ day: "__BG_DAY__", dusk: "__BG_DUSK__", night: "__BG_NIGHT__", dawn: "__BG_DAWN__",
+  snow_day: "__BG_SNOW_DAY__", snow_dusk: "__BG_SNOW_DUSK__", snow_night: "__BG_SNOW_NIGHT__", snow_dawn: "__BG_SNOW_DAWN__" })) { BG[k] = new Image(); BG[k].src = src; }
+
+// ---------- runtime (mirrors farm.js) ----------
+function frameAt(sprite, anim, t) { const a = META.sprites[sprite].anims[anim]; return Math.floor(t / (1000 / a.fps)) % a.frames; }
+function shadow(ctx, x, y, w) { ctx.fillStyle = "rgba(43,29,23,.22)"; ctx.beginPath(); ctx.ellipse(Math.round(x), Math.round(y), w * .38, 2.5, 0, 0, Math.PI * 2); ctx.fill(); }
+function drawSprite(ctx, sprite, anim, frame, x, y, flip = false, withShadow = true) {
+  const s = META.sprites[sprite], a = s.anims[anim];
+  if (withShadow) shadow(ctx, x + s.w / 2, y + s.h - 1, s.w);
+  const sx = (frame % a.frames) * s.w, sy = a.y;
+  if (flip) { ctx.save(); ctx.translate(Math.round(x) + s.w, Math.round(y)); ctx.scale(-1, 1); ctx.drawImage(sheetImg, sx, sy, s.w, s.h, 0, 0, s.w, s.h); ctx.restore(); }
+  else ctx.drawImage(sheetImg, sx, sy, s.w, s.h, Math.round(x), Math.round(y), s.w, s.h);
+}
+
+const woolLevel = f => f < .33 ? 0 : f < .8 ? 1 : 2;
+let woolBank = 0;
+const ICON = { shears:4, bang:5, heart:8, coin:9 };
+
+// ---------- clock + weather ----------
+const clock = { t: .18, period: 180, paused: false };
+function phaseOf(t) { return t < .42 ? "day" : t < .52 ? "dusk" : t < .92 ? "night" : "dawn"; }
+const timeEl = document.getElementById("time"), pauseBtn = document.getElementById("pause"), periodEl = document.getElementById("period"), rainBtn = document.getElementById("rain");
+timeEl.addEventListener("input", () => { clock.t = timeEl.value / 1000; });
+pauseBtn.addEventListener("click", () => { clock.paused = !clock.paused; pauseBtn.textContent = clock.paused ? "resume clock" : "pause clock"; });
+function realTime() { const d = new Date(); return ((d.getHours() * 60 + d.getMinutes()) / 1440 + .75) % 1; }
+periodEl.addEventListener("change", () => { clock.period = +periodEl.value; if (clock.period === 86400) clock.t = realTime(); });
+// weather: sun | rain | snow, plus temperature and seasons
+let weather = "sun", rain = false, temp = 14, liveNote = "";
+const SEASONS = ["spring","summer","autumn","winter"];
+const SEASON_TEMP = { spring: 12, summer: 26, autumn: 10, winter: -3 };
+const SEASON_ODDS = { spring: { rain: .35, snow: .02 }, summer: { rain: .18, snow: 0 }, autumn: { rain: .42, snow: .05 }, winter: { rain: .05, snow: .5 } };
+let epoch = Date.now(); try { epoch = +localStorage.getItem("farm-epoch") || Date.now(); localStorage.setItem("farm-epoch", epoch); } catch (e) {}
+const wmodeEl = document.getElementById("wmode"), seasonEl = document.getElementById("season"), cityEl = document.getElementById("city"), cityGo = document.getElementById("cityGo"), wnote = document.getElementById("wnote");
+function currentSeason() {
+  if (seasonEl.value !== "auto") return seasonEl.value;
+  const len = RULES.season.realDays * 86400e3;
+  return SEASONS[Math.floor((Date.now() - epoch) / len) % 4];
+}
+function setWeather(w) { weather = w; rain = w === "rain"; rainUntil = 0;
+  document.querySelectorAll("button[data-w]").forEach(b => b.classList.toggle("on", b.dataset.w === w)); }
+document.querySelectorAll("button[data-w]").forEach(b => b.addEventListener("click", () => { wmodeEl.value = "manual"; wmodeChanged(); setWeather(b.dataset.w); }));
+function wmodeChanged() { const live = wmodeEl.value === "live"; cityEl.style.display = cityGo.style.display = live ? "inline-block" : "none"; wnote.textContent = ""; if (wmodeEl.value !== "live") liveStop(); }
+wmodeEl.addEventListener("change", wmodeChanged);
+// live weather via open-meteo
+let liveTimer = null;
+function liveStop() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } }
+async function liveFetch() {
+  try {
+    const g = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityEl.value)}&count=1`)).json();
+    if (!g.results || !g.results.length) { wnote.textContent = "city not found"; return; }
+    const { latitude, longitude, name } = g.results[0];
+    const w = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`)).json();
+    const code = w.current.weather_code; temp = w.current.temperature_2m;
+    setWeather([71,73,75,77,85,86].includes(code) ? "snow" : ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95 ? "rain" : "sun"));
+    wnote.textContent = `${name}: ${Math.round(temp)}°, live`;
+  } catch (e) { wnote.textContent = "live weather unavailable here — using seasons"; wmodeEl.value = "season"; wmodeChanged(); }
+}
+cityGo.addEventListener("click", () => { liveStop(); liveFetch(); liveTimer = setInterval(liveFetch, 600000); });
+
+// ---------- world geometry ----------
+const world = document.getElementById("world"), wc = world.getContext("2d"); wc.imageSmoothingEnabled = false;
+const ui = document.getElementById("ui"), uc = ui.getContext("2d");
+const W = 640, H = 400;
+const spr = document.createElement("canvas"); spr.width = W; spr.height = H; const sc = spr.getContext("2d"); sc.imageSmoothingEnabled = false;
+const mask = document.createElement("canvas"); mask.width = W; mask.height = H; const mc = mask.getContext("2d");
+const C = [320, 208], RX = 304, RY = 164;
+const BARN = { x0: 268, x1: 388, y0: 0, y1: 76 };
+function inBarn(x, y) { return x > BARN.x0 && x < BARN.x1 && y > BARN.y0 && y < BARN.y1; }
+function insideField(x, y, m = .9) { return Math.abs(x - C[0]) / RX + Math.abs(y - C[1]) / RY < m && !inBarn(x, y); }
+function clampField(o, foot) {
+  if (o.outside || o.leaving || o.entering) return;
+  const fx = o.x + foot[0], fy = o.y + foot[1];
+  if (inBarn(fx, fy)) { o.y += 1.5; return; }
+  if (!insideField(fx, fy, .97)) { o.x += (C[0] - fx) * .04; o.y += (C[1] - fy) * .04; if (o.tx !== null && o.tx !== undefined && !insideField(o.tx, o.ty, .9)) { o.tx = C[0] + (o.tx - C[0]) * .85; o.ty = C[1] + (o.ty - C[1]) * .85; } }
+}
+function segHitsBarn(x0, y0, x1, y1) { for (let i = 0; i <= 12; i++) { const t = i / 12; if (inBarn(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return true; } return false; }
+function waypointAround(x0, y0, x1, y1) { const below = BARN.y1 + 10, c = [[BARN.x0 - 12, below], [BARN.x1 + 12, below]]; c.sort((a, b) => (Math.hypot(a[0]-x0,a[1]-y0)+Math.hypot(a[0]-x1,a[1]-y1)) - (Math.hypot(b[0]-x0,b[1]-y0)+Math.hypot(b[0]-x1,b[1]-y1))); return { x: c[0][0], y: c[0][1] }; }
+// Move o (sprite top-left) so its foot reaches (o.tx,o.ty). Returns true on arrival.
+function stepToward(o, foot, sp, dt) {
+  const fx = o.x + foot[0], fy = o.y + foot[1];
+  let gx = o.tx, gy = o.ty;
+  if (o.wp) { gx = o.wp.x; gy = o.wp.y; }
+  else if (!o.outside && segHitsBarn(fx, fy, gx, gy)) { o.wp = waypointAround(fx, fy, gx, gy); gx = o.wp.x; gy = o.wp.y; }
+  const dx = gx - fx, dy = gy - fy, d = Math.hypot(dx, dy);
+  if (d < 1.2) { if (o.wp) { o.wp = null; return false; } return true; }
+  const v = Math.min(sp, sp * (0.35 + d / 12));
+  o.x += dx / d * v * dt; o.y += dy / d * v * dt;
+  if (Math.abs(dx) > 2) o.dir = dx < 0 ? -1 : 1;
+  return false;
+}
+function randomFoot() { for (let i = 0; i < 60; i++) { const x = 40 + Math.random() * 560, y = 60 + Math.random() * 290; if (Math.abs(x - 320) / RX + Math.abs(y - 208) / RY < .78 && !inBarn(x, y) && !inBarn(x, y - 8)) return { x, y }; } return { x: 320, y: 230 }; }
+
+// landmarks (foot coords in world px)
+const SPOT = {
+  trough: { x: 150, y: 216 }, hay: { x: 240, y: 146 }, gate: { x: 506, y: 262 }, web: { x: 488, y: 250 }, gateOut: { x: 560, y: 290 }, offstage: { x: 690, y: 330 },
+  barnDoor: { x: 316, y: 80 }, tree: { x: 78, y: 200 }, front: { x: 320, y: 300 },
+};
+const TOOLS = { file: SPOT.trough, shell: SPOT.hay, web: SPOT.web, db: SPOT.barnDoor };
+const POSTS = [[168, 108], [222, 82], [452, 104], [516, 136]];   // fence post tops for the bird
+const FLOWERS = [[120, 240], [400, 312], [500, 224], [280, 184]];
+
+const SW = META.sprites.sheep.w, SH = META.sprites.sheep.h, LW = META.sprites.digital_luna.w, LH = META.sprites.digital_luna.h;
+const SFOOT = [SW * .5, SH - 2], LFOOT = [LW * .5, LH - 2];
+const NAMES = ["Clover","Daisy","Biscuit","Pepper","Maple","Willow","Poppy","Hazel","Juniper"];
+const COLORS = ["#3a7bd5","#e0a52c","#2fa07a","#7c4dbf","#e0602c","#d33a2f","#2aa0b8","#a04ad0","#8b8b2a"];
+
+let sheep, luna, rabbit, flies, tufts, bird, bflies, nameIdx, troubleSince = null;
+let farmer = null, merchant = null, coins = 0, owned = [], lastVisitDay = -1, merchantAt = 0, dayCount = 0, lastT = 0;
+let prints = [], mud = [], wasSnowy = false;
+function stampGround(o, foot, now, snowy) {
+  const fx = o.x + foot[0], fy = o.y + foot[1];
+  if (o.lastStamp && Math.hypot(fx - o.lastStamp.x, fy - o.lastStamp.y) < 7) return;
+  o.lastStamp = { x: fx, y: fy }; o.stampSide = !o.stampSide;
+  if (snowy) { prints.push({ x: fx + (o.stampSide ? -3 : 3), y: fy - 1, t: now }); if (prints.length > 600) prints.shift(); }
+  else if (rain) { mud.push({ x: fx, y: fy - 1, t: now, r: 3 + Math.random() * 3 }); if (mud.length > 220) mud.shift(); }
+}
+function tickGround(now, snowy) {
+  if (wasSnowy && !snowy) {          // melt: tracks become mud
+    for (const p of prints) if (Math.random() < .35) mud.push({ x: p.x, y: p.y, t: now, r: 4 + Math.random() * 4 });
+    prints = []; if (mud.length > 260) mud = mud.slice(-260);
+  }
+  wasSnowy = snowy;
+  if (!snowy) prints = [];
+  mud = mud.filter(m => now - m.t < (rain ? 600000 : 240000));
+}
+const GW = META.sprites.grass.w, GH = META.sprites.grass.h;
+function makeTufts() {
+  const out = [], inset = .78, corners = [[320, 44], [624, 208], [320, 372], [16, 208]].map(([x, y]) => [320 + (x - 320) * inset, 208 + (y - 208) * inset]);
+  for (let e = 0; e < 4; e++) { const [ax, ay] = corners[e], [bx, by] = corners[(e + 1) % 4];
+    for (let i = 1; i < 9; i++) { const t = i / 9, x = ax + (bx - ax) * t + (Math.random() - .5) * 10, y = ay + (by - ay) * t + (Math.random() - .5) * 6;
+      if (inBarn(x, y) || inBarn(x, y - 10) || (e === 1 && t > .15 && t < .55)) continue; out.push({ x, y, level: .4 + Math.random() * .6, claimed: null }); } }
+  for (let i = 0; i < 6; i++) { const f = randomFoot(); out.push({ x: f.x, y: f.y, level: Math.random(), claimed: null }); }
+  return out;
+}
+function nearestTuft(fx, fy, minLevel) { let best = null, bd = 1e9; for (const t of tufts) { if (t.claimed || t.level < minLevel) continue; const dd = Math.hypot(t.x - fx, t.y - fy); if (dd < bd) { bd = dd; best = t; } } return best; }
+
+function makeSheep(i, foot, outside = false) {
+  return { name: NAMES[i % NAMES.length], color: COLORS[i % COLORS.length], x: foot.x - SFOOT[0], y: foot.y - SFOOT[1], dir: Math.random() < .5 ? 1 : -1, t0: performance.now() - Math.random() * 4000,
+           tx: null, ty: null, wp: null, lambs: [], wool: Math.random() * .6, wander: 0, path: [], outside, icon: null, iconUntil: 0, tagUntil: 0, resting: false, entering: outside };
+}
+function reset() {
+  tufts = makeTufts(); nameIdx = 5; woolBank = 0; coins = 0; owned = []; farmer = null; merchant = null; merchantAt = performance.now() + 45000;
+  sheep = [0, 1, 2, 3, 4].map(i => makeSheep(i, randomFoot()));
+  luna = { x: 120, y: 280, dir: 1, anim: "sit", t0: 0, target: null, idle: 0, manual: null, manualUntil: 0, wp: null, routine: null, icon: null };
+  rabbit = null; bird = null; bflies = [0, 1].map(i => ({ x: FLOWERS[i][0], y: FLOWERS[i][1], p: Math.random() * 6, home: FLOWERS[i] }));
+  flies = Array.from({ length: 14 }, () => ({ ...randomFoot(), p: Math.random() * 6, s: .5 + Math.random() }));
+}
+reset();
+
+function setPath(s, pts) { s.path = pts.slice(); s.tx = s.ty = null; s.wp = null; nextLeg(s); }
+function nextLeg(s) { if (s.path.length) { const p = s.path.shift(); s.tx = p.x; s.ty = p.y; return true; } return false; }
+function bubble(s, icon, ms) { s.icon = icon; s.iconUntil = performance.now() + ms; }
+function drawIconMaybe() {}
+
+// ---------- simulation ----------
+function tick(dt, now) {
+  if (!clock.paused) { clock.t = clock.period === 86400 ? realTime() : (clock.t + dt / clock.period) % 1; timeEl.value = Math.round(clock.t * 1000); }
+  autoWeather(now);
+  const phase = phaseOf(clock.t), night = phase === "night";
+  for (const t of tufts) t.level = Math.min(1, t.level + dt * RULES.tuftRegrowPerSec);
+
+  // ----- sheep (just sheep now) -----
+  for (const s of sheep) {
+    const age = now - s.t0, fx = s.x + SFOOT[0], fy = s.y + SFOOT[1];
+    s.wool = Math.min(1, s.wool + dt / RULES.woolGrowSec);                       // fleece grows over ~2.5 min
+    if (s.shear && now > s.shear) { s.shear = null; s.wool = .05; woolBank++; }
+    if (rain) {
+      if (s.tx === null && !s.shelter && !s.inBarn) { s.shelter = true; s.resting = false; setPath(s, [{ x: SPOT.barnDoor.x + (Math.random() * 10 - 5), y: SPOT.barnDoor.y }]); s.toBarn = true; }
+    } else {
+      if (s.inBarn) { s.inBarn = false; s.shelter = false; s.x = SPOT.barnDoor.x - SFOOT[0] + (Math.random() * 14 - 7); s.y = SPOT.barnDoor.y - SFOOT[1] + 2; setPath(s, [randomFoot()]); s.wander = 1; }
+      s.shelter = false;
+      if (night) { if (s.tx === null && !s.eating) s.resting = true; }
+      else if (s.resting && Math.random() < dt * .4) { s.resting = false; s.t0 = now; }
+      if (!night && !s.resting && s.tx === null && !s.eating && !s.ridden && Math.random() < dt * .14) {
+        const r = Math.random(), t = nearestTuft(fx, fy, .45);
+        if (t && r < .5) { t.claimed = s; s.tuft = t; setPath(s, [{ x: t.x - (s.dir > 0 ? 16 : -16), y: t.y + 2 }]); s.wander = 1; }
+        else if (r < .62) { setPath(s, [{ x: SPOT.hay.x - 20 + Math.random() * 12, y: SPOT.hay.y + 10 }]); s.wander = 1; s.hayTrip = true; }
+        else if (r < .72) { setPath(s, [{ x: SPOT.trough.x + 16, y: SPOT.trough.y + 4 }]); s.wander = 1; s.drinkTrip = true; }
+        else if (r < .8 && Math.random() < dt * 2) { s.resting = true; }
+        else if (weather === "snow") { const cx = sheep.reduce((a, q) => a + q.x, 0) / sheep.length + SFOOT[0], cy = sheep.reduce((a, q) => a + q.y, 0) / sheep.length + SFOOT[1];
+          const f = randomFoot(); setPath(s, [{ x: (f.x + cx * 2) / 3, y: (f.y + cy * 2) / 3 }]); s.wander = 1; }
+        else { setPath(s, [randomFoot()]); s.wander = 1; }
+      }
+      if (s.eating) { if (s.tuft) s.tuft.level -= dt * RULES.tuftBitePerSec; if ((s.tuft && s.tuft.level < .08) || Math.random() < dt * .05) { if (s.tuft) s.tuft.claimed = null; s.eating = false; s.tuft = null; s.hayTrip = false; s.drinkTrip = false; s.t0 = now; } }
+      // lambs are born rarely when the flock is settled, and grow up
+      if (!s.lambs.length && sheep.length + sheep.reduce((n, q) => n + q.lambs.length, 0) < RULES.flockCap && Math.random() < dt * RULES.lambChancePerSec) {
+        s.lambs.push({ x: s.x - 18, y: s.y + 8, dir: s.dir, t0: now, born: now });
+      }
+      for (const l of s.lambs) if (now - l.born > RULES.lambGrowMs) { l.grown = true; }
+      if (s.lambs.some(l => l.grown)) {
+        const l = s.lambs.find(x => x.grown); s.lambs = s.lambs.filter(x => x !== l);
+        const ns = makeSheep(nameIdx++, { x: l.x + 10, y: l.y + 12 }); ns.wool = .05; sheep.push(ns);
+      }
+    }
+    if (s.tx !== null) {
+      if (!s.entering && !s.leaving) { const ct = clampTarget({ x: s.tx, y: s.ty }); s.tx = ct.x; s.ty = ct.y; }
+      const arrived = stepToward(s, SFOOT, s.wander ? RULES.speed.sheepWander : RULES.speed.sheepWalk, dt);
+      if (arrived) { s.tx = s.ty = null;
+        if (!nextLeg(s)) { s.wander = 0; if (s.toBarn) { s.toBarn = false; s.inBarn = true; } if (s.tuft || s.hayTrip || s.drinkTrip) { s.eating = true; if (s.tuft) s.dir = s.tuft.x > fx ? 1 : -1; } }
+      }
+    }
+    clampField(s, SFOOT);
+    if (s.tx !== null && !s.inBarn) stampGround(s, SFOOT, now, weather === "snow" || (currentSeason() === "winter" && wmodeEl.value !== "live"));
+    // weather looks: wet in rain, snow settling on the back
+    const outside = !s.inBarn;
+    s.wet = Math.max(0, Math.min(1, (s.wet || 0) + (rain && outside ? dt / 6 : -dt / 45)));
+    s.snow = Math.max(0, Math.min(1, (s.snow || 0) + (weather === "snow" && outside && s.tx === null ? dt / 10 : -(rain ? dt / 2 : dt / 25))));
+    let px = s.x - s.dir * 18, py = s.y + 8;
+    for (const l of s.lambs) { l.x += (px - l.x) * 3 * dt; l.y += (py - l.y) * 3 * dt; l.dir = s.dir; px = l.x - s.dir * 14; py = l.y + 2; }
+  }
+
+  // ----- Digital Luna -----
+  if (luna.riding) {
+    const s = luna.riding;
+    if (!sheep.includes(s)) { luna.riding = null; }
+    else {
+      if (now > luna.rideUntil || rain) dismount(now);
+      else { if (s.tx === null && Math.random() < dt * .9) { const f = randomFoot(); s.tx = f.x; s.ty = f.y; }
+        if (s.tx !== null && stepToward(s, SFOOT, 22, dt)) { s.tx = s.ty = null; }
+        clampField(s, SFOOT); }
+    }
+  }
+  const trouble = null, escalate = false, calm = true;
+  if (!(luna.iconUntil && performance.now() < luna.iconUntil)) luna.icon = null;
+  // fetch: a thrown stick overrides idle play
+  if (stickThrow && !luna.manual && !luna.riding && !luna.inBarn && !["bed","asleep","shelterWait","shelterEnter"].includes(luna.routine)) {
+    if (stickThrow.phase === "out") { luna.anim = "run"; luna.target = { x: stickThrow.x, y: stickThrow.y + 4 };
+      if (walkLuna(dt, RULES.speed.lunaRun)) { stickThrow.phase = "back"; luna.anim = "stick"; luna.target = { x: stickThrow.fromX, y: stickThrow.fromY }; } }
+    else { luna.anim = "stick"; luna.target = luna.target || { x: stickThrow.fromX, y: stickThrow.fromY };
+      if (walkLuna(dt, RULES.speed.lunaFetchBack)) { stickThrow = null; luna.anim = "pant"; luna.t0 = now; luna.icon = "heart"; } }
+    clampField(luna, LFOOT);
+    for (const f of flies) { f.p += dt * f.s; f.x += Math.sin(f.p * 1.3) * 6 * dt; f.y += Math.cos(f.p * .9) * 4 * dt; }
+    tickLife(dt, now); return;
+  }
+
+  if (luna.riding) { /* handled above */ }
+  else if (luna.mounting) {
+    const s = luna.mounting;
+    if (!sheep.includes(s) || s.resting || rain) { luna.mounting = null; luna.anim = "sit"; }
+    else { luna.target = { x: s.x + SFOOT[0] - 14, y: s.y + SFOOT[1] + 2 }; luna.anim = "run";
+      if (walkLuna(dt, 80)) { luna.riding = s; luna.mounting = null; s.ridden = true; s.tx = s.ty = null; s.path = []; s.resting = false; luna.rideUntil = now + (luna.manual === "ride" ? RULES.rideManualMs : RULES.rideMs); luna.manual = null; } }
+  }
+  else if (luna.manual) { manualLuna(dt, now); }
+  if (false) {
+    luna.routine = null; rabbit = null; luna.idle = 0;
+    luna.target = { x: trouble.x + SFOOT[0] - 40, y: trouble.y + SFOOT[1] + 2 };
+    if (walkLuna(dt, 80)) luna.anim = "tilt"; else if (luna.anim !== "stretch") luna.anim = "run";
+  } else if (luna.routine === "bark" || luna.anim === "tilt") { luna.routine = null; luna.anim = "pant"; luna.t0 = now; luna.target = null; }
+  else if (luna.anim === "pant" && now - luna.t0 > 2500) { luna.anim = "sit"; luna.t0 = now; }
+  else if (rain && !luna.inBarn && !["shelterWait","shelterEnter"].includes(luna.routine)) { luna.routine = "shelterWait"; luna.chasing = false; rabbit = null; luna.target = { x: SPOT.barnDoor.x - 34, y: SPOT.barnDoor.y + 4 }; luna.anim = "run"; }
+  else if (luna.routine === "shelterWait") {
+    if (!rain) { luna.routine = null; luna.anim = "sit"; }
+    else if (walkLuna(dt, 80)) {
+      const pending = sheep.filter(s => !s.inBarn && !s.outside);
+      if (pending.length) {
+        luna.anim = (now % 6000) < 1400 ? "tilt" : "sit";          // an occasional head-tilt, not a twitch
+        if (!luna.dirAt || now - luna.dirAt > 700) {               // re-face at most ~once a second…
+          const nearest = pending.sort((a, b) => Math.hypot(a.x - luna.x, a.y - luna.y) - Math.hypot(b.x - luna.x, b.y - luna.y))[0];
+          const dx = nearest.x + SFOOT[0] - (luna.x + LFOOT[0]);
+          if (Math.abs(dx) > 12) { luna.dir = dx > 0 ? 1 : -1; }   // …and only if the sheep is clearly to one side
+          luna.dirAt = now;
+        }
+      }
+      else { luna.routine = "shelterEnter"; luna.target = { x: SPOT.barnDoor.x, y: SPOT.barnDoor.y }; luna.anim = "run"; }
+    }
+  }
+  else if (luna.routine === "shelterEnter") { if (!rain) { luna.routine = null; luna.anim = "sit"; } else if (walkLuna(dt, 80)) { luna.inBarn = true; luna.routine = null; } }
+  else if (luna.inBarn) { if (!rain) { luna.inBarn = false; luna.x = SPOT.barnDoor.x - LFOOT[0]; luna.y = SPOT.barnDoor.y - LFOOT[1] + 2; luna.anim = "sit"; luna.t0 = now; } }
+  else if ((phase === "dusk" || night) && calm && luna.routine !== "bed" && luna.routine !== "asleep") { luna.routine = "bed"; luna.target = { x: SPOT.barnDoor.x + 24, y: SPOT.barnDoor.y + 2 }; luna.anim = "run"; }
+  else if (luna.routine === "bed") {
+    if (walkLuna(dt, 70)) { if (!luna.circleUntil) luna.circleUntil = now + 1800; luna.anim = "run";
+      luna.dir = Math.floor(now / 450) % 2 ? 1 : -1; luna.x += Math.sin(now / 140) * 14 * dt;
+      if (now > luna.circleUntil) { luna.circleUntil = null; luna.routine = "asleep"; luna.anim = "sleep"; luna.dir = 1; } }
+  } else if (luna.routine === "asleep") { if (phase === "dawn" || phase === "day") { luna.routine = null; luna.anim = "stretch"; luna.t0 = now; } }
+  else if (luna.anim === "stretch") { if (now - luna.t0 > 2700) { luna.anim = "sit"; luna.t0 = now; } }
+  else if (luna.anim === "sit" && temp > 27 && !night && Math.random() < dt * .15) { luna.anim = "pant"; luna.t0 = now; }
+  else if (luna.anim === "sit" && calm && !night) {
+    luna.idle += dt;
+    if (luna.idle > 7) { luna.idle = 0; const r = Math.random();
+      if (r < .22) { luna.anim = "flop"; luna.t0 = now; }
+      else if (r < .44) { luna.anim = "stick"; luna.target = randomFoot(); }
+      else if (r < .56) { const cand = sheep.filter(s => !s.inBarn && !s.ridden && !s.resting);
+        if (cand.length) luna.mounting = cand[Math.floor(Math.random() * cand.length)]; }
+      else if (r < .78) { const t = nearestTuft(luna.x + LFOOT[0], luna.y + LFOOT[1], .5); if (t) { t.claimed = luna; luna.tuft = t; luna.anim = "run"; luna.target = { x: t.x - 18, y: t.y + 2 }; } }
+      else { rabbit = { x: 30, y: 150 + Math.random() * 120, t0: now }; luna.chasing = true; luna.anim = "run"; }
+    }
+  } else if (luna.anim === "flop" && now - luna.t0 > 5000) luna.anim = "sit";
+  else if (luna.anim === "nibble") { luna.tuft.level -= dt * .05; if (now - luna.t0 > 4000 || luna.tuft.level < .1) { luna.tuft.claimed = null; luna.tuft = null; luna.anim = "sit"; luna.t0 = now; } }
+  else if (luna.anim === "sleep" && luna.routine !== "asleep") luna.anim = "sit";
+  if (!luna.manual && !luna.riding && !luna.mounting && !luna.inBarn) {
+    if (rabbit && luna.chasing) { luna.target = { x: rabbit.x - 30, y: rabbit.y + 22 }; luna.anim = "run"; }
+    if (luna.target && (luna.chasing || ["run","stick"].includes(luna.anim)) && !["bed","asleep","shelterWait","shelterEnter"].includes(luna.routine)) {
+      if (walkLuna(dt, luna.anim === "stick" ? RULES.speed.lunaCarry : RULES.speed.lunaRun)) { if (luna.chasing) { /* caught up; rabbit keeps hopping */ } else if (luna.anim === "stick") luna.anim = "sit"; else if (luna.tuft) { luna.anim = "nibble"; luna.t0 = now; luna.dir = 1; } else { luna.anim = "sit"; luna.t0 = now; } }
+    }
+  }
+  clampField(luna, LFOOT);
+  if (luna.target && !luna.inBarn && !luna.riding) stampGround(luna, LFOOT, now, weather === "snow" || (currentSeason() === "winter" && wmodeEl.value !== "live"));
+  luna.wet = Math.max(0, Math.min(1, (luna.wet || 0) + (rain && !luna.inBarn ? dt / 6 : -dt / 45)));
+  luna.snow = Math.max(0, Math.min(1, (luna.snow || 0) + (weather === "snow" && !luna.inBarn && !luna.target ? dt / 10 : -(rain ? dt / 2 : dt / 25))));
+  tickGround(now, weather === "snow" || (currentSeason() === "winter" && wmodeEl.value !== "live"));
+  tickLife(dt, now);
+}
+// ----- NPCs -----
+const NPC_W = 16, NPC_H = 21;
+function summonFarmer() {
+  if (farmer) return;
+  farmer = { x: SPOT.offstage.x - 8, y: SPOT.offstage.y - NPC_H + 2, dir: -1, tx: null, ty: null, wp: null, outside: true, entering: true, plan: [], job: null, jobUntil: 0, anim: "walk" };
+  const todo = [{ job: "trough", at: { x: SPOT.trough.x + 18, y: SPOT.trough.y + 6 } }, { job: "hay", at: { x: SPOT.hay.x + 22, y: SPOT.hay.y + 12 } }];
+  farmer.plan = [{ job: "enter", at: SPOT.gateOut }, { job: "enter", at: SPOT.gate }, ...todo, { job: "shear" }, { job: "pat" }, { job: "leave", at: SPOT.gate }, { job: "leave", at: SPOT.gateOut }, { job: "gone", at: SPOT.offstage }];
+}
+function summonMerchant() {
+  if (merchant) return;
+  merchant = { x: SPOT.offstage.x - 8, y: SPOT.offstage.y - NPC_H + 2, dir: -1, tx: null, ty: null, wp: null, outside: true, plan: [{ job: "enter", at: { x: SPOT.gateOut.x + 10, y: SPOT.gateOut.y } }, { job: "trade" }, { job: "gone", at: SPOT.offstage }], job: null, jobUntil: 0, anim: "walk", cart: true };
+}
+function npcStep(n, dt, now, onJob) {
+  if (!n.job) { const next = n.plan.shift(); if (!next) return "done"; n.job = next.job; if (next.at) { n.tx = next.at.x; n.ty = next.at.y; n.anim = "walk"; } else { n.jobUntil = 0; } }
+  if (n.tx !== null && n.tx !== undefined) {
+    const arrived = stepToward(n, [NPC_W / 2, NPC_H - 1], 26, dt);
+    if (arrived) { n.tx = n.ty = null; if (n.job === "enter" && n.x + 8 < 540) n.outside = false; if (n.job === "leave" && n.x + 8 > 520) n.outside = true; if (["enter","leave"].includes(n.job)) { n.job = null; return; } if (n.job === "gone") return "done"; n.jobUntil = now + 2600; n.anim = "work"; }
+    return;
+  }
+  if (!n.jobUntil) { const r = onJob(n.job, "start"); if (r === "skip") { n.job = null; return; } if (r) { n.tx = r.x; n.ty = r.y; n.anim = "walk"; return; } if (!n.jobUntil) n.jobUntil = now + 2600; n.anim = "work"; }
+  if (now > n.jobUntil) { onJob(n.job, "end"); n.job = null; n.jobUntil = 0; }
+}
+function tickNPCs(dt, now) {
+  // schedule: farmer twice a day; merchant on a timer
+  const day = Math.floor(clock.t * 100);
+  for (const at of RULES.farmer.visitsAt) { const k = Math.floor(at * 100); if (day === k && lastVisitDay !== k * 1000 + dayCount) { lastVisitDay = k * 1000 + dayCount; summonFarmer(); } }
+  if (clock.t < lastT) dayCount++; lastT = clock.t;
+  if (!merchant && now > merchantAt) summonMerchant();
+  if (farmer) {
+    const r = npcStep(farmer, dt, now, (job, when) => {
+      if (job === "trough" && when === "end") { bubble(farmer, "heart", 800); }
+      if (job === "hay" && when === "end") { for (const s of sheep) if (s.hayTrip) s.eating = true; }
+      if (job === "shear") {
+        if (when === "start") { const t = sheep.filter(s => !s.inBarn && s.wool >= RULES.farmer.shearAt && !s.shear).sort((a, b) => b.wool - a.wool)[0];
+          if (!t) return "skip"; farmer.shearing = t; return { x: t.x + SFOOT[0] + (t.dir > 0 ? -22 : 22), y: t.y + SFOOT[1] + 2 }; }
+        if (when === "end") { const t = farmer.shearing; if (t && sheep.includes(t)) { t.shear = now + 1200; bubble(t, "shears", 1200); t.tagUntil = now + 1500; } farmer.shearing = null;
+          if (sheep.some(s => !s.inBarn && s.wool >= RULES.farmer.shearAt && !s.shear && s !== t)) farmer.plan.unshift({ job: "shear" }); }
+      }
+      if (job === "pat") {
+        if (when === "start") { if (luna.inBarn || luna.riding) return "skip"; luna.manual = null; luna.chasing = false; luna.mounting = null; luna.routine = null; luna.target = { x: farmer.x + 8 - 14, y: farmer.y + NPC_H + 2 }; luna.anim = "run"; return null; }
+        if (when === "end") { bubble(luna, "heart", 1600); luna.anim = "pant"; luna.t0 = now; luna.target = null; }
+      }
+    });
+    if (r === "done") farmer = null;
+  }
+  if (merchant) {
+    const r = npcStep(merchant, dt, now, (job, when) => {
+      if (job === "trade" && when === "start") { merchant.jobUntil = now + RULES.merchant.stayMs; merchant.anim = "work";
+        if (woolBank > 0) { const earned = woolBank * RULES.merchant.woolPrice; coins += earned; woolBank = 0; bubble(merchant, "coin", 2500); merchant.sold = earned; }
+        buyUpgrades(); return null; }
+    });
+    if (r === "done") { merchant = null; merchantAt = now + RULES.merchant.everyMs; }
+  }
+}
+function buyUpgrades() { for (const [name, cost] of RULES.upgrades) { if (!owned.includes(name) && coins >= cost) { coins -= cost; owned.push(name); } } }
+function tickLife(dt, now) {
+  tickNPCs(dt, now);
+  if (rabbit) { rabbit.x += 60 * dt; if (rabbit.x > 600) { rabbit = null; if (luna.chasing) { luna.chasing = false; luna.target = null; luna.wp = null; if (!luna.manual) { luna.anim = "sit"; luna.t0 = now; } } } }
+  for (const b of bflies) { b.p += dt; b.x = b.home[0] + Math.sin(b.p * .9) * 14 + Math.sin(b.p * 2.3) * 4; b.y = b.home[1] - 14 + Math.cos(b.p * 1.4) * 8; }
+  if (!bird && !rain && Math.random() < dt * .03) { const p = POSTS[Math.floor(Math.random() * POSTS.length)]; bird = { x: 660, y: 20, tx: p[0] - 4, ty: p[1] - 6, state: "in", t0: now }; }
+  if (bird) {
+    if (bird.state === "in") { const dx = bird.tx - bird.x, dy = bird.ty - bird.y, d = Math.hypot(dx, dy); if (d < 2) { bird.state = "sit"; bird.t0 = now; } else { bird.x += dx / d * 90 * dt; bird.y += dy / d * 90 * dt; } }
+    else if (bird.state === "sit" && (now - bird.t0 > 4000 + Math.random() * 3000 || rain)) bird.state = "out";
+    else if (bird.state === "out") { bird.x += 80 * dt; bird.y -= 60 * dt; if (bird.y < -10) bird = null; }
+  }
+}
+function dismount(now) {
+  if (!luna.riding) return;
+  const s = luna.riding; s.ridden = false; luna.riding = null;
+  luna.x = s.x + SFOOT[0] - LFOOT[0] - 20; luna.y = s.y + SFOOT[1] - LFOOT[1] + 2;
+  luna.anim = "pant"; luna.t0 = now; s.t0 = now;
+}
+let weatherAt = 0, rainUntil = 0, stickThrow = null;
+function autoWeather(now) {
+  // temperature always tracks season + time of day (live mode overrides the base)
+  const season = currentSeason();
+  if (wmodeEl.value !== "live") {
+    const base = SEASON_TEMP[season];
+    const diurnal = Math.sin((clock.t - .05) * Math.PI * 2 - Math.PI / 2) * 6 + 3;
+    const wx = weather === "rain" ? -4 : weather === "snow" ? -2 : 0;
+    temp = temp * .98 + (base + diurnal + wx) * .02;
+  }
+  if (wmodeEl.value !== "season") return;
+  if (weather === "sun" && now > weatherAt) {
+    weatherAt = now + RULES.rain.rollEveryMs[0] + Math.random() * (RULES.rain.rollEveryMs[1] - RULES.rain.rollEveryMs[0]);
+    const odds = SEASON_ODDS[season], r = Math.random();
+    if (r < odds.snow) { setWeather("snow"); rainUntil = now + RULES.rain.lengthMs[0] + Math.random() * (RULES.rain.lengthMs[1] - RULES.rain.lengthMs[0]) * 1.5; }
+    else if (r < odds.snow + odds.rain) { setWeather("rain"); rainUntil = now + RULES.rain.lengthMs[0] + Math.random() * (RULES.rain.lengthMs[1] - RULES.rain.lengthMs[0]); }
+  }
+  if (weather !== "sun" && rainUntil && now > rainUntil) setWeather("sun");
+}
+function clampTarget(t, m = .86) { let n = 0; const o = { x: t.x, y: t.y }; while (!insideField(o.x, o.y, m) && n++ < 40) { o.x += (C[0] - o.x) * .08; o.y += (C[1] - o.y) * .08; if (inBarn(o.x, o.y)) o.y += 3; } return o; }
+function walkLuna(dt, sp) { if (!luna.target) return true; const t = clampTarget(luna.target); luna.tx = t.x; luna.ty = t.y; if (stepToward(luna, LFOOT, sp, dt)) { luna.target = null; luna.wp = null; return true; } return false; }
+function manualLuna(dt, now) {
+  if (luna.manual === "rabbit") { if (rabbit) { rabbit.x += 60 * dt; luna.target = { x: rabbit.x - 30, y: rabbit.y + 22 }; luna.anim = "run"; walkLuna(dt, 80); if (rabbit.x > 600) { rabbit = null; luna.manual = null; luna.anim = "sit"; } } else luna.manual = null; }
+  else if (luna.manual === "walk") { if (luna.target) { if (walkLuna(dt, luna.anim === "stick" ? 34 : 80)) { luna.manual = null; luna.anim = "pant"; luna.t0 = now; } } else { luna.manual = null; luna.anim = "sit"; } }
+  else if (luna.manual === "nibble") {
+    if (luna.target) { if (walkLuna(dt, 80)) { luna.anim = "nibble"; luna.t0 = now; luna.dir = 1; } }
+    else if (luna.anim === "nibble") { if (luna.tuft) luna.tuft.level = Math.max(0, luna.tuft.level - dt * .05); if (now - luna.t0 > 4000) { if (luna.tuft) luna.tuft.claimed = null; luna.tuft = null; luna.manual = null; luna.anim = "sit"; } }
+  } else if (now > luna.manualUntil) { luna.manual = null; luna.anim = "sit"; luna.t0 = now; }
+}
+
+// ---------- drawing ----------
+function drawTag(text, cx, top, color, k) {
+  uc.font = `${8.5 * k}px ui-monospace, Menlo, monospace`; uc.textBaseline = "middle";
+  const tw = uc.measureText(text).width, h = 12 * k, w = tw + 18 * k, x = Math.round(cx * k - w / 2), y = Math.round(top * k - h - 3 * k);
+  uc.fillStyle = "rgba(43,29,23,.85)"; uc.fillRect(x, y, w, h);
+  uc.fillStyle = color; uc.fillRect(x + 4 * k, y + h / 2 - 2.5 * k, 5 * k, 5 * k);
+  uc.fillStyle = "#f8f5ee"; uc.fillText(text, x + 12 * k, y + h / 2 + k * .5);
+}
+function drawIcon(name, cx, top, now) { const s = META.sprites.icon; const bob = Math.floor(now / 400) % 2; drawSprite(sc, "icon", "all", ICON[name], cx - s.w / 2, top - s.h - 4 - bob, false, false); }
+let windT = 0;
+function draw(now) {
+  const phase = phaseOf(clock.t), night = phase === "night";
+  const season = currentSeason();
+  const snowy = weather === "snow" || (season === "winter" && wmodeEl.value !== "live");
+  // crossfade: near each phase boundary blend the two backgrounds and tints
+  const EDGES = [[0, "dawn", "day"], [.42, "day", "dusk"], [.52, "dusk", "night"], [.92, "night", "dawn"]];
+  let mixTo = null, mix = 0; const FADE = .025;
+  for (const [e, a, b2] of EDGES) { const dd = clock.t - e; if (Math.abs(dd) < FADE) { mixTo = dd < 0 ? b2 : null; if (dd < 0) mix = (dd + FADE) / (2 * FADE); else { mixTo = a; mix = 1 - (dd + FADE) / (2 * FADE); } } }
+  const pre = snowy ? "snow_" : "";
+  wc.clearRect(0, 0, W, H); wc.drawImage(BG[pre + phase], 0, 0);
+  if (mixTo && mix > 0) { wc.globalAlpha = Math.min(1, mix); wc.drawImage(BG[pre + mixTo], 0, 0); wc.globalAlpha = 1; }
+  // ground: mud patches and snow footprints
+  for (const m of mud) { const age = (now - m.t) / (rain ? 600000 : 240000); wc.fillStyle = `rgba(112,82,50,${(.55 * (1 - age)).toFixed(2)})`; wc.beginPath(); wc.ellipse(Math.round(m.x), Math.round(m.y), m.r, m.r * .55, 0, 0, Math.PI * 2); wc.fill(); }
+  if (snowy) { wc.fillStyle = "rgb(128,146,178)"; for (const p of prints) { const a = 1 - (now - p.t) / 150000; if (a <= 0) continue; wc.globalAlpha = a; wc.fillRect(Math.round(p.x), Math.round(p.y), 2, 2); } wc.globalAlpha = 1; }
+  const lerp3 = (a, b2, t) => a.map((v, i) => v + (b2[i] - v) * t);
+  const tintNow = mixTo ? lerp3(PHASES[phase], PHASES[mixTo], Math.min(1, mix)) : PHASES[phase];
+  sc.clearRect(0, 0, W, H);
+  const k = ui.width / W; uc.clearRect(0, 0, ui.width, ui.height);
+  const list = [], tags = [];
+  const wind = rain ? 1.6 : .7;
+  for (const t of tufts) { const fr = Math.min(3, Math.floor(t.level * 3.99)); const sway = Math.round(Math.sin(now / 700 + t.x * .05) * wind); list.push({ z: t.y, f: () => drawSprite(sc, "grass", "grow", fr, t.x - GW / 2 + sway, t.y - GH + 4, false, false) }); }
+  const inBarnSheep = sheep.filter(s => s.inBarn);
+  const slots = luna.inBarn ? [[300, 44], [318, 43]] : [[301, 52], [313, 55], [324, 52]];
+  inBarnSheep.slice(0, slots.length).forEach((s, i) => {
+    const [px, py] = slots[i];
+    list.push({ z: 60 + i, f: () => drawSprite(sc, "peek", "look", frameAt("peek", "look", now + s.t0), px, py, i === slots.length - 1, false) });
+    if (now < s.tagUntil) tags.push([s.name, 316, 30 - i * 2, s.color]);
+  });
+  if (luna.inBarn) {
+    list.push({ z: 66, f: () => drawSprite(sc, "dl_peek", "look", frameAt("dl_peek", "look", now), 304, 48, false, false) });
+
+  }
+  for (const s of sheep) {
+    if (s.inBarn) continue;
+    if (s.ridden && luna.riding === s) {
+      const RW = META.sprites.ride.w, RH = META.sprites.ride.h;
+      list.push({ z: s.y + SH, f: () => drawSprite(sc, "ride", "go", frameAt("ride", "go", now), s.x - 4, s.y + SH - RH, s.dir < 0) });
+      if (now < s.tagUntil) tags.push([s.name, s.x + SW / 2, s.y + SH - RH + 22, s.color]);
+      continue;
+    }
+    let anim = "wool", fr = woolLevel(s.wool);
+    if (s.resting || ((night || rain) && s.tx === null && !s.eating)) { anim = "rest"; fr = null; }
+    else if (s.tx !== null) { anim = "trot"; fr = null; }
+    else if (s.eating) { anim = "graze"; fr = null; }
+    else if (Math.floor(now / 9000 + s.t0) % 3 === 0) { anim = "graze"; fr = null; }
+    const showIcon = (s.icon && now < s.iconUntil) ? s.icon : null;
+    list.push({ z: s.y + SH, f: () => {
+      if (s.wet > .3) sc.filter = `brightness(${(1 - .28 * s.wet).toFixed(2)}) saturate(.85)`;
+      drawSprite(sc, "sheep", anim, fr ?? frameAt("sheep", anim, now + s.t0), s.x, s.y, s.dir < 0); sc.filter = "none";
+      if (s.wet > .5 && Math.floor((now + s.t0) / 700) % 3 === 0) { sc.fillStyle = "#9fc4ea"; sc.fillRect(Math.round(s.x + 10 + ((now + s.t0) % 700) / 100), Math.round(s.y + SH - 6 + ((now + s.t0) % 700) / 140), 1, 2); }
+      if (s.snow > .4 && anim !== "rest") { sc.fillStyle = "#d9e6f6"; for (const [ox, oy] of [[9, 2], [12, 1], [15, 1], [18, 2], [11, 3], [16, 3]]) if (Math.random() < 2) sc.fillRect(Math.round(s.x + (s.dir < 0 ? SW - ox : ox)), Math.round(s.y + oy), 2, 1); }
+      if (showIcon) drawIcon(showIcon, s.x + SW / 2, s.y - 2, now); } });
+    if (now < s.tagUntil) tags.push([s.name, s.x + SW / 2, s.y + 4 - (showIcon ? 14 : 0), s.color]);
+    for (const l of s.lambs) list.push({ z: l.y + META.sprites.lamb.h, f: () => drawSprite(sc, "lamb", "walk", frameAt("lamb", "walk", now + l.t0), l.x, l.y, l.dir < 0) });
+  }
+  if (!luna.inBarn && !luna.riding) {
+    const deep = snowy || (season === "summer" && !snowy);
+    let lanim = luna.anim; if ((deep || now < (luna.forceBound || 0)) && lanim === "run") lanim = snowy ? "trundle" : "bound";
+    list.push({ z: luna.y + LH, f: () => {
+      if (luna.wet > .3) sc.filter = `brightness(${(1 - .25 * luna.wet).toFixed(2)})`;
+      drawSprite(sc, "digital_luna", lanim, frameAt("digital_luna", lanim, now), luna.x, luna.y, luna.dir < 0); sc.filter = "none";
+      if (luna.snow > .4 && !["sleep","flop"].includes(luna.anim)) { sc.fillStyle = "#f4f7fb"; for (const [ox, oy] of [[15, 1], [19, 0], [23, 1], [17, 2], [21, 2]]) sc.fillRect(Math.round(luna.x + (luna.dir < 0 ? LW - ox : ox)), Math.round(luna.y + oy), 2, 1); }
+      if (luna.icon) drawIcon(luna.icon, luna.x + LW / 2, luna.y - 2, now); } });
+    if (now < (luna.tagUntil || 0)) tags.push(["Digital Luna", luna.x + LW / 2, luna.y + 2 - (luna.icon ? 14 : 0), "#d33a2f"]);
+  }
+  if (rabbit) list.push({ z: rabbit.y + 30, f: () => drawSprite(sc, "rabbit", "hop", frameAt("rabbit", "hop", now), rabbit.x, rabbit.y) });
+  if (owned.includes("flowerbed")) list.push({ z: 236, f: () => drawSprite(sc, "upgrade", "flowerbed", 0, 176, 231, false, false) });
+  if (owned.includes("hay2")) list.push({ z: 160, f: () => { const s = META.sprites.upgrade; /* second bale: reuse grass-free hay art? draw a small bale with icons */ } });
+  if (owned.includes("scarecrow")) list.push({ z: 300, f: () => drawSprite(sc, "upgrade", "scarecrow", 0, 420, 286, false, false) });
+  for (const n of [farmer, merchant].filter(Boolean)) {
+    const spr = n === farmer ? "farmer" : "merchant";
+    list.push({ z: n.y + NPC_H, f: () => { drawSprite(sc, spr, n.anim, frameAt(spr, n.anim, now), n.x, n.y, n.dir < 0); if (n.icon && now < n.iconUntil) drawIcon(n.icon, n.x + 8, n.y - 2, now); } });
+    if (n.cart) list.push({ z: n.y + NPC_H - 1, f: () => drawSprite(sc, "cart", "lay", 0, n.x + (n.dir < 0 ? 14 : -26), n.y + 6, n.dir > 0, false) });
+  }
+  if (stickThrow && stickThrow.phase === "out") list.push({ z: stickThrow.y, f: () => drawSprite(sc, "stick", "lay", 0, stickThrow.x - 6, stickThrow.y - 2, false, false) });
+  for (const b of bflies) list.push({ z: 9999, f: () => drawSprite(sc, "butterfly", "flap", frameAt("butterfly", "flap", now + b.p * 1000), b.x, b.y, false, false) });
+  if (bird) list.push({ z: 9998, f: () => drawSprite(sc, "bird", bird.state === "sit" ? "sit" : "fly", frameAt("bird", bird.state === "sit" ? "sit" : "fly", now), bird.x, bird.y, bird.state === "in", false) });
+  list.sort((a, b) => a.z - b.z).forEach(o => o.f());
+  const placed = [];
+  for (const t of tags.sort((a, b) => a[1] - b[1])) {
+    let [text, cx, top, color] = t; const w = text.length * 5.2 + 18;
+    for (let n = 0; n < 6; n++) { const hit = placed.find(p => Math.abs(p.cx - cx) < (p.w + w) / 2 && Math.abs(p.top - top) < 14); if (!hit) break; top = hit.top - 14; }
+    placed.push({ cx, top, w }); drawTag(text, cx, top, color, k);
+  }
+  if (phase !== "day" || rain || mixTo) {
+    const f = rain ? [tintNow[0] * .78, tintNow[1] * .82, tintNow[2] * .92] : tintNow;
+    mc.clearRect(0, 0, W, H); mc.drawImage(spr, 0, 0);
+    sc.globalCompositeOperation = "multiply"; sc.fillStyle = `rgb(${f[0]*255|0},${f[1]*255|0},${f[2]*255|0})`; sc.fillRect(0, 0, W, H);
+    sc.globalCompositeOperation = "destination-in"; sc.drawImage(mask, 0, 0); sc.globalCompositeOperation = "source-over";
+    if (rain) { wc.fillStyle = "rgba(60,80,110,.28)"; wc.fillRect(0, 0, W, H); }
+  }
+  wc.drawImage(spr, 0, 0);
+  if (rain) {
+    wc.strokeStyle = "rgba(220,235,255,.55)"; wc.lineWidth = 1; wc.beginPath();
+    const off = (now / 6) % 40;
+    for (let i = 0; i < 90; i++) { const x = (i * 71 + off * 2) % (W + 40) - 20, y = (i * 53 + off * 4) % (H + 40) - 20; wc.moveTo(x, y); wc.lineTo(x - 3, y + 9); }
+    wc.stroke();
+  }
+  if (weather === "snow") {
+    wc.fillStyle = "rgba(255,255,255,.9)";
+    for (let i = 0; i < 70; i++) { const sp = 12 + (i % 5) * 4, x = (i * 97 + Math.sin(now / 900 + i) * 18 + now / 90) % (W + 20) - 10, y = (i * 61 + now / (1000 / sp)) % (H + 10) - 5;
+      wc.fillRect(Math.round(x), Math.round(y), i % 3 ? 1 : 2, i % 3 ? 1 : 2); }
+  }
+  if (temp < 3) {   // visible breath in the cold
+    wc.fillStyle = "rgba(240,246,255,.5)";
+    const puff = t0 => { const ph = ((now + t0) % 2600) / 2600; return ph < .45 ? ph / .45 : null; };
+    for (const s of sheep) { if (s.inBarn || s.resting) continue; const p = puff(s.t0); if (p !== null) wc.fillRect(Math.round(s.x + (s.dir > 0 ? SW - 2 : 0) + s.dir * p * 5), Math.round(s.y + 10 - p * 4), 2, 2); }
+    if (!luna.inBarn && !luna.riding && !["sleep"].includes(luna.anim)) { const p = puff(777); if (p !== null) wc.fillRect(Math.round(luna.x + (luna.dir > 0 ? LW - 4 : 2) + luna.dir * p * 5), Math.round(luna.y + 14 - p * 4), 2, 2); }
+  }
+  if (!snowy && (season === "summer" || season === "autumn")) {
+    wc.globalCompositeOperation = "multiply";
+    wc.fillStyle = season === "summer" ? "rgba(255,248,225,1)" : "rgba(255,236,205,1)";
+    wc.fillRect(0, 0, W, H); wc.globalCompositeOperation = "source-over";
+  }
+  if ((night || phase === "dusk") && !rain) { const a = night ? 1 : .35; for (const fl of flies) { const on = (Math.sin(fl.p * 3) + 1) / 2; if (on > .55) { wc.fillStyle = `rgba(255,230,120,${(on - .5) * 2 * a})`; wc.fillRect(Math.round(fl.x), Math.round(fl.y), 2, 2); } } }
+  const hrs = ((clock.t + .25) * 24) % 24, hh = String(Math.floor(hrs)).padStart(2, "0"), mm = String(Math.floor((hrs % 1) * 60)).padStart(2, "0");
+  uc.font = `${9 * k}px ui-monospace, Menlo, monospace`; uc.textBaseline = "top";
+  uc.fillStyle = "rgba(43,29,23,.85)"; uc.fillRect(6 * k, 6 * k, 196 * k, 14 * k);
+  uc.fillStyle = night ? "#dfe8ff" : "#ffd75e"; uc.fillText(`${rain ? "☂" : weather === "snow" ? "❄" : night ? "☾" : "☀"} ${hh}:${mm}  ${sheep.length + sheep.reduce((n, s) => n + s.lambs.length, 0)} sheep  ${woolBank} wool  ${coins} coins  ${Math.round(temp)}°`, 10 * k, 9 * k);
+}
+
+function resize() { const r = ui.getBoundingClientRect(); ui.width = Math.round(r.width * devicePixelRatio); ui.height = Math.round(r.height * devicePixelRatio); }
+addEventListener("resize", resize); resize();
+let last = performance.now();
+let frozen = false, frozenAt = 0;
+function loop(now) { const dt = Math.min(.05, (now - last) / 1000); last = now; if (sheetImg.complete && Object.values(BG).every(i => i.complete)) { if (!frozen) { tick(dt, now); draw(now); frozenAt = now; } else draw(frozenAt); } requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+// ---------- input ----------
+ui.addEventListener("click", e => {
+  if (commenting) return;
+  const r = ui.getBoundingClientRect(), mx = (e.clientX - r.left) * W / r.width, my = (e.clientY - r.top) * H / r.height;
+  const now = performance.now();
+  // Digital Luna first
+  if (!luna.inBarn && !luna.riding && mx > luna.x && mx < luna.x + LW && my > luna.y && my < luna.y + LH) {
+    bubble(luna, "heart", 1600); luna.tagUntil = now + 1800;
+    if (!luna.manual && !["bed","asleep","shelterWait","shelterEnter"].includes(luna.routine)) { luna.anim = "pant"; luna.t0 = now; luna.target = null; }
+    return;
+  }
+  for (const s of sheep) {
+    if (s.inBarn) continue;
+    if (mx > s.x && mx < s.x + SW && my > s.y && my < s.y + SH) {
+      s.tagUntil = now + RULES.petTagMs;
+      if (s.wool >= RULES.shearReadyAt && !s.shear) { s.shear = now + 1200; bubble(s, "shears", 1200); }
+      else bubble(s, "heart", 1600);
+      return;
+    }
+  }
+  // empty grass: throw a stick for DL
+  if (insideField(mx, my, .95) && !rain && !luna.inBarn && !luna.riding && !["bed","asleep"].includes(luna.routine)) {
+    stickThrow = { x: mx, y: my, fromX: luna.x + LFOOT[0], fromY: luna.y + LFOOT[1], phase: "out" };
+  luna.chasing = false;
+    luna.manual = null; luna.mounting = null; if (luna.tuft) { luna.tuft.claimed = null; luna.tuft = null; }
+  }
+});
+document.querySelectorAll("button[data-ev]").forEach(b => b.addEventListener("click", () => { if (b.dataset.ev === "reset") reset(); }));
+function dlAction(act) {
+  const now = performance.now();
+  luna.target = null; luna.wp = null; rabbit = null; luna.idle = 0; luna.routine = null; luna.circleUntil = null;
+  luna.chasing = false;
+  if (luna.inBarn) { luna.inBarn = false; luna.x = SPOT.barnDoor.x - LFOOT[0]; luna.y = SPOT.barnDoor.y - LFOOT[1] + 2; }
+  if (luna.tuft) { luna.tuft.claimed = null; luna.tuft = null; }
+  const hold = { sit: 6000, tilt: 5000, pant: 4000, flop: 7000, sleep: 12000, stretch: 4000 };
+  if (act in hold) { luna.manual = act; luna.manualUntil = now + hold[act]; luna.anim = act; luna.t0 = now; }
+  else if (act === "run" || act === "stick") { luna.manual = "walk"; luna.anim = act; luna.target = randomFoot(); }
+  else if (act === "come") { luna.manual = "walk"; luna.anim = "run"; luna.target = SPOT.front; }
+  else if (act === "nibble") { const t = nearestTuft(luna.x + LFOOT[0], luna.y + LFOOT[1], .3); luna.manual = "nibble"; if (t) { t.claimed = luna; luna.tuft = t; luna.anim = "run"; luna.target = { x: t.x - 18, y: t.y + 2 }; } else { luna.anim = "nibble"; luna.t0 = now; } }
+  else if (act === "rabbit") { rabbit = { x: 30, y: 150 + Math.random() * 120, t0: now }; luna.chasing = true; luna.anim = "run"; }
+  else if (act === "ride") { const cand = sheep.filter(s => !s.inBarn && !s.ridden);
+    if (cand.length) { luna.manual = "ride"; luna.mounting = cand.sort((a, b) => Math.hypot(a.x - luna.x, a.y - luna.y) - Math.hypot(b.x - luna.x, b.y - luna.y))[0]; } }
+}
+const ACTIONS = [
+  ["Digital Luna", "sit", "sit", () => dlAction("sit")], ["Digital Luna", "tilt", "head tilt", () => dlAction("tilt")], ["Digital Luna", "pant", "pant", () => dlAction("pant")],
+  ["Digital Luna", "run", "zoomies", () => dlAction("run")], ["Digital Luna", "stick", "carry a stick", () => dlAction("stick")], ["Digital Luna", "nibble", "nibble grass", () => dlAction("nibble")],
+  ["Digital Luna", "flop", "belly flop", () => dlAction("flop")], ["Digital Luna", "sleep", "nap", () => dlAction("sleep")], ["Digital Luna", "stretch", "stretch", () => dlAction("stretch")],
+  ["Digital Luna", "ride", "ride a sheep", () => dlAction("ride")], ["Digital Luna", "rabbit", "chase a rabbit", () => dlAction("rabbit")], ["Digital Luna", "come", "come here", () => dlAction("come")],
+  ["Digital Luna", "trundle", "trundle (bound around)", () => { dlAction("run"); luna.forceBound = performance.now() + 6000; }],
+  ["Digital Luna", "pet", "pet her", () => { bubble(luna, "heart", 1600); luna.tagUntil = performance.now() + 1800; }],
+  ["Digital Luna", "bed", "go to bed", () => { dlAction("sit"); luna.manual = null; luna.routine = "bed"; luna.target = { x: SPOT.barnDoor.x + 24, y: SPOT.barnDoor.y + 2 }; luna.anim = "run"; }],
+  ["Sheep", "shearAll", "shear every woolly sheep", () => sheep.forEach(s => { if (s.wool >= .5 && !s.shear) { s.shear = performance.now() + 1200; bubble(s, "shears", 1200); } })],
+  ["Sheep", "petAll", "pet everyone", () => sheep.forEach(s => { bubble(s, "heart", 1600); s.tagUntil = performance.now() + 1800; })],
+  ["Sheep", "lamb", "a lamb is born", () => { const s = sheep.find(q => !q.lambs.length && !q.inBarn); if (s) s.lambs.push({ x: s.x - 18, y: s.y + 8, dir: s.dir, t0: performance.now(), born: performance.now() }); }],
+  ["Sheep", "graze", "everyone graze", () => sheep.forEach(s => { s.resting = false; const t = nearestTuft(s.x + SFOOT[0], s.y + SFOOT[1], .3); if (t) { t.claimed = s; s.tuft = t; setPath(s, [{ x: t.x - 16, y: t.y + 2 }]); s.wander = 1; } })],
+  ["Sheep", "rest", "everyone lie down", () => sheep.forEach(s => { s.tx = s.ty = null; s.path = []; s.eating = false; s.resting = true; })],
+  ["Sheep", "scatter", "scatter", () => sheep.forEach(s => { s.resting = false; setPath(s, [randomFoot()]); s.wander = 0; })],
+  ["Sheep", "wool", "grow all wool", () => sheep.forEach(s => s.wool = 1)],
+  ["Farm", "farmer", "farmer visits now", () => summonFarmer()], ["Farm", "merchant", "merchant arrives now", () => summonMerchant()],
+  ["Farm", "bird", "a bird lands", () => { const p = POSTS[Math.floor(Math.random() * POSTS.length)]; bird = { x: 660, y: 20, tx: p[0] - 4, ty: p[1] - 6, state: "in", t0: performance.now() }; }],
+  ["Farm", "rabbitOnly", "release a rabbit (no chase)", () => { rabbit = { x: 30, y: 150 + Math.random() * 120, t0: performance.now() }; }],
+  ["Farm", "coins", "+50 coins (test)", () => { coins += 50; buyUpgrades(); }],
+  ["Farm", "reset", "reset farm", () => reset()],
+  ["Weather", "sun", "sun", () => { wmodeEl.value = "manual"; wmodeChanged(); setWeather("sun"); }], ["Weather", "rain", "rain", () => { wmodeEl.value = "manual"; wmodeChanged(); setWeather("rain"); }],
+  ["Weather", "snow", "snow", () => { wmodeEl.value = "manual"; wmodeChanged(); setWeather("snow"); }],
+  ["Weather", "spring", "spring", () => seasonEl.value = "spring"], ["Weather", "summer", "summer", () => seasonEl.value = "summer"], ["Weather", "autumn", "autumn", () => seasonEl.value = "autumn"], ["Weather", "winter", "winter", () => seasonEl.value = "winter"],
+  ["Time", "dawn", "jump to dawn", () => clock.t = .94], ["Time", "noon", "jump to noon", () => clock.t = .2], ["Time", "dusk", "jump to dusk", () => clock.t = .44], ["Time", "night", "jump to night", () => clock.t = .7],
+];
+const actionSel = document.getElementById("actionSel"), actionLinks = document.getElementById("actionLinks");
+{ let grp = null, og = null;
+  for (const [g, id, label] of ACTIONS) { if (g !== grp) { grp = g; og = document.createElement("optgroup"); og.label = g; actionSel.appendChild(og); } const o = document.createElement("option"); o.value = id; o.textContent = label; og.appendChild(o); }
+  grp = null;
+  for (const [g, id, label, fn] of ACTIONS) { if (g !== grp) { grp = g; const h = document.createElement("span"); h.textContent = g + ": "; h.style.opacity = .6; h.style.marginLeft = "8px"; actionLinks.appendChild(h); }
+    const a = document.createElement("a"); a.textContent = label; a.href = "#"; a.style.color = "#ffd75e"; a.style.margin = "0 6px"; a.addEventListener("click", e => { e.preventDefault(); fn(); }); actionLinks.appendChild(a); }
+}
+document.getElementById("actionGo").addEventListener("click", () => { const a = ACTIONS.find(x => x[1] === actionSel.value); if (a) a[3](); });
+document.getElementById("actionList").addEventListener("click", () => { const on = actionLinks.style.display === "none"; actionLinks.style.display = on ? "flex" : "none"; document.getElementById("actionList").textContent = on ? "hide list" : "show all"; });
+
+// ---------- comment overlay ----------
+const stage = document.getElementById("stage"), pinsEl = document.getElementById("pins"), notesEl = document.getElementById("notes");
+const cmodeBtn = document.getElementById("cmode"), cfreezeBtn = document.getElementById("cfreeze");
+let commenting = false, comments = [];
+try { comments = JSON.parse(localStorage.getItem("farm-comments") || "[]"); } catch (e) {}
+function saveComments() { try { localStorage.setItem("farm-comments", JSON.stringify(comments)); } catch (e) {} }
+function setFrozen(f) { frozen = f; cfreezeBtn.classList.toggle("on", f); cfreezeBtn.textContent = f ? "unfreeze" : "freeze"; document.getElementById("frozen").style.display = f ? "block" : "none"; }
+cmodeBtn.addEventListener("click", () => { commenting = !commenting; cmodeBtn.classList.toggle("on", commenting); stage.classList.toggle("commenting", commenting); notesEl.classList.toggle("show", commenting || comments.length > 0); if (commenting) setFrozen(true); render(); });
+cfreezeBtn.addEventListener("click", () => setFrozen(!frozen));
+pinsEl.addEventListener("click", e => {
+  if (!commenting || e.target.classList.contains("pin")) return;
+  const r = pinsEl.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  const near = describeAt(x * W, y * H);
+  comments.push({ x, y, text: "", near, time: new Date().toISOString() }); saveComments(); render(true);
+});
+function describeAt(wx, wy) {
+  let best = null, bd = 40;
+  const cands = [["Digital Luna", luna.x + LW / 2, luna.y + LH / 2], ...sheep.map(s => [s.name, s.x + SW / 2, s.y + SH / 2]),
+    ["barn", 350, 80], ["gate", 506, 262], ["trough", 150, 216], ["hay", 240, 146], ["lantern", 500, 290]];
+  for (const [n, cx, cy] of cands) { const d = Math.hypot(cx - wx, cy - wy); if (d < bd) { bd = d; best = n; } }
+  return best;
+}
+function render(focusLast = false) {
+  pinsEl.innerHTML = ""; notesEl.innerHTML = "";
+  comments.forEach((c, i) => {
+    const p = document.createElement("div"); p.className = "pin"; p.textContent = i + 1; p.style.left = (c.x * 100) + "%"; p.style.top = (c.y * 100) + "%";
+    p.title = c.text || "(empty)"; p.addEventListener("click", ev => { ev.stopPropagation(); const ta = notesEl.querySelectorAll("textarea")[i]; if (ta) { ta.focus(); ta.scrollIntoView({ block: "nearest" }); } });
+    pinsEl.appendChild(p);
+    const n = document.createElement("div"); n.className = "note";
+    n.innerHTML = `<b>${i + 1}</b><textarea placeholder="${c.near ? "near " + c.near + " — " : ""}what's wrong here?"></textarea><button>✕</button>`;
+    const ta = n.querySelector("textarea"); ta.value = c.text; ta.addEventListener("input", () => { c.text = ta.value; p.title = c.text; saveComments(); });
+    n.querySelector("button").addEventListener("click", () => { comments.splice(i, 1); saveComments(); render(); });
+    notesEl.appendChild(n);
+  });
+  notesEl.classList.toggle("show", commenting || comments.length > 0);
+  if (focusLast) { const tas = notesEl.querySelectorAll("textarea"); if (tas.length) tas[tas.length - 1].focus(); }
+}
+document.getElementById("cclear").addEventListener("click", () => { if (comments.length && confirm("Clear all comments?")) { comments = []; saveComments(); render(); } });
+function openModal(children) {
+  const box = document.getElementById("modalBox"); box.innerHTML = "";
+  for (const ch of children) box.appendChild(ch);
+  const close = document.createElement("button"); close.textContent = "close";
+  close.addEventListener("click", () => document.getElementById("modal").classList.remove("show"));
+  box.appendChild(close);
+  document.getElementById("modal").classList.add("show");
+}
+document.getElementById("modal").addEventListener("click", e => { if (e.target.id === "modal") e.target.classList.remove("show"); });
+
+function commentsMarkdown() {
+  const hrs = ((clock.t + .25) * 24) % 24;
+  return [`## Agent Farm comments — ${String(Math.floor(hrs)).padStart(2, "0")}:${String(Math.floor((hrs % 1) * 60)).padStart(2, "0")} ${phaseOf(clock.t)}${rain ? ", rain" : ""}`, ""]
+    .concat(comments.map((c, i) => `${i + 1}. ${c.near ? `[${c.near}] ` : ""}${c.text || "(no text)"}  (${Math.round(c.x * W)}, ${Math.round(c.y * H)})`))
+    .join(String.fromCharCode(10));
+}
+document.getElementById("cexport").addEventListener("click", async () => {
+  const md = commentsMarkdown();
+  let copied = false;
+  try { await navigator.clipboard.writeText(md); copied = true; } catch (e) {}
+  if (!copied) { try { const t = document.createElement("textarea"); t.value = md; t.style.position = "fixed"; t.style.opacity = 0; document.body.appendChild(t); t.select(); copied = document.execCommand("copy"); t.remove(); } catch (e) {} }
+  const ta = document.createElement("textarea"); ta.value = md; ta.readOnly = true;
+  const hint = document.createElement("div"); hint.className = "hint";
+  hint.textContent = copied ? "Copied to clipboard. It's also here if you need it:" : "Clipboard is blocked in this viewer — select the text below and copy it:";
+  openModal([hint, ta]); ta.focus(); ta.select();
+});
+document.getElementById("cpng").addEventListener("click", () => {
+  const out = document.createElement("canvas"); const S = 2; out.width = W * S; out.height = H * S + (comments.length ? 16 * S * (comments.length + 1) : 0);
+  const c = out.getContext("2d"); c.imageSmoothingEnabled = false;
+  c.fillStyle = "#2f4a2a"; c.fillRect(0, 0, out.width, out.height);
+  c.drawImage(world, 0, 0, W * S, H * S); c.drawImage(ui, 0, 0, W * S, H * S);
+  c.font = `bold ${7 * S}px ui-monospace, Menlo, monospace`; c.textBaseline = "middle"; c.textAlign = "center";
+  comments.forEach((cm, i) => { const x = cm.x * W * S, y = cm.y * H * S;
+    c.fillStyle = "#2b1d17"; c.beginPath(); c.arc(x, y - 7 * S, 6.5 * S, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#ffd75e"; c.beginPath(); c.arc(x, y - 7 * S, 5.5 * S, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#2b1d17"; c.fillText(i + 1, x, y - 7 * S); });
+  c.textAlign = "left"; c.font = `${6 * S}px ui-monospace, Menlo, monospace`; c.fillStyle = "#f3efe4";
+  comments.forEach((cm, i) => c.fillText(`${i + 1}. ${cm.near ? "[" + cm.near + "] " : ""}${cm.text || "(no text)"}`.slice(0, 110), 8 * S, H * S + 16 * S * (i + 1)));
+  let url; try { url = out.toDataURL("image/png"); } catch (e) { openModal([Object.assign(document.createElement("div"), { className: "hint", textContent: "Couldn't render the PNG in this viewer." })]); return; }
+  const img = new Image(); img.src = url;
+  const hint = document.createElement("div"); hint.className = "hint"; hint.textContent = "Long-press (or right-click) the image to save it. The download button below works outside sandboxed viewers.";
+  const dl = document.createElement("a"); dl.href = url; dl.download = "agent-farm-comments.png";
+  const btn = document.createElement("button"); btn.textContent = "download PNG"; dl.appendChild(btn);
+  openModal([hint, img, dl]);
+});
+render();
+</script>
+</body>
+</html>

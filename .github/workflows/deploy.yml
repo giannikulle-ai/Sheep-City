@@ -33,6 +33,10 @@ env:
   LIVE_URL: https://sheep-city.sheepcliff.com/
   GARAGE_URL: https://lab.sheepcliff.com
   GARAGE_TILE: sheep-city
+  # Phase 0 guardrail (owner's rule): the live tile shows the Luna Farm v31
+  # prototype until the ported app reaches parity and the owner has pinned it.
+  # Remove this line to deploy apps/web/dist instead.
+  DEPLOY_SOURCE: prototype/luna-farm/build/farm_sim.html
 
 jobs:
   deploy:

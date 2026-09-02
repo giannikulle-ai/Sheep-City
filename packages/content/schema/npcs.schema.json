@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepcliff.com/content/schema/npcs.schema.json",
+  "title": "Farm NPC job plans",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "source": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "sprite": {
+      "type": "object",
+      "properties": {
+        "w": { "type": "integer", "minimum": 1 }, "h": { "type": "integer", "minimum": 1 },
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+      },
+      "required": ["w", "h"], "additionalProperties": false
+    },
+    "walkSpeed": { "$ref": "#/$defs/number" },
+    "jobDurationMs": { "$ref": "#/$defs/number" },
+    "spawn": {
+      "type": "object",
+      "properties": {
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "spot": { "$ref": "_defs.schema.json#/$defs/id" },
+        "dx": { "type": "number" }, "dy": { "type": "number" },
+        "dir": { "type": "integer", "enum": [-1, 1] }
+      },
+      "required": ["spot", "dx", "dy", "dir"], "additionalProperties": false
+    },
+    "boundary": {
+      "type": "object",
+      "properties": {
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "measureDx": { "type": "number" },
+        "insideBelowX": { "type": "number" },
+        "outsideAboveX": { "type": "number" }
+      },
+      "required": ["measureDx", "insideBelowX", "outsideAboveX"], "additionalProperties": false
+    },
+    "npcs": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "_defs.schema.json#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/npc" }
+    }
+  },
+  "required": ["source", "sprite", "walkSpeed", "jobDurationMs", "spawn", "boundary", "npcs"],
+  "additionalProperties": false,
+  "$defs": {
+    "number": {
+      "type": "object",
+      "properties": { "value": { "type": "number" }, "comment": { "$ref": "_defs.schema.json#/$defs/comment" } },
+      "required": ["value", "comment"], "additionalProperties": false
+    },
+    "job": { "type": "string", "enum": ["enter", "leave", "gone", "trough", "hay", "shear", "pat", "trade"] },
+    "target": {
+      "type": "object",
+      "properties": {
+        "spot": { "$ref": "_defs.schema.json#/$defs/id" },
+        "dx": { "type": "number" }, "dy": { "type": "number" }
+      },
+      "required": ["spot"], "additionalProperties": false
+    },
+    "step": {
+      "type": "object",
+      "properties": { "job": { "$ref": "#/$defs/job" }, "at": { "$ref": "#/$defs/target" } },
+      "required": ["job"], "additionalProperties": false
+    },
+    "npc": {
+      "type": "object",
+      "properties": {
+        "sprite": { "$ref": "_defs.schema.json#/$defs/id" },
+        "cart": { "type": "boolean" },
+        "schedule": {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string", "enum": ["clock", "timer"] },
+            "balanceKey": { "type": "string", "pattern": "^[a-zA-Z]+(\\.[a-zA-Z]+)*$" },
+            "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+          },
+          "required": ["kind", "balanceKey"], "additionalProperties": false
+        },
+        "plan": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } },
+        "jobs": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/job" },
+          "additionalProperties": {
+            "type": "object",
+            "properties": { "comment": { "$ref": "_defs.schema.json#/$defs/comment" } },
+            "required": ["comment"],
+            "additionalProperties": { "type": "number" }
+          }
+        }
+      },
+      "required": ["sprite", "cart", "schedule", "plan"], "additionalProperties": false
+    }
+  }
+}

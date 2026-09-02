@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepcliff.com/content/schema/balance-farm.schema.json",
+  "title": "Farm balance numbers",
+  "description": "Every RULES number from the prototype, each with a one-line comment. Adding a key to RULES means adding it here too: `rules` allows no extra properties.",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "source": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "rules": {
+      "type": "object",
+      "properties": {
+        "flockCap":         { "$ref": "#/$defs/int" },
+        "woolGrowSec":      { "$ref": "#/$defs/num" },
+        "shearReadyAt":     { "$ref": "#/$defs/unit" },
+        "lambChancePerSec": { "$ref": "#/$defs/unit" },
+        "lambGrowMs":       { "$ref": "#/$defs/int" },
+        "tuftRegrowPerSec": { "$ref": "#/$defs/unit" },
+        "tuftBitePerSec":   { "$ref": "#/$defs/unit" },
+        "rain": {
+          "type": "object",
+          "properties": {
+            "rollEveryMs": { "$ref": "#/$defs/range" },
+            "chance":      { "$ref": "#/$defs/unit" },
+            "lengthMs":    { "$ref": "#/$defs/range" }
+          },
+          "required": ["rollEveryMs", "chance", "lengthMs"], "additionalProperties": false
+        },
+        "season": {
+          "type": "object",
+          "properties": { "realDays": { "$ref": "#/$defs/num" } },
+          "required": ["realDays"], "additionalProperties": false
+        },
+        "speed": {
+          "type": "object",
+          "properties": {
+            "sheepWander": { "$ref": "#/$defs/num" }, "sheepWalk": { "$ref": "#/$defs/num" },
+            "lunaRun": { "$ref": "#/$defs/num" }, "lunaFetchBack": { "$ref": "#/$defs/num" }, "lunaCarry": { "$ref": "#/$defs/num" }
+          },
+          "required": ["sheepWander", "sheepWalk", "lunaRun", "lunaFetchBack", "lunaCarry"], "additionalProperties": false
+        },
+        "rideMs":       { "$ref": "#/$defs/int" },
+        "rideManualMs": { "$ref": "#/$defs/int" },
+        "farmer": {
+          "type": "object",
+          "properties": {
+            "visitsAt": {
+              "type": "object",
+              "properties": {
+                "value": { "type": "array", "minItems": 1, "items": { "type": "number", "minimum": 0, "maximum": 1 } },
+                "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+              },
+              "required": ["value", "comment"], "additionalProperties": false
+            },
+            "shearAt": { "$ref": "#/$defs/unit" }
+          },
+          "required": ["visitsAt", "shearAt"], "additionalProperties": false
+        },
+        "merchant": {
+          "type": "object",
+          "properties": {
+            "everyMs": { "$ref": "#/$defs/int" }, "stayMs": { "$ref": "#/$defs/int" }, "woolPrice": { "$ref": "#/$defs/int" }
+          },
+          "required": ["everyMs", "stayMs", "woolPrice"], "additionalProperties": false
+        },
+        "upgrades": {
+          "type": "object",
+          "properties": { "see": { "type": "string", "const": "farm/upgrades.json" }, "comment": { "$ref": "_defs.schema.json#/$defs/comment" } },
+          "required": ["see", "comment"], "additionalProperties": false
+        },
+        "petTagMs": { "$ref": "#/$defs/int" }
+      },
+      "required": ["flockCap", "woolGrowSec", "shearReadyAt", "lambChancePerSec", "lambGrowMs", "tuftRegrowPerSec", "tuftBitePerSec",
+                   "rain", "season", "speed", "rideMs", "rideManualMs", "farmer", "merchant", "upgrades", "petTagMs"],
+      "additionalProperties": false
+    },
+    "outsideRules": {
+      "type": "object",
+      "properties": {
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "clock": {
+          "type": "object",
+          "properties": {
+            "startT": { "$ref": "#/$defs/unit" },
+            "periodSec": { "$ref": "#/$defs/num" },
+            "phases": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "object",
+                  "properties": { "day": { "$ref": "#/$defs/unitRaw" }, "dusk": { "$ref": "#/$defs/unitRaw" }, "night": { "$ref": "#/$defs/unitRaw" }, "dawn": { "$ref": "#/$defs/unitRaw" } },
+                  "required": ["day", "dusk", "night", "dawn"], "additionalProperties": false
+                },
+                "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+              },
+              "required": ["value", "comment"], "additionalProperties": false
+            }
+          },
+          "required": ["startT", "periodSec", "phases"], "additionalProperties": false
+        },
+        "seasons": {
+          "type": "object",
+          "properties": {
+            "order": {
+              "type": "object",
+              "properties": {
+                "value": { "type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true, "items": { "$ref": "#/$defs/seasonName" } },
+                "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+              },
+              "required": ["value", "comment"], "additionalProperties": false
+            },
+            "temp": {
+              "type": "object",
+              "properties": {
+                "value": { "type": "object", "propertyNames": { "$ref": "#/$defs/seasonName" }, "additionalProperties": { "type": "number" }, "minProperties": 4 },
+                "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+              },
+              "required": ["value", "comment"], "additionalProperties": false
+            },
+            "odds": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "object", "propertyNames": { "$ref": "#/$defs/seasonName" }, "minProperties": 4,
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": { "rain": { "$ref": "#/$defs/unitRaw" }, "snow": { "$ref": "#/$defs/unitRaw" } },
+                    "required": ["rain", "snow"], "additionalProperties": false
+                  }
+                },
+                "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+              },
+              "required": ["value", "comment"], "additionalProperties": false
+            }
+          },
+          "required": ["order", "temp", "odds"], "additionalProperties": false
+        },
+        "merchant": {
+          "type": "object",
+          "properties": { "firstVisitMs": { "$ref": "#/$defs/int" } },
+          "required": ["firstVisitMs"], "additionalProperties": false
+        },
+        "flock": {
+          "type": "object",
+          "properties": { "initial": { "$ref": "#/$defs/int" } },
+          "required": ["initial"], "additionalProperties": false
+        }
+      },
+      "required": ["clock", "seasons", "merchant", "flock"], "additionalProperties": false
+    }
+  },
+  "required": ["source", "rules", "outsideRules"],
+  "additionalProperties": false,
+  "$defs": {
+    "seasonName": { "type": "string", "enum": ["spring", "summer", "autumn", "winter"] },
+    "unitRaw": { "type": "number", "minimum": 0, "maximum": 1 },
+    "num": {
+      "type": "object",
+      "properties": { "value": { "type": "number" }, "comment": { "$ref": "_defs.schema.json#/$defs/comment" } },
+      "required": ["value", "comment"], "additionalProperties": false
+    },
+    "int": {
+      "type": "object",
+      "properties": { "value": { "type": "integer", "minimum": 0 }, "comment": { "$ref": "_defs.schema.json#/$defs/comment" } },
+      "required": ["value", "comment"], "additionalProperties": false
+    },
+    "unit": {
+      "type": "object",
+      "properties": { "value": { "$ref": "#/$defs/unitRaw" }, "comment": { "$ref": "_defs.schema.json#/$defs/comment" } },
+      "required": ["value", "comment"], "additionalProperties": false
+    },
+    "range": {
+      "type": "object",
+      "properties": {
+        "value": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number", "minimum": 0 } },
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+      },
+      "required": ["value", "comment"], "additionalProperties": false
+    }
+  }
+}

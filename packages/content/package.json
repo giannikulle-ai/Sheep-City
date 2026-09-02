@@ -1,0 +1,17 @@
+{
+  "name": "@sheepcliff/content",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Sheepcliff world content as plain JSON with a schema per file.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "validate:content": "node scripts/validate.mjs",
+    "validate": "node scripts/validate.mjs",
+    "test": "vitest run && node --test \"test/*.test.mjs\"",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "engines": { "node": ">=20" }
+}

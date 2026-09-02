@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sheepcliff — hello canvas</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #2b1d17;
+        color: #f6f2e8;
+        font: 14px/1.4 system-ui, sans-serif;
+      }
+      main {
+        min-height: 100%;
+        display: grid;
+        place-items: center;
+        gap: 12px;
+        grid-auto-rows: max-content;
+        align-content: center;
+      }
+      /* Native-pixel canvas, upscaled by CSS only. Never draw scaled. */
+      canvas#scene {
+        width: 384px;
+        height: 256px;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        border: 2px solid #4e3428;
+      }
+      p {
+        margin: 0;
+        opacity: 0.8;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <canvas id="scene" width="96" height="64"></canvas>
+      <p id="status">loading sheet…</p>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

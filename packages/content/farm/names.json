@@ -1,0 +1,11 @@
+{
+  "$schema": "../schema/names.schema.json",
+  "source": "prototype/luna-farm/src/sim_template.html (NAMES, COLORS, reset)",
+  "comment": "Sheep i takes names[i % names.length] and tagColours[i % tagColours.length]. The first five sheep use indices 0..4; grown lambs continue from lambNamesStartAt.",
+  "sheep": ["Clover", "Daisy", "Biscuit", "Pepper", "Maple", "Willow", "Poppy", "Hazel", "Juniper"],
+  "tagColours": {
+    "comment": "Name-tag colours inherited from agent days (FARM_RULES known debts). Not part of the sprite palette; they tint the HUD tag only.",
+    "hex": ["#3a7bd5", "#e0a52c", "#2fa07a", "#7c4dbf", "#e0602c", "#d33a2f", "#2aa0b8", "#a04ad0", "#8b8b2a"]
+  },
+  "lambNamesStartAt": 5
+}

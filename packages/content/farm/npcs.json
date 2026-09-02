@@ -1,0 +1,59 @@
+{
+  "$schema": "../schema/npcs.schema.json",
+  "source": "prototype/luna-farm/src/sim_template.html (NPC_W/NPC_H, summonFarmer, summonMerchant, npcStep, tickNPCs)",
+  "comment": "Visiting NPCs walk a job plan: each step is a job name plus an optional target given as a landmark from farm/spots.json and a pixel offset. Steps without a target run in place. Timers for how often they visit live in balance/farm.json.",
+  "sprite": { "w": 16, "h": 21, "comment": "NPC sprite box; the foot point is (w / 2, h - 1)." },
+  "walkSpeed": { "value": 26, "comment": "px per second for every NPC (npcStep passes 26)." },
+  "jobDurationMs": { "value": 2600, "comment": "Default time spent on a job that sets no duration of its own." },
+  "spawn": {
+    "comment": "Spawn top-left corner: offstage.x + dx, offstage.y + dy where dy is -h + 2, so the foot lands one px below the offstage spot. Faces left.",
+    "spot": "offstage", "dx": -8, "dy": -19, "dir": -1
+  },
+  "boundary": {
+    "comment": "Measured at x + 8 (the foot's x): after an `enter` step an NPC is inside once below insideBelowX; after a `leave` step it is outside once above outsideAboveX. Outside NPCs ignore the barn router and the field clamp.",
+    "measureDx": 8, "insideBelowX": 540, "outsideAboveX": 520
+  },
+  "npcs": {
+    "farmer": {
+      "sprite": "farmer",
+      "cart": false,
+      "schedule": { "kind": "clock", "balanceKey": "farmer.visitsAt", "comment": "Summoned when floor(clock.t * 100) hits floor(visit * 100), once per in-world day per visit." },
+      "plan": [
+        { "job": "enter", "at": { "spot": "gateOut" } },
+        { "job": "enter", "at": { "spot": "gate" } },
+        { "job": "trough", "at": { "spot": "trough", "dx": 18, "dy": 6 } },
+        { "job": "hay",    "at": { "spot": "hay",    "dx": 22, "dy": 12 } },
+        { "job": "shear" },
+        { "job": "pat" },
+        { "job": "leave", "at": { "spot": "gate" } },
+        { "job": "leave", "at": { "spot": "gateOut" } },
+        { "job": "gone",  "at": { "spot": "offstage" } }
+      ],
+      "jobs": {
+        "trough": { "comment": "Tops up the trough; a heart bubble on the farmer for heartMs when done.", "heartMs": 800 },
+        "hay":    { "comment": "Refills the hay; every sheep on a hay trip starts eating when done." },
+        "shear":  {
+          "comment": "Picks the woolliest sheep at or above balance farmer.shearAt that is outside and not already being shorn, walks beside it (approachDx on the side it faces away from, approachDy below its foot), shears it after shearDelayMs, shows its tag for tagMs, and re-queues itself while another sheep qualifies. Skipped when no sheep qualifies.",
+          "approachDx": 22, "approachDy": 2, "shearDelayMs": 1200, "tagMs": 1500
+        },
+        "pat":    {
+          "comment": "Calls DL to farmer + (lunaDx, lunaDy) (lunaDy is h + 2) and cancels her manual/routine state; on end she pants with a heart for heartMs. Skipped if DL is in the barn or riding.",
+          "lunaDx": -6, "lunaDy": 23, "heartMs": 1600
+        }
+      }
+    },
+    "merchant": {
+      "sprite": "merchant",
+      "cart": true,
+      "schedule": { "kind": "timer", "balanceKey": "merchant.everyMs", "comment": "Summoned when the timer since the last visit runs out; the first visit is balance outsideRules.merchant.firstVisitMs after reset." },
+      "plan": [
+        { "job": "enter", "at": { "spot": "gateOut", "dx": 10, "dy": 0 } },
+        { "job": "trade" },
+        { "job": "gone",  "at": { "spot": "offstage" } }
+      ],
+      "jobs": {
+        "trade": { "comment": "Stays balance merchant.stayMs. Sells the whole wool bank at merchant.woolPrice coins each with a coin bubble for coinMs, then auto-buys upgrades in order.", "coinMs": 2500 }
+      }
+    }
+  }
+}

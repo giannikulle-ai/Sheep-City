@@ -49,7 +49,8 @@ function bootIntents(search: string): ClientIntent[] {
   const out: ClientIntent[] = [];
   if (q.has('t')) out.push({ type: 'setClock', t: p.t });
   if (q.has('weather')) out.push({ type: 'setWeather', weather: p.weather });
-  if (q.has('season') || q.has('weather')) out.push({ type: 'setSeason', season: p.season });
+  // Only an explicit ?season= pins the season; ?weather= alone leaves the sim's seasonal mode as is.
+  if (q.has('season')) out.push({ type: 'setSeason', season: p.season });
   if (p.freeze) out.push({ type: 'pauseClock', paused: true });
   return out;
 }
@@ -77,9 +78,9 @@ async function main(): Promise<void> {
   const fixed = params.now !== null;
   const game = new Game({ seed: params.seed, liveWeather: params.liveWeather, boot: bootIntents(location.search), onMoment: emitMoment });
   // A fixed render clock is a still for goldens: the fixture exactly as the URL says, no sim.
+  // A still never runs a frame, so it is not "frozen for pins" unless pins are switched on.
   let still: FarmView | null = null;
   if (params.now !== null) {
-    game.frozen = true;
     game.renderNow = params.now;
     still = buildFixture(params, params.now);
   }
@@ -119,7 +120,7 @@ async function main(): Promise<void> {
       view: currentView,
       sizes: () => sizes,
       setFrozen: (f) => {
-        if (!fixed) game.frozen = f;
+        game.frozen = f;
       },
       isFrozen: () => game.frozen,
     },

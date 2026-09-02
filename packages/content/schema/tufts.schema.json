@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepcliff.com/content/schema/tufts.schema.json",
+  "title": "Farm grass tuft generator",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "source": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "ring": {
+      "type": "object",
+      "properties": {
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "center": { "$ref": "_defs.schema.json#/$defs/point" },
+        "corners": { "type": "array", "items": { "$ref": "_defs.schema.json#/$defs/pair" }, "minItems": 3 },
+        "inset": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "subdivisions": { "type": "integer", "minimum": 2 },
+        "jitter": {
+          "type": "object",
+          "properties": {
+            "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+            "x": { "type": "number", "minimum": 0 }, "y": { "type": "number", "minimum": 0 }
+          },
+          "required": ["x", "y"], "additionalProperties": false
+        },
+        "skip": {
+          "type": "object",
+          "properties": {
+            "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+            "barnCheckYOffsets": { "type": "array", "items": { "type": "number" } },
+            "edge": { "type": "integer", "minimum": 0 },
+            "tFrom": { "type": "number", "minimum": 0, "maximum": 1 },
+            "tTo": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "required": ["barnCheckYOffsets", "edge", "tFrom", "tTo"], "additionalProperties": false
+        },
+        "initialLevel": {
+          "type": "object",
+          "properties": {
+            "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+            "min": { "type": "number", "minimum": 0, "maximum": 1 },
+            "spread": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "required": ["min", "spread"], "additionalProperties": false
+        }
+      },
+      "required": ["center", "corners", "inset", "subdivisions", "jitter", "skip", "initialLevel"],
+      "additionalProperties": false
+    },
+    "scatter": {
+      "type": "object",
+      "properties": {
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "count": { "type": "integer", "minimum": 0 },
+        "randomFoot": {
+          "type": "object",
+          "properties": {
+            "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+            "xMin": { "type": "number" }, "xRange": { "type": "number", "minimum": 0 },
+            "yMin": { "type": "number" }, "yRange": { "type": "number", "minimum": 0 },
+            "fieldMetric": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "barnCheckYOffsets": { "type": "array", "items": { "type": "number" } },
+            "tries": { "type": "integer", "minimum": 1 },
+            "fallback": { "$ref": "_defs.schema.json#/$defs/point" }
+          },
+          "required": ["xMin", "xRange", "yMin", "yRange", "fieldMetric", "barnCheckYOffsets", "tries", "fallback"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["count", "randomFoot"], "additionalProperties": false
+    },
+    "anchors": {
+      "type": "object",
+      "properties": {
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "edge": { "type": "integer", "minimum": 0 },
+              "i": { "type": "integer", "minimum": 1 },
+              "x": { "type": "number" }, "y": { "type": "number" },
+              "skipped": { "type": "boolean" }
+            },
+            "required": ["edge", "i", "x", "y", "skipped"], "additionalProperties": false
+          }
+        }
+      },
+      "required": ["points"], "additionalProperties": false
+    }
+  },
+  "required": ["source", "ring", "scatter"],
+  "additionalProperties": false
+}

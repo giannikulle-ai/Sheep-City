@@ -1,0 +1,168 @@
+# Deploy to The Garage (issue #12).
+#
+# Publishes the built web app to The Garage tile `sheep-city`, served at
+# https://sheep-city.sheepcliff.com, on every push to the trunk branch once
+# the other checks on that commit are green, and on manual trigger.
+#
+# Secrets: GARAGE_TOKEN (repository secret). Never printed; masked twice.
+# See docs/DEPLOY.md for the observed API and how to run a manual deploy.
+name: deploy
+
+on:
+  push:
+    branches:
+      - claude/sheepcliff-civilization-framework-bkgla5   # trunk until main exists
+  workflow_dispatch:
+    inputs:
+      wait_for_ci:
+        description: "Wait for the other checks on this commit to pass before deploying"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  checks: read
+  actions: read
+
+# One deploy at a time; a queued deploy always runs (it carries the newest commit).
+concurrency:
+  group: deploy-garage
+  cancel-in-progress: false
+
+env:
+  LIVE_URL: https://sheep-city.sheepcliff.com/
+  GARAGE_URL: https://lab.sheepcliff.com
+  GARAGE_TILE: sheep-city
+
+jobs:
+  deploy:
+    name: Deploy sheep-city to The Garage
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Require GARAGE_TOKEN
+        env:
+          GARAGE_TOKEN: ${{ secrets.GARAGE_TOKEN }}
+        run: |
+          if [ -z "${GARAGE_TOKEN}" ]; then
+            echo "::error::The GARAGE_TOKEN repository secret is not set. Add it at https://github.com/${GITHUB_REPOSITORY}/settings/secrets/actions. Nothing was deployed."
+            exit 1
+          fi
+          echo "::add-mask::${GARAGE_TOKEN}"
+          echo "GARAGE_TOKEN is set. Deploying ${GITHUB_REF_NAME}@${GITHUB_SHA::8}."
+
+      - name: Wait for the other checks on this commit
+        if: github.event_name == 'push' || inputs.wait_for_ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Polls the check runs on this commit and proceeds only when every
+          # check that is not part of this deploy run has finished successfully.
+          # This does not depend on the CI workflow's name, so it keeps working
+          # when .github/workflows/ci.yml lands or is renamed.
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 30*60 ))   # give CI up to 30 minutes
+          grace=$(( $(date +%s) + 90 ))         # and 90 s to show up at all
+          while :; do
+            runs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
+              --jq '[.check_runs[] | select(.html_url | contains("/actions/runs/'"${GITHUB_RUN_ID}"'/") | not)]' \
+              | jq -s 'add // []')
+            total=$(jq 'length' <<<"$runs")
+            pending=$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")
+            failed=$(jq -r '[.[] | select(.status == "completed" and (.conclusion | IN("success","skipped","neutral") | not))] | .[] | "\(.name): \(.conclusion)"' <<<"$runs")
+            now=$(date +%s)
+            if [ -n "$failed" ]; then
+              echo "::error::Not deploying: a check on ${GITHUB_SHA::8} did not pass:"
+              echo "$failed"
+              exit 1
+            fi
+            if [ "$total" -eq 0 ]; then
+              if [ "$now" -ge "$grace" ]; then
+                echo "::warning::No other checks appeared on ${GITHUB_SHA::8} within 90 s (CI not wired up yet?). Deploying anyway."
+                break
+              fi
+              echo "No other checks on this commit yet; waiting..."
+            elif [ "$pending" -eq 0 ]; then
+              echo "All ${total} other checks on ${GITHUB_SHA::8} passed."
+              break
+            else
+              echo "${pending} of ${total} checks still running..."
+            fi
+            if [ "$now" -ge "$deadline" ]; then
+              echo "::error::Gave up waiting for checks after 30 minutes."
+              exit 1
+            fi
+            sleep 20
+          done
+
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Build the web app (when it exists)
+        run: |
+          # The web app lands in a later ticket; until then deploy.sh falls back
+          # to the Luna Farm prototype build that is committed to the repo.
+          if [ -f package.json ]; then
+            npm ci && npm run build
+          else
+            echo "No package.json at the repo root yet; skipping the build."
+          fi
+
+      - name: Deploy to The Garage
+        env:
+          GARAGE_TOKEN: ${{ secrets.GARAGE_TOKEN }}
+        run: |
+          echo "::add-mask::${GARAGE_TOKEN}"
+          bash tools/deploy/deploy.sh
+
+      - name: Verify the live URL answers 200
+        run: |
+          set -u
+          for attempt in $(seq 1 12); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${LIVE_URL}" || echo "000")
+            echo "attempt ${attempt}: ${LIVE_URL} -> ${code}"
+            if [ "$code" = "200" ]; then
+              echo "Live: ${LIVE_URL}" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::${LIVE_URL} did not return 200 after the deploy (last status ${code})."
+          exit 1
+
+      - name: Screenshot the live site through The Garage (best effort)
+        id: shot
+        continue-on-error: true
+        env:
+          GARAGE_TOKEN: ${{ secrets.GARAGE_TOKEN }}
+        run: |
+          # GET /api/tiles/{name}/screenshot renders the tile through the lab's
+          # own headless Chromium and returns a PNG (per the Garage OpenAPI spec).
+          echo "::add-mask::${GARAGE_TOKEN}"
+          umask 077
+          printf 'Authorization: Bearer %s\n' "${GARAGE_TOKEN}" > "${RUNNER_TEMP}/auth-header"
+          code=$(curl -sS -o live-sheep-city.png -w '%{http_code}' -H @"${RUNNER_TEMP}/auth-header" --max-time 180 \
+            "${GARAGE_URL}/api/tiles/${GARAGE_TILE}/screenshot?full=true" || echo "000")
+          rm -f "${RUNNER_TEMP}/auth-header"
+          echo "screenshot endpoint -> ${code}"
+          if [ "$code" != "200" ] || ! file live-sheep-city.png | grep -q "PNG image"; then
+            rm -f live-sheep-city.png
+            exit 1
+          fi
+
+      - name: Screenshot the live site with Playwright (fallback, best effort)
+        if: steps.shot.outcome != 'success'
+        continue-on-error: true
+        run: |
+          npx --yes playwright@1 install --with-deps chromium
+          npx --yes playwright@1 screenshot \
+            --browser chromium --viewport-size=1280,800 --wait-for-timeout=4000 --full-page \
+            "${LIVE_URL}" live-sheep-city.png
+
+      - name: Upload the screenshot
+        if: hashFiles('live-sheep-city.png') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-sheep-city-${{ github.sha }}
+          path: live-sheep-city.png
+          retention-days: 14

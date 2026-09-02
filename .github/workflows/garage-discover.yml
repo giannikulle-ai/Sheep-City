@@ -40,6 +40,8 @@ jobs:
       GARAGE_TOKEN: ${{ secrets.GARAGE_TOKEN }}
       BASE_URL: ${{ inputs.base_url || 'https://lab.sheepcliff.com' }}
       EXTRA_PATHS: ${{ inputs.extra_paths || '' }}
+      GARAGE_TILE: sheep-city
+      LIVE_URL: https://sheep-city.sheepcliff.com
     steps:
       - name: Check that GARAGE_TOKEN is set
         id: token
@@ -67,12 +69,16 @@ jobs:
           base = os.environ["BASE_URL"].rstrip("/")
           extra = [p.strip() for p in os.environ.get("EXTRA_PATHS", "").split(",") if p.strip()]
 
-          # The paths the ticket asks for, plus a few common doc/API locations.
+          tile = os.environ.get("GARAGE_TILE", "sheep-city")
+          # The paths the ticket asks for, plus the read-only endpoints the
+          # OpenAPI spec lists (all GETs; nothing here changes the tile).
           paths = [
-              "/", "/docs", "/openapi.json", "/api", "/tiles", "/tiles/sheep-city",
-              "/openapi.yaml", "/redoc", "/swagger.json", "/api/docs", "/api/openapi.json",
-              "/api/tiles", "/api/tiles/sheep-city", "/health", "/healthz", "/version",
-              "/robots.txt", "/.well-known/openapi.json",
+              "/", "/docs", "/openapi.json", "/api", "/tiles", f"/tiles/{tile}",
+              "/api/docs", "/api/openapi.json", "/health", "/robots.txt",
+              "/auth/check", "/api/status", "/api/tiles", f"/api/tiles/{tile}",
+              f"/api/tiles/{tile}/files?path=index.html", f"/api/tiles/{tile}/tests",
+              f"/api/tiles/{tile}/logs?lines=40", f"/tile/{tile}",
+              f"/git/{tile}.git/info/refs?service=git-upload-pack",
           ] + extra
 
           MAX_BODY = 4096
@@ -131,14 +137,17 @@ jobs:
           summary.append(("no-auth", "GET", "/", probe("/", auth=False)))
           for p in paths:
               summary.append(("auth" if has_token else "no-auth", "GET", p, probe(p, auth=has_token)))
-          # OPTIONS on the tile path often lists allowed methods on small APIs.
-          summary.append(("auth" if has_token else "no-auth", "OPTIONS", "/tiles/sheep-city",
-                          probe("/tiles/sheep-city", method="OPTIONS", auth=has_token)))
+          # The live URL, as a visitor sees it (no token).
+          live = os.environ.get("LIVE_URL", "").rstrip("/")
+          if live:
+              saved, base = base, live
+              summary.append(("no-auth", "GET", live + "/", probe("/", auth=False)))
+              base = saved
 
           print("=" * 78)
           print("SUMMARY (label method path -> status)")
           for label, method, path, status in summary:
-              print(f"  {label:7} {method:7} {path:32} -> {status}")
+              print(f"  {label:7} {method:7} {path:48} -> {status}")
 
           step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
           if step_summary:

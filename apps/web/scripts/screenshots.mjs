@@ -1,5 +1,7 @@
-// Page screenshots (world + UI layer) for PR review: four phases at 2x.
+// Page screenshots (world + UI layer) for PR review.
 // Usage: npm run build && node scripts/screenshots.mjs   (writes apps/web/screenshots/)
+//   four phases plus rain and snow at 2x on the desktop viewport, and three phone shots:
+//   portrait, landscape with the tray open, and the pin overlay with two pins dropped.
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,13 +27,56 @@ const browser = await chromium.launch({
   headless: true,
   ...(existsSync(preinstalled) ? { executablePath: preinstalled } : {}),
 });
+const base = 'http://127.0.0.1:4174/';
+const ready = (page) => page.waitForSelector('body[data-ready="1"]', { timeout: 15000 });
+
 const page = await browser.newPage({ viewport: { width: 640, height: 470 }, deviceScaleFactor: 2 });
 for (const [name, query] of SHOTS) {
-  await page.goto(`http://127.0.0.1:4174/?${query}&now=100000`);
-  await page.waitForSelector('body[data-ready="1"]', { timeout: 15000 });
+  await page.goto(`${base}?${query}&now=100000`);
+  await ready(page);
   const file = join(out, `${name}.png`);
   await page.screenshot({ path: file, fullPage: true });
   console.log('wrote', file);
 }
+await page.close();
+
+// Phone shots on the live page: a fixed seed and clock, the sim paused so the picture holds.
+const LIVE = '?seed=1&weather=sun&t=0.2&freeze=1';
+const tapWorld = async (p, wx, wy) => {
+  const box = await p.locator('#stage').boundingBox();
+  await p.mouse.click(box.x + (wx * box.width) / 640, box.y + (wy * box.height) / 400);
+};
+
+const portrait = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+await portrait.goto(base + LIVE);
+await ready(portrait);
+await tapWorld(portrait, 150, 238); // pet Clover
+await tapWorld(portrait, 142, 300); // pet Digital Luna
+await portrait.locator('#who button[data-who="sheep-1"]').click();
+await portrait.screenshot({ path: join(out, 'phone-portrait.png'), fullPage: true });
+console.log('wrote', join(out, 'phone-portrait.png'));
+
+await portrait.locator('#cmode').click();
+await tapWorld(portrait, 499, 276);
+await portrait.locator('#notes textarea').last().fill('lantern glow looks flat');
+await tapWorld(portrait, 318, 96);
+await portrait.locator('#notes textarea').last().fill('barn door shadow');
+await portrait.screenshot({ path: join(out, 'phone-pins.png'), fullPage: true });
+console.log('wrote', join(out, 'phone-pins.png'));
+await portrait.locator('#ctext').click();
+await portrait.waitForSelector('#modal.show');
+await portrait.screenshot({ path: join(out, 'phone-pins-text.png'), fullPage: false });
+console.log('wrote', join(out, 'phone-pins-text.png'));
+await portrait.close();
+
+const landscape = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2 });
+await landscape.goto(base + LIVE);
+await ready(landscape);
+await landscape.locator('#trayToggle').click();
+await landscape.waitForTimeout(300);
+await landscape.screenshot({ path: join(out, 'phone-landscape.png'), fullPage: false });
+console.log('wrote', join(out, 'phone-landscape.png'));
+await landscape.close();
+
 await browser.close();
 await server.close();

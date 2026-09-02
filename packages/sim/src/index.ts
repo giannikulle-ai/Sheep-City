@@ -74,7 +74,21 @@ export {
   type Butterfly,
   type Fly,
 } from './state';
-export { applyIntent, applyDueIntents, INTENT_TYPES, LUNA_ACTIONS, FARM_ACTIONS, type Intent, type IntentType, type LunaAction, type FarmAction } from './intents';
+export {
+  applyIntent,
+  applyDueIntents,
+  INTENT_TYPES,
+  LUNA_ACTIONS,
+  FARM_ACTIONS,
+  SHEEP_ACTIONS,
+  type Intent,
+  type IntentType,
+  type LunaAction,
+  type FarmAction,
+  type SheepAction,
+  type SheepTarget,
+  type PetTarget,
+} from './intents';
 export { createRegistry, DEFAULT_CHAIN, type Behaviour, type Registry } from './behaviours/registry';
 export {
   LUNA_BEHAVIOURS,

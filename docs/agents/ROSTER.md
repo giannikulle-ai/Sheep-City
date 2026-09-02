@@ -11,10 +11,11 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | art | done | session_01UaKpw34TT6nFFfXec6EGCK | #3 pipeline move, merged as PR #13 (Verifier session_01QqVLgxYDm8TMg51Nh5kiTU approved) | 2026-09-02 |
 | world | done | session_016yv8aPqYXfRfWNuFCyBiQS | #10 farm content, merged as PR #15 | 2026-09-02 |
 | sim | done | session_01RNhjEJp3aB7MZj9NRYpDeh | #4 clock, RNG, step, merged as PR #18 (Verifier session_01ChUNxEUTH453EE89FtFTGn approved) | 2026-09-02 |
-| sim | active | session_01Y8mRE88YxpXSCaE4dv8foL | #5 part a: behaviour registry and DL chain (gate high, owner pin) | 2026-09-02 |
-| sim | active | session_01QRszNSGVx7TZV97ud6uZwn | #8 save v1 | 2026-09-02 |
+| sim | in review | session_01Y8mRE88YxpXSCaE4dv8foL | #5 part a: registry and DL chain, PR #23 (needs-owner-pin; Verifier session_01PQ4W5z8o3KBp7LnycoBzdh) | 2026-09-02 |
+| sim | active | session_01UHyCUx8NRHHoBXzGVTHEiq | #5 part b: sheep, lambs, NPCs, stacked on #23 | 2026-09-02 |
+| sim | in review | session_01QRszNSGVx7TZV97ud6uZwn | #8 save v1, PR #22 (Verifier session_01MKos2vVS14sLaH3N4dWKoD) | 2026-09-02 |
 | client | done | session_01BzngZosAW3AvFAP4XMhC1A | #6 renderer port, merged as PR #19 (Verifier session_013uNxpKjNWXAVSXaAJs7zDr; Foreman resolved a spec-name collision with #21) | 2026-09-02 |
-| client | active | session_01M7oHrnRiqrvqwGM7aWZ1JP | #7 input, tap verbs, portrait frame, pin overlay (gate high, owner pin) | 2026-09-02 |
+| client | in review | session_01M7oHrnRiqrvqwGM7aWZ1JP | #7 input and pin overlay, PR #24 (needs-owner-pin; Verifier session_01BAsYfT1x8aae9UpDr3NYvn) | 2026-09-02 |
 | qa | done | session_01XwNiAQpm1ectYv8dsxiMWX | #9 watch test and goldens, merged as PR #21 | 2026-09-02 |
 | economy | not started | — | Phase 2 | — |
 

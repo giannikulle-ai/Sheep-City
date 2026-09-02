@@ -64,39 +64,77 @@ test.describe('portrait phone', () => {
 
   test('three taps: pet a sheep, pet Digital Luna, throw a stick', async ({ page }) => {
     const errors = await open(page);
-    // the flock is wherever seed 1 put it, and DL's first tick pulls her onto the field: let the
-    // sim settle, then read Clover's and DL's sprite centres from the view
-    await page.waitForTimeout(400);
-    const at = await page.evaluate(() => {
-      const v = (window as unknown as WithApp).sheepcliff.view();
-      const s = v.sheep[0];
-      if (!s) throw new Error('no sheep');
-      return { clover: { x: s.x + 16, y: s.y + 13 }, luna: { x: v.luna.x + 22, y: v.luna.y + 20 } };
+    // Fix the world before asking anything of it (#37). The sim refuses `throwStick` in rain, in
+    // the barn, on a sheep's back, in bed, and off the field, so the test pins every one of those:
+    // seed 1 on the QA virtual clock (only `step` moves time from here), sun in manual weather (no
+    // rain roll), mid-morning (bed is a dusk routine), and five ticks so DL's first tick has
+    // pulled her onto the field. Each tap then lands on a tick the test runs itself, and the
+    // assertions read the sim's state on that tick, not whatever a wall clock allowed.
+    await page.evaluate(() => {
+      const a = (window as unknown as WithApp).sheepcliff;
+      a.qa.seed(1);
+      a.qa.setWeather('sun');
+      a.qa.setClock(0.18);
+      a.qa.step(30);
     });
-    await tapWorld(page, at.clover.x, at.clover.y);
-    await tapWorld(page, at.luna.x, at.luna.y);
-    await tapWorld(page, 320, 250); // open grass
+    const tick = () => page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.step(6));
+
+    // Clover and DL are wherever seed 1 put them: read each sprite's centre from the view just
+    // before its tap, and run one tick after it so the sim's hit test sees the same positions
+    const clover = await page.evaluate(() => {
+      const s = (window as unknown as WithApp).sheepcliff.view().sheep[0];
+      if (!s) throw new Error('no sheep');
+      return { x: s.x + 16, y: s.y + 13 };
+    });
+    await tapWorld(page, clover.x, clover.y);
+    await tick();
+    const luna = await page.evaluate(() => {
+      const l = (window as unknown as WithApp).sheepcliff.view().luna;
+      return { x: l.x + 22, y: l.y + 20 };
+    });
+    await tapWorld(page, luna.x, luna.y);
+    await tick();
+
+    // the throw is legal here, and the test says so before it throws: a failure names the refusal
+    // that fired instead of a null stick. (320, 250) is open grass well inside the field ellipse.
+    const before = await page.evaluate(() => {
+      const s = (window as unknown as WithApp).sheepcliff.sim();
+      return { rain: s.weather.rain, inBarn: s.luna.inBarn, riding: s.luna.riding, routine: s.luna.routine, stick: s.luna.stick };
+    });
+    expect(before).toEqual({ rain: false, inBarn: false, riding: null, routine: null, stick: null });
+    await tapWorld(page, 320, 250);
+    await tick();
 
     // every tap became the sim's click at the tapped world point; the sim did the hit-testing
+    // (the QA hooks above sent their weather and clock through the same log, so read the taps)
     const intents = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.intents.map((r) => ({ ...r.intent, sim: r.sim })));
-    expect(intents).toHaveLength(3);
-    for (const [i, want] of [at.clover, at.luna, { x: 320, y: 250 }].entries()) {
-      expect(intents[i]).toMatchObject({ type: 'tap', sim: true });
-      const tap = intents[i] as { x: number; y: number };
+    expect(intents.filter((r) => r.type === 'tap')).toHaveLength(3);
+    expect(intents).toHaveLength(5);
+    const taps = intents.slice(2);
+    for (const [i, want] of [clover, luna, { x: 320, y: 250 }].entries()) {
+      expect(taps[i]).toMatchObject({ type: 'tap', sim: true });
+      const tap = taps[i] as { x: number; y: number };
       expect(Math.abs(tap.x - want.x)).toBeLessThan(2);
       expect(Math.abs(tap.y - want.y)).toBeLessThan(2);
     }
-    // and the sim's own hit test read them as a pet, a pet, and a stick: heart bubbles, DL's tag,
-    // the stick on the grass and DL running for it
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const v = (window as unknown as WithApp).sheepcliff.view();
-          const sim = (window as unknown as WithApp).sheepcliff.sim();
-          return { clover: v.sheep[0]?.icon, luna: sim.luna.icon, lunaTag: sim.luna.tagUntilMs > 0, stick: !!sim.luna.stick, anim: v.luna.anim };
-        }),
-      )
-      .toEqual({ clover: 'heart', luna: 'heart', lunaTag: true, stick: true, anim: 'run' });
+    // and the sim's own hit test read them as a pet, a pet, and a stick: heart bubbles (1600 ms,
+    // two ticks ago at most), DL's tag, the stick on the grass with DL running for it
+    const after = await page.evaluate(() => {
+      const v = (window as unknown as WithApp).sheepcliff.view();
+      const s = (window as unknown as WithApp).sheepcliff.sim();
+      return {
+        clover: v.sheep[0]?.icon,
+        luna: s.luna.icon,
+        lunaTag: s.luna.tagUntilMs > s.clock.nowMs,
+        stick: s.luna.stick,
+        anim: s.luna.anim,
+        drawn: v.stick,
+      };
+    });
+    expect(after).toMatchObject({ clover: 'heart', luna: 'heart', lunaTag: true, anim: 'run', stick: { phase: 'out' } });
+    expect(Math.abs((after.stick?.x ?? 0) - 320)).toBeLessThan(2);
+    expect(Math.abs((after.stick?.y ?? 0) - 250)).toBeLessThan(2);
+    expect(after.drawn).not.toBeNull();
 
     // the tray follows the tap: DL's chip is selected and her verbs are listed
     await expect(page.locator('#who .chip.on')).toHaveAttribute('data-who', 'luna');
@@ -104,10 +142,33 @@ test.describe('portrait phone', () => {
     await expect(page.locator('#say')).toContainText(/tap at \(320, 2(49|50)\)/);
 
     // moments reached window listeners, per the QA contract
-    await expect
-      .poll(() => page.evaluate(() => (window as unknown as WithMoments).__moments.map((m) => `${m.kind}:${m.actor}:${m.detail}`)))
-      .toEqual(expect.arrayContaining(['bubble:Clover:heart', 'bubble:Digital Luna:heart', 'dl-trick:Digital Luna:fetch']));
+    const moments = await page.evaluate(() => (window as unknown as WithMoments).__moments.map((m) => `${m.kind}:${m.actor}:${m.detail}`));
+    expect(moments).toEqual(expect.arrayContaining(['bubble:Clover:heart', 'bubble:Digital Luna:heart', 'dl-trick:Digital Luna:fetch']));
     expect(errors).toEqual([]);
+  });
+
+  test('a tap on the grass in rain is the sim refusing the throw, not a lost stick', async ({ page }) => {
+    // the other side of the rule above: same seed, same clock, rain instead of sun. DL is running
+    // for the barn door, and the sim keeps the click (the intent went in) but throws nothing.
+    await open(page);
+    await page.evaluate(() => {
+      const a = (window as unknown as WithApp).sheepcliff;
+      a.qa.seed(1);
+      a.qa.setWeather('rain');
+      a.qa.setClock(0.18);
+      a.qa.step(30);
+    });
+    await tapWorld(page, 320, 250);
+    await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.step(6));
+    const after = await page.evaluate(() => {
+      const a = (window as unknown as WithApp).sheepcliff;
+      const s = a.sim();
+      return { tap: a.intents.at(-1)?.intent, sim: a.intents.at(-1)?.sim, rain: s.weather.rain, routine: s.luna.routine, stick: s.luna.stick, drawn: a.view().stick };
+    });
+    expect(after).toMatchObject({ tap: { type: 'tap' }, sim: true, rain: true, routine: 'shelterWait', stick: null, drawn: null });
+    await expect(page.locator('#say')).toContainText(/tap at \(320, 2(49|50)\)/);
+    const moments = await page.evaluate(() => (window as unknown as WithMoments).__moments.map((m) => `${m.kind}:${m.detail}`));
+    expect(moments).not.toContain('dl-trick:fetch');
   });
 
   test('tray verbs: one sheep, one task; the sky reaches the sim', async ({ page }) => {

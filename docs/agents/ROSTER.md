@@ -25,8 +25,8 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | sim | active | session_019434DtXF9qU91ChVnK8V8J | #33 small life: bird, butterflies, fireflies, mud, footprints | 2026-09-02 |
 | client | active | session_01Heu2V5bR36DSzk728E9y9c | #37 flaky three-taps e2e | 2026-09-02 |
 | infra | active | session_017tkbiMa17hfXxX8Npx71TT | #38 sheep-city tile swap to the app (owner merges the PR) | 2026-09-02 |
-| world | active | session_01YW2Xp4rCiWGvW6RyY5b8jw | #41 farm event deck, fifteen events as data | 2026-09-02 |
-| art | active | session_01XZ7wcpkNLc5hTBfC8zxZGJ | #47 crow brief and frames (owner pin) | 2026-09-02 |
+| world | active | session_01CevVn4SyV2V83qBWBgDeyq | #41 farm event deck, fifteen events as data | 2026-09-02 |
+| art | active | session_01Q47K68B53zVR6UFSQfpzLJ | #47 crow brief and frames (owner pin) | 2026-09-02 |
 | economy | not started | — | Phase 2 | — |
 
 Budget tier: Standard (about four lanes), set 2026-09-02.

@@ -12,7 +12,7 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | world | done | session_016yv8aPqYXfRfWNuFCyBiQS | #10 farm content, merged as PR #15 | 2026-09-02 |
 | sim | done | session_01RNhjEJp3aB7MZj9NRYpDeh | #4 clock, RNG, step, merged as PR #18 (Verifier session_01ChUNxEUTH453EE89FtFTGn approved) | 2026-09-02 |
 | sim | done | session_01Y8mRE88YxpXSCaE4dv8foL | #5 part a: registry and DL chain, merged as PR #23 after the owner's pin (fix workers session_01NV8mL9L7nchRpJ1N8ySjBZ and session_01Ki5ZREZCkJ6eqBHBqsaaSt) | 2026-09-02 |
-| sim | in review | session_01UHyCUx8NRHHoBXzGVTHEiq | #5 part b: sheep, lambs, NPCs, PR #26; Verifier session_012nbMWpRbm7RxGEB1oM1EQU approved, owner pinned okay; worker session_01... merging base with save v3 | 2026-09-02 |
+| sim | in review | session_01UHyCUx8NRHHoBXzGVTHEiq | #5 part b: sheep, lambs, NPCs, PR #26; Verifier session_012nbMWpRbm7RxGEB1oM1EQU approved, owner pinned okay; worker session_01HdMizhyRarxe8Wxa6jWBQS merging base with save v3 | 2026-09-02 |
 | sim | done | session_01QRszNSGVx7TZV97ud6uZwn | #8 save v1, merged as PR #22 (Verifier session_01MKos2vVS14sLaH3N4dWKoD approved) | 2026-09-02 |
 | client | done | session_01BzngZosAW3AvFAP4XMhC1A | #6 renderer port, merged as PR #19 (Verifier session_013uNxpKjNWXAVSXaAJs7zDr; Foreman resolved a spec-name collision with #21) | 2026-09-02 |
 | client | in review | session_01M7oHrnRiqrvqwGM7aWZ1JP | #7 input and pin overlay, PR #24; Verifier approved, owner pinned okay; fix worker session_01Q7HsUjbWsdCM89DZwhrbqN applying three nits, then merge | 2026-09-02 |

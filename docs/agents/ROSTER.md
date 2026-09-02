@@ -33,6 +33,11 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 
 Budget tier: Standard (about four lanes), set 2026-09-02.
 
+## Owner's operating rules, 2026-09-02 22:30 UTC
+- Foreman check-ins every four hours, six a day: 8pm, 12am, 4am, 8am, 12pm, 4pm Central (01, 05, 09, 13, 17, 21 UTC). PR events still wake the Foreman in between.
+- The Fable weekly window is spent until Monday 11:00 Central. New workers and Verifiers run on Opus (claude-opus-5) until then, and every PR from an Opus worker gets a Verifier pass whatever its gate. "We better be watching closely."
+- The two Fable workers already running (#39 Ledger, #20 jump-to) finish on their own; they are not restarted on credits if they stall.
+
 ## Phase 0 ticket order
 #2 scaffold (landed) → #4 clock/RNG (landed) → #5 behaviour registry (both parts landed) and #8 save v1 (landed)
 #2 scaffold (landed) → #6 renderer (landed) → #7 input and pin overlay (landed); #9 watch test (landed)

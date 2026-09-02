@@ -22,11 +22,12 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | client | in review | session_01NFdtsZpVraCTq3LGBUmLoQ | #28 real sim in the app at parity, PR #34 open, needs-owner-pin (Verifier session_019H7jjiz5rus2A3GboAqHpb for the technical pass; owner pins on sheep-city-next) | 2026-09-02 |
 | infra | done | session_0139MAKFzvgv1t7v38D7yX5H | #29 second tile sheep-city-next, merged as PR #31; live at https://sheep-city-next.sheepcliff.com | 2026-09-02 |
 | infra | done | session_011rFrY7DKvF7JPLiZUzgoRm | #35 CI re-runs on PR body edits, merged as PR #36 | 2026-09-02 |
-| sim | in review | session_019434DtXF9qU91ChVnK8V8J | #33 small life, PR #54 (Verifier session_01LSxRvbp2g3mkKLnSKZxpri; CI red on two client e2e tests the sim change broke, worker fixing under a one-file exception) | 2026-09-02 |
+| sim | done | session_019434DtXF9qU91ChVnK8V8J | #33 small life, merged as PR #54 (Verifier session_01LSxRvbp2g3mkKLnSKZxpri; one-file exception for the client spec the new draws changed) | 2026-09-02 |
 | client | done | session_01Heu2V5bR36DSzk728E9y9c | #37 flaky three-taps e2e, merged as PR #51 | 2026-09-02 |
 | infra | done | session_017tkbiMa17hfXxX8Npx71TT | #38 sheep-city tile swap, PR #50 merged by the owner 21:37 UTC; both tiles serve the app | 2026-09-02 |
 | world | done | session_01CevVn4SyV2V83qBWBgDeyq | #41 farm event deck, merged as PR #52 | 2026-09-02 |
-| art | in review | session_01Q47K68B53zVR6UFSQfpzLJ | #47 crow brief and frames, PR #53 (Verifier session_01WUXF4oyVKuAY2XN4sFhzVr; then owner pin) | 2026-09-02 |
+| art | done | session_01Q47K68B53zVR6UFSQfpzLJ | #47 crow brief and frames, PR #53 merged by the owner 22:07 UTC (the pin; Verifier session_01WUXF4oyVKuAY2XN4sFhzVr) | 2026-09-02 |
+| sim | active | session_01KvdHVJrPpHcy7fN9XctWFo | #39 Ledger and catch-up beyond one day | 2026-09-02 |
 | client | active | session_01RLbJ7BSan8mt2pBH5DM11Q | #20 jump-to dawn and dusk outside the crossfade band | 2026-09-02 |
 | economy | not started | — | Phase 2 | — |
 
@@ -44,7 +45,7 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 Passed 2026-09-02 21:22 UTC: the owner merged PR #34 (real sim in the app at v31 parity) after the Verifier's approval; that merge is the pin. PR #32 followed; the owner merged the tile swap (PR #50) at 21:37 and https://sheep-city.sheepcliff.com serves the app. Remaining tail: #33 small life (in review), #20 jump-to values (active).
 
 ## Phase 1 ticket order
-Landed: #41 world event deck (PR #52). In review: #47 art crows (PR #53, owner pin after the Verifier).
+Landed: #41 world event deck (PR #52), #47 art crows (PR #53, pinned). Running: #39 sim Ledger. Queued client: #55 (wall-clock poll in the tray-verbs e2e) after #20.
 After #33 lands: #39 sim Ledger, #40 sim Director, #45 sim social behaviours, #43 sim deity intents (one or two sim workers at a time; the save version bump is shared, so the second merges trunk before its PR).
 After #39 and #40: #42 client storybook (owner pin), #48 sim crows.
 After #43: #44 client deity powers UX (owner pin).

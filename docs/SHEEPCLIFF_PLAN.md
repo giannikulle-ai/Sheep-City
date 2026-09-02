@@ -272,3 +272,4 @@ Answer in one comment whenever convenient; the defaults are the assumptions in s
 4. Whether you want the two missing Sheepcliff artifacts folded in (attach them like the zip).
 5. Deity powers: weather first, then direct per-inhabitant actions. No pick-up-and-move. Confirmed 2026-09-02.
 6. Daily status note: an artifact page, updated daily, chosen 2026-09-02. A pinned GitHub issue keeps the record.
+7. Phase 0 started 2026-09-02 on the owner's go. Tickets #2 to #11; first three workers spawned.

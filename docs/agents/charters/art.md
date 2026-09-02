@@ -6,7 +6,7 @@ Grow the cast and the world in the established hand-pixelled style, one reviewed
 ## Owns (paths)
 - `tools/art/**` (the Python pipeline moved from `prototype/luna-farm/src/`)
 - `tools/art/grids/**` (character and prop grids)
-- `apps/web/public/sheets/**` (built sheets, backgrounds, and JSON, committed as build outputs)
+- `tools/art/build/**` (built sheets, backgrounds, and JSON, committed as build outputs; the web app reads them from here)
 - `docs/STYLE_GUIDE.md`
 
 ## Never touches

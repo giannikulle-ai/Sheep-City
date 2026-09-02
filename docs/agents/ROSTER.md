@@ -19,6 +19,8 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | client | done | session_01BzngZosAW3AvFAP4XMhC1A | #6 renderer port, merged as PR #19 (Verifier session_013uNxpKjNWXAVSXaAJs7zDr; Foreman resolved a spec-name collision with #21) | 2026-09-02 |
 | client | done | session_01M7oHrnRiqrvqwGM7aWZ1JP | #7 input and pin overlay, merged as PR #24 after the owner's pin (Verifier session_01BAsYfT1x8aae9UpDr3NYvn; nits worker session_01Q7HsUjbWsdCM89DZwhrbqN; Foreman raised the JS budget) | 2026-09-02 |
 | qa | done | session_01XwNiAQpm1ectYv8dsxiMWX | #9 watch test and goldens, merged as PR #21 | 2026-09-02 |
+| client | active | session_01NFdtsZpVraCTq3LGBUmLoQ | #28 real sim in the app at parity (Phase 0 exit gate, owner pin) | 2026-09-02 |
+| infra | active | session_0139MAKFzvgv1t7v38D7yX5H | #29 second tile sheep-city-next | 2026-09-02 |
 | economy | not started | — | Phase 2 | — |
 
 Budget tier: Standard (about four lanes), set 2026-09-02.

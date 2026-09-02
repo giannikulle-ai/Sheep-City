@@ -16,7 +16,7 @@ A deterministic, testable simulation core that makes Sheepcliff feel alive witho
 ```
 npm run test -w packages/sim      # expected: all tests pass, including seeded determinism test
 npm run typecheck                 # expected: 0 errors
-npm run bench:sim                 # expected: 10 sim-minutes of a 40-actor district under 50 ms
+npm run bench -w packages/sim     # expected: 10 sim-minutes of a 40-actor district under 50 ms
 ```
 
 ## Gate

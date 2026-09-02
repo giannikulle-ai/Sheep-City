@@ -54,8 +54,11 @@ export function waypointAround(x0: number, y0: number, x1: number, y1: number): 
  * `dt` is split into `RULES.moveSubsteps` prototype-sized frames; see the note on that rule.
  */
 export function stepToward(o: Mover, foot: readonly [number, number], sp: number, dt: number): boolean {
+  // No target: the first frame would report arrival, so say so without entering the loop.
+  if (o.tx === null || o.ty === null) return true;
   const n = RULES.moveSubsteps;
-  for (let i = 0; i < n; i++) if (stepFrame(o, foot, sp, dt / n)) return true;
+  const frame = dt / n;
+  for (let i = 0; i < n; i++) if (stepFrame(o, foot, sp, frame)) return true;
   return false;
 }
 
@@ -124,12 +127,35 @@ function clampFrame(o: Mover, foot: readonly [number, number]): boolean {
 
 /** Pull a target point inside the field, stepping it towards the centre and off the barn. */
 export function clampTarget(t: Point, m = 0.86): Point {
-  let n = 0;
   const o = { x: t.x, y: t.y };
+  clampPoint(o, m);
+  return o;
+}
+
+/**
+ * `clampTarget` applied to a walker's own `tx, ty`, in place. Same arithmetic in the same order,
+ * so the target lands on the same pixel; nothing is allocated, which matters for forty walking
+ * sheep every tick. A walker without a target is left alone.
+ */
+export function clampMoverTarget(o: Mover, m = 0.86): void {
+  if (o.tx === null || o.ty === null) return;
+  const p = target;
+  p.x = o.tx;
+  p.y = o.ty;
+  clampPoint(p, m);
+  o.tx = p.x;
+  o.ty = p.y;
+}
+
+/** Scratch point for `clampMoverTarget`; the sim is single-threaded and the clamp never re-enters. */
+const target: Point = { x: 0, y: 0 };
+
+/** The prototype's `clampTarget` loop on a point, mutating it: at most 40 steps of 8% towards the centre. */
+function clampPoint(o: Point, m: number): void {
+  let n = 0;
   while (!insideField(o.x, o.y, m) && n++ < 40) {
     o.x += (C[0] - o.x) * 0.08;
     o.y += (C[1] - o.y) * 0.08;
     if (inBarn(o.x, o.y)) o.y += 3;
   }
-  return o;
 }

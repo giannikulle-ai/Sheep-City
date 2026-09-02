@@ -101,7 +101,7 @@ export {
   type SheepBehaviour,
 } from './behaviours/sheep';
 export { NPC_FOOT, makeNpc, summonFarmer, summonMerchant, npcStep, tickNpcs, buyUpgrades, type JobHook, type JobResult } from './npcs';
-export { stepToward, clampField, clampTarget, segHitsBarn, waypointAround, type Mover } from './movement';
+export { stepToward, clampField, clampTarget, clampMoverTarget, segHitsBarn, waypointAround, type Mover } from './movement';
 export { LUNA_ID, findSheep, bubble, nearestTuft } from './actors';
 export { tickRabbit } from './life';
 export { tick, tickInPlace, advance } from './tick';

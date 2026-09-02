@@ -1,6 +1,6 @@
 # @sheepcliff/content
 
-Everything in the world that is data rather than logic: landmarks, grass, upgrades, NPC job plans, name lists, and balance numbers. Plain JSON, one schema per file, no dependencies. The sim lane reads these; the world lane edits them.
+Everything in the world that is data rather than logic: landmarks, grass, upgrades, NPC job plans, name lists, balance numbers, and the event deck. Plain JSON, one schema per file, no dependencies. The sim lane reads these; the world lane edits them.
 
 ```
 packages/content/
@@ -10,9 +10,11 @@ packages/content/
   farm/npcs.json       the farmer's and merchant's job plans and per-job numbers
   farm/names.json      sheep names and name-tag colours
   balance/farm.json    every RULES number from the prototype, one comment each
+  events/farm.json     the farm's event deck: fifteen cards the Director draws from (docs/content/EVENT_DECK.md)
   schema/              one JSON Schema (draft 2020-12) per file, shared bits in _defs.schema.json
   scripts/validate.mjs checks every file against its schema
-  test/                asserts the JSON still matches prototype/luna-farm/src/sim_template.html
+  src/index.ts         typed handles on the JSON for the sim and the client (the event deck today)
+  test/                asserts the JSON still matches prototype/luna-farm/src/sim_template.html, and the deck's cross-checks
 ```
 
 ## Run the checks
@@ -58,6 +60,13 @@ Until the root `package.json` exists, the charter's `npm run validate:content` r
 ## How to add a balance number
 
 Add it to `RULES` in the prototype or to the sim's config, then add a `{ value, comment }` leaf in `balance/farm.json` and a matching property in `schema/balance-farm.schema.json` (`rules` allows no extra keys, so the schema must know about it). Constants that live outside `RULES` in the prototype go under `outsideRules`.
+
+## How to add an event card
+
+1. Append a card to `events` in `events/farm.json`. Copy a neighbour: `id` (lowerCamel), `title`, `weight` (10 is ordinary), `cooldownSimHours`, `preconditions`, `durationSimMinutes`, `hooks` with `start` and `end` lists, `storybook` (one past-tense line under 90 characters, placeholders from `{dl}`, `{lamb}`, `{sheep}`, `{farmer}`, `{merchant}`, `{coins}`, `{flock}`), `moment` (a watch-test `kind` and a `detail` no other card or ordinary moment uses), and `beat` (what the player sees within one second at start, and what marks the end).
+2. Times are in-world: 1440 sim minutes to the day, and a day is 180 real seconds when watching, so 240 sim minutes is 30 real seconds. Keep durations between 3 and 90 real seconds; the test checks.
+3. Hooks come only from the vocabulary the sim's Director implements: `setVisibility`, `spawn`, `mood`, `coins`, `flag`. A flag set at start must be cleared at end. Need another effect? Propose it on the issue; do not add an `op` to the schema on your own.
+4. Write the card's page in `docs/content/EVENT_DECK.md` in the game's voice, then run `npm run validate` and `npm test` here.
 
 ## How to add a whole new file
 

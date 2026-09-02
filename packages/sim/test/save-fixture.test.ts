@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { hashState } from '../src/hash';
+import { V2_LUNA_DEFAULTS } from '../src/save/migrations/v2-luna-fetch-fields';
+import { v3NpcDefaults } from '../src/save/migrations/v3-flock-and-npc-fields';
 import { SAVE_FORMAT } from '../src/save/doc';
 import { fromSave, toSave, toSaveText } from '../src/save/serialize';
 import { createInitialState, SAVE_VERSION, type SimState } from '../src/state';
@@ -56,8 +58,16 @@ export function buildFixtureState(): SimState {
     t0Ms: now,
     tx: 240,
     ty: 146,
+    wp: null,
+    outside: false,
+    entering: false,
     plan: [{ job: 'shear', at: { x: 240, y: 146 } }, { job: 'leave' }],
+    job: null,
     jobUntilMs: now + 4_000,
+    shearing: null,
+    cart: false,
+    icon: 'heart',
+    iconUntilMs: now + 1_000,
     sold: 0,
   };
   s.life.rabbit = { x: 90, y: 300, t0Ms: now - 1_000 };
@@ -110,6 +120,9 @@ describe('save fixtures', () => {
     expect(loaded.luna.dirAtMs).toBe(0);
     expect(loaded.luna.tagUntilMs).toBe(0);
     expect(loaded.luna.forceBoundUntilMs).toBe(0);
+    // The v3 migration filled the flock counter and the farmer's job-plan fields.
+    expect(loaded.nameIdx).toBe(5);
+    expect(loaded.npcs.farmer).toMatchObject(v3NpcDefaults('farmer'));
 
     const after = advance(loaded, 100);
     expect(after.clock.tick).toBe(1300);
@@ -132,16 +145,29 @@ describe('save fixtures', () => {
     expect(JSON.stringify(again, null, 2) + '\n').toBe(readFileSync(join(fixturesDir, name), 'utf8'));
   });
 
-  it('an older fixture comes back as a current-version document with the same world plus the migrated fields', () => {
-    const v1 = readFixture('save-v1.json') as { version: number; world: { luna: Record<string, unknown> } };
-    const again = toSave(fromSave(v1));
-    expect(v1.version).toBe(1);
-    expect(again.version).toBe(SAVE_VERSION);
-    const { luna, ...restOfV1 } = v1.world;
-    const { luna: lunaAgain, ...restAgain } = again.world;
-    expect(restAgain).toEqual(restOfV1);
-    expect(lunaAgain).toEqual({ ...luna, stick: null, circleUntilMs: null, dirAtMs: 0, tagUntilMs: 0, forceBoundUntilMs: 0 });
-  });
+  type OldDoc = { version: number; world: { luna: Record<string, unknown>; npcs: { farmer: Record<string, unknown> | null; merchant: Record<string, unknown> | null } } & Record<string, unknown> };
+
+  /** `world` as the migrations from `from` should leave it: the old fields, plus each later version's defaults. */
+  function migratedWorld(from: number, world: OldDoc['world']): Record<string, unknown> {
+    let out: Record<string, unknown> = world;
+    if (from < 2) out = { ...out, luna: { ...world.luna, ...V2_LUNA_DEFAULTS } };
+    if (from < 3) {
+      const fill = (n: Record<string, unknown> | null): Record<string, unknown> | null => (n ? { ...n, ...v3NpcDefaults(n['kind']) } : null);
+      out = { ...out, nameIdx: (world['sheep'] as unknown[]).length, npcs: { ...world.npcs, farmer: fill(world.npcs.farmer), merchant: fill(world.npcs.merchant) } };
+    }
+    return out;
+  }
+
+  for (const from of [1, 2]) {
+    it(`save-v${from}.json comes back as a current-version document with the same world plus exactly the migrated fields`, () => {
+      const old = readFixture(`save-v${from}.json`) as OldDoc;
+      const again = toSave(fromSave(old));
+      expect(old.version).toBe(from);
+      expect(again.version).toBe(SAVE_VERSION);
+      expect(again.world).toEqual(migratedWorld(from, old.world));
+      expect(old.world).not.toHaveProperty('nameIdx');
+    });
+  }
 
   for (const name of names) {
     it(`${name} loads through the migrations and steps 100 ticks`, () => {

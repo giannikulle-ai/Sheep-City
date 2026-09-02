@@ -81,12 +81,18 @@ describe('fixed-step loop', () => {
     expect(c.banks.wool).toBe(1);
   });
 
-  it('grows a lamb after lambGrowMs', () => {
+  it('grows a lamb after lambGrowMs, and the same tick it becomes a named sheep', () => {
     const a = createInitialState(7);
+    a.weather = { ...a.weather, mode: 'manual' }; // no rain: lambs only grow up in fair weather
     a.sheep[1]!.lambs.push({ x: 0, y: 0, dir: 1, bornMs: 0, grown: false });
     const b = advance(a, RULES.lambGrowMs / TICK_MS);
     expect(b.sheep[1]!.lambs[0]!.grown).toBe(false);
-    expect(tick(b).sheep[1]!.lambs[0]!.grown).toBe(true);
+    expect(b.sheep).toHaveLength(5);
+    const c = tick(b);
+    expect(c.sheep[1]!.lambs).toEqual([]);
+    expect(c.sheep).toHaveLength(6);
+    expect(c.sheep[5]).toMatchObject({ id: 'sheep-5', name: 'Willow' });
+    expect(c.sheep[5]!.wool).toBeCloseTo(0.05 + 0.1 / RULES.woolGrowSec, 9); // shorn, plus its first tick's growth
   });
 });
 

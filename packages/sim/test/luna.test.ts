@@ -6,12 +6,11 @@ import { LUNA_ID } from '../src/actors';
 import { SPOT } from '../src/geometry';
 import { hashState } from '../src/hash';
 import { applyIntent, type Intent } from '../src/intents';
-import { cloneRng } from '../src/rng';
 import { RULES, TICK_MS } from '../src/rules';
 import { createInitialState, type SimState } from '../src/state';
 import { step } from '../src/step';
 import { tickInPlace } from '../src/tick';
-import { armIdlePlay, lunaFootOf, press, rain, run, runUntil, world } from './luna-helpers';
+import { armIdlePlay, lunaFootOf, press, probeBeforeLuna, rain, run, runUntil, world } from './luna-helpers';
 
 /** The door-wait spot after `clampTarget` pulled it inside the field, where DL actually stands. */
 const DOOR_WAIT_FOOT = { x: 285.04, y: 93.92 };
@@ -323,6 +322,9 @@ describe('riding', () => {
     press(s, 'ride');
     runUntil(s, (w) => w.luna.riding !== null);
     const id = s.luna.riding;
+    // Two seconds into the ride: the routine chain keeps counting idle time under a sit hold, so
+    // a press at the mount would let idle play roll a second mount before this ride ends.
+    run(s, 20);
     press(s, 'sit');
     expect(s.luna.manual).toBe('sit');
     run(s, 40);
@@ -581,9 +583,9 @@ describe('idle play', () => {
     s.weather = { ...s.weather, temp: 35 };
     let seen = 0;
     for (let i = 0; i < 400 && seen < 2; i++) {
-      // Predict the routine chain's pick with a copy of the dice, then tick for real.
-      const ctx = { ...lunaContext(s), rng: cloneRng(s.rng) };
-      const predicted = LUNA_BEHAVIOURS.select(ctx, s.luna, 'routine')?.id;
+      // Predict the routine chain's pick on a probe that has taken the sheep's draws, then tick for real.
+      const probe = probeBeforeLuna(s);
+      const predicted = LUNA_BEHAVIOURS.select(lunaContext(probe), probe.luna, 'routine')?.id;
       const wasSitting = s.luna.anim === 'sit';
       tickInPlace(s);
       if (predicted === 'hotPant') {

@@ -17,6 +17,16 @@ export interface Mover extends Point {
 }
 
 export function segHitsBarn(x0: number, y0: number, x1: number, y1: number): boolean {
+  // Every sample lies inside the box spanned by the endpoints, so a box that misses the barn's
+  // open rectangle cannot hit it. Same answer as sampling, without the thirteen `inBarn` calls.
+  if (
+    (x0 <= BARN.x0 && x1 <= BARN.x0) ||
+    (x0 >= BARN.x1 && x1 >= BARN.x1) ||
+    (y0 <= BARN.y0 && y1 <= BARN.y0) ||
+    (y0 >= BARN.y1 && y1 >= BARN.y1)
+  ) {
+    return false;
+  }
   for (let i = 0; i <= 12; i++) {
     const t = i / 12;
     if (inBarn(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return true;
@@ -83,19 +93,22 @@ function stepFrame(o: Mover, foot: readonly [number, number], sp: number, dt: nu
 
 /**
  * Nudge a walker back inside the field diamond and out of the barn footprint. The prototype's
- * nudges were per frame, so this repeats `RULES.moveSubsteps` times per tick.
+ * nudges were per frame, so this repeats `RULES.moveSubsteps` times per tick. A frame's nudge
+ * depends on the position alone, so once a frame moves nothing the rest would not either and
+ * the loop stops early with the same result.
  */
 export function clampField(o: Mover, foot: readonly [number, number]): void {
   if (o.outside || o.leaving || o.entering) return;
-  for (let i = 0; i < RULES.moveSubsteps; i++) clampFrame(o, foot);
+  for (let i = 0; i < RULES.moveSubsteps; i++) if (!clampFrame(o, foot)) return;
 }
 
-function clampFrame(o: Mover, foot: readonly [number, number]): void {
+/** One frame of the clamp. True if it moved anything. */
+function clampFrame(o: Mover, foot: readonly [number, number]): boolean {
   const fx = o.x + foot[0];
   const fy = o.y + foot[1];
   if (inBarn(fx, fy)) {
     o.y += 1.5;
-    return;
+    return true;
   }
   if (!insideField(fx, fy, 0.97)) {
     o.x += (C[0] - fx) * 0.04;
@@ -104,7 +117,9 @@ function clampFrame(o: Mover, foot: readonly [number, number]): void {
       o.tx = C[0] + (o.tx - C[0]) * 0.85;
       o.ty = C[1] + (o.ty - C[1]) * 0.85;
     }
+    return true;
   }
+  return false;
 }
 
 /** Pull a target point inside the field, stepping it towards the centre and off the barn. */

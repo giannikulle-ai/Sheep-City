@@ -59,6 +59,8 @@ export interface Registry<C extends { rng: Rng }, A> {
 export function createRegistry<C extends { rng: Rng }, A>(): Registry<C, A> {
   const byChain = new Map<string, Behaviour<C, A>[]>();
   const byId = new Map<string, Behaviour<C, A>>();
+  /** The chain lists in first-appearance order, for `run` to walk without a Map iterator. */
+  const chainLists: Behaviour<C, A>[][] = [];
 
   function register(behaviour: Behaviour<C, A>): Behaviour<C, A> {
     if (byId.has(behaviour.id)) throw new Error(`behaviour "${behaviour.id}" is already registered`);
@@ -71,6 +73,7 @@ export function createRegistry<C extends { rng: Rng }, A>(): Registry<C, A> {
     if (!list) {
       list = [];
       byChain.set(chain, list);
+      chainLists.push(list);
     }
     // Insert after every behaviour of equal or higher priority: sorted descending, stable.
     let i = list.length;
@@ -82,7 +85,10 @@ export function createRegistry<C extends { rng: Rng }, A>(): Registry<C, A> {
 
   function select(ctx: C, actor: A, chain = DEFAULT_CHAIN): Behaviour<C, A> | null {
     const list = byChain.get(chain);
-    if (!list) return null;
+    return list ? selectIn(list, ctx, actor) : null;
+  }
+
+  function selectIn(list: readonly Behaviour<C, A>[], ctx: C, actor: A): Behaviour<C, A> | null {
     let first = -1;
     for (let i = 0; i < list.length; i++) {
       if ((list[i] as Behaviour<C, A>).condition(ctx, actor)) {
@@ -92,6 +98,8 @@ export function createRegistry<C extends { rng: Rng }, A>(): Registry<C, A> {
     }
     if (first < 0) return null;
     const winner = list[first] as Behaviour<C, A>;
+    // Alone at its priority: nothing to draw among, and no other condition to run.
+    if (first + 1 >= list.length || (list[first + 1] as Behaviour<C, A>).priority !== winner.priority) return winner;
     // Gather the rest of the same priority whose conditions hold.
     const group: Behaviour<C, A>[] = [winner];
     for (let i = first + 1; i < list.length; i++) {
@@ -113,8 +121,8 @@ export function createRegistry<C extends { rng: Rng }, A>(): Registry<C, A> {
 
   function run(ctx: C, actor: A): string[] {
     const ran: string[] = [];
-    for (const chain of byChain.keys()) {
-      const b = select(ctx, actor, chain);
+    for (let c = 0; c < chainLists.length; c++) {
+      const b = selectIn(chainLists[c] as Behaviour<C, A>[], ctx, actor);
       if (!b) continue;
       b.tick(ctx, actor);
       ran.push(b.id);

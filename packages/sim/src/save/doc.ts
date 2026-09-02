@@ -5,6 +5,8 @@
 // v1 (#8):               `{ format, version: 1, world }`, where `world` is the state minus `version`.
 // v2 (#5a):              same envelope; `world.luna` gains `stick`, `circleUntilMs`, `dirAtMs`,
 //                        `tagUntilMs`, `forceBoundUntilMs` for the behaviour chain.
+// v3 (#5b):              same envelope; `world` gains `nameIdx`, and each NPC gains `wp`, `outside`,
+//                        `entering`, `job`, `shearing`, `cart`, `icon`, `iconUntilMs` for the job plans.
 
 import type { SimState } from '../state';
 

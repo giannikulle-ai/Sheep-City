@@ -1,10 +1,12 @@
 // Shared scaffolding for the Digital Luna tests: a controllable world and a few drivers.
-import type { SeasonName } from '../src/clock';
+import { tickSheep } from '../src/behaviours/sheep';
+import { advanceClock, advanceSeason, type SeasonName } from '../src/clock';
 import { applyIntent, type LunaAction } from '../src/intents';
 import { createRng, nextFloat, type Rng } from '../src/rng';
+import { TICK_MS } from '../src/rules';
 import { cloneState, createInitialState, type SimState } from '../src/state';
 import { tickInPlace } from '../src/tick';
-import { setWeather, type WeatherKind } from '../src/weather';
+import { setWeather, tickWeather, type WeatherKind } from '../src/weather';
 
 export interface WorldOptions {
   seed?: number;
@@ -62,11 +64,38 @@ export function rngWhereNextFloatIn(lo: number, hi: number): Rng {
   throw new Error(`no seed found for [${lo}, ${hi})`);
 }
 
+/**
+ * A copy of `s` advanced through the head of `tickInPlace` up to Digital Luna: clock, season,
+ * weather, then the sheep, who draw from the generator before she does. Tick the copy's DL, or
+ * draw from its generator, to see what the real tick will give her.
+ */
+export function probeBeforeLuna(s: SimState, rng?: Rng): SimState {
+  const probe = cloneState(s);
+  if (rng) probe.rng = rng;
+  probe.clock = advanceClock(probe.clock, TICK_MS);
+  probe.season = advanceSeason(probe.season, TICK_MS);
+  probe.weather = tickWeather(probe.weather, probe.clock, probe.season, probe.rng);
+  tickSheep(probe);
+  return probe;
+}
+
+/**
+ * Find a generator state whose next float, after the sheep have taken their draws for the coming
+ * tick, lands in [lo, hi). The sheep tick before DL, so this is the float DL's next roll sees.
+ */
+export function rngWhereLunaRollIn(s: SimState, lo: number, hi: number): Rng {
+  for (let seed = 0; seed < 100000; seed++) {
+    const r = nextFloat(probeBeforeLuna(s, createRng(seed)).rng);
+    if (r >= lo && r < hi) return createRng(seed);
+  }
+  throw new Error(`no seed found for [${lo}, ${hi}) after the sheep's draws`);
+}
+
 /** Put DL one tick short of an idle play and load the dice so the pick lands in [lo, hi). */
 export function armIdlePlay(s: SimState, lo: number, hi: number): SimState {
   s.luna.anim = 'sit';
   s.luna.idle = 6.95;
-  s.rng = rngWhereNextFloatIn(lo, hi);
+  s.rng = rngWhereLunaRollIn(s, lo, hi);
   return s;
 }
 

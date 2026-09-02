@@ -132,7 +132,10 @@ function fixtureMud(now: number): MudPatch[] {
   return out;
 }
 
-export function buildFixture(p: SceneParams, now: number): FarmView {
+/** What the fixture reads from the scene parameters; the seed is the sim's. */
+export type FixtureParams = Omit<SceneParams, 'seed'>;
+
+export function buildFixture(p: FixtureParams, now: number): FarmView {
   const rain = p.weather === 'rain';
   const snow = p.weather === 'snow';
   const sheep: SheepView[] = SHEEP.map((s, i) => {

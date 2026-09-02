@@ -52,7 +52,7 @@ A lane is a focus area with an owner charter. Lanes are the unit you add and rem
 
 The full charters live in `docs/agents/charters/`. A charter is the kickoff prompt's backbone, so keep it current: when a lane's owned paths change, change the charter in the same PR.
 
-**Ownership is by path.** A worker whose diff touches paths outside its lane's owned list fails the ownership check and must explain on the issue. The Foreman can grant a one-ticket exception by writing it in the ticket.
+**Ownership is by path.** A worker whose diff touches paths outside its lane's owned list fails the ownership check and must explain on the issue. The Foreman can grant a one-ticket exception by writing it in the ticket. To grant it after the PR is open, the Foreman adds an `ownership-exception: <reason>` line to the PR body; CI re-runs on the body edit and the check goes green on its own, with no new push.
 
 ---
 

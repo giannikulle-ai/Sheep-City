@@ -2,6 +2,14 @@ name: ci
 
 on:
   pull_request:
+    # `edited` re-runs the checks when the PR's title, body, or base changes, so an
+    # `ownership-exception:` line added to the body after the PR was opened turns the
+    # ownership job green without a new push (issue #35). The ownership job reads the
+    # title and body from the event payload, and a re-run of an old run keeps the old body.
+    # Every job re-runs on an edit on purpose: a job skipped on `edited` would replace a red
+    # result from the last push with a "skipped" that reads as green in the PR's checks box,
+    # and a full run costs about a minute of wall clock.
+    types: [opened, synchronize, reopened, ready_for_review, edited]
   push:
     branches:
       - main

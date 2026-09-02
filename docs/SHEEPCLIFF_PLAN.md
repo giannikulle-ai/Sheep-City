@@ -35,12 +35,12 @@ The owner said go before answering the open questions, so the plan proceeds on t
 | # | Assumption | If wrong |
 |---|---|---|
 | A1 | Sheepcliff is the civilization that grows around Luna Farm. The farm is district one. DL is the mascot. | If it is a separate world, the art pipeline still carries over; the sim port is the same; only content changes. |
-| A2 | Phone-first web app at a URL on the existing dev environment, installable as a PWA. | If it must stay a single local HTML file, drop the server phase and keep the one-file build target alongside. |
+| A2 | A web app at a URL on your website, working on phone and desktop, installable as a PWA. | If it must stay a single local HTML file, drop the server phase and keep the one-file build target alongside. |
 | A3 | Client-side simulation with offline catch-up first; server-side always-on world in Phase 3 as an option. | If always-on is required from day one, Phase 0 includes the Node worker and the timeline lengthens by about two weeks. |
 | A4 | The code moves to a modular TypeScript project with a bundler. The Python art pipeline stays exactly as it is. | If you want to stay framework-free, the same structure works with plain ES modules and no types; testing gets weaker. |
 | A5 | Agents may draw new grids in the established style, and every new sprite waits for your pin review. | If you draw everything yourself, art becomes the schedule's critical path and the cast grows slower. |
 | A6 | Dozens of inhabitants per district at v1, hundreds later through the ledger layer. | If hundreds are required at v1, the Actor layer needs pooling and culling in Phase 1 instead of Phase 3. |
-| A7 | Agent team runs as Claude Code remote sessions coordinated through GitHub, at the Standard budget tier. | Lean tier halves the parallel lanes and stretches each phase by about 50 percent. |
+| A7 | Agent team runs as Claude Code remote sessions coordinated through GitHub, at the Lean budget tier (two lanes at a time). Confirmed 2026-09-02. | Standard tier doubles the parallel lanes and shortens each phase by about a third. |
 | A8 | Product name is Sheepcliff; the repo stays Sheep-City. | Rename is a one-line change in the plan and the app title. |
 
 ---
@@ -104,11 +104,11 @@ Growth links districts: wool from the farm feeds the weaver; bread from the bake
 | Weather | tap the sky icon, choose | clouds roll, sheep look up | mood, grass growth |
 | Bless | long-press an inhabitant | sparkles, heart bubble, a little dance | mood up, need met |
 | Drop | drag from tray (hay, coins, seeds, a stick) | item lands with a bounce, nearest actor reacts | stock up |
-| Pick up and move | drag an inhabitant | it dangles with flailing legs, lands with a puff | none, but re-plans |
+| Direct action | tap an inhabitant, pick a trick or task from its list | it does the thing, with a bubble | depends on the action |
 | Summon | tap the bell, choose (merchant, festival, storm, wolf) | an arrival beat | event enters deck immediately |
 | Nudge time | hold the clock | fast forward with a whoosh | ticks advance |
 
-Curse comes after bless once the reactions are good, and stays mild: a grumble cloud, a sneeze, a sulk.
+Owner's direction (2026-09-02): weather first, and the ability to trigger individual actions on individual inhabitants (the prototype's action list, made per-creature) is a must. No picking up and moving creatures. Pocket God is a reference for reaction quality, not for the verbs. Curse, if it comes at all, comes late and stays mild.
 
 ---
 
@@ -152,9 +152,9 @@ sheep-city/
 
 ## 6. Phases
 
-Weeks assume the Standard tier (four lanes active). Each phase has exit criteria you can check at the dev URL.
+Weeks assume the Lean tier (two lanes active at a time). Each phase has exit criteria you can check at the dev URL.
 
-### Phase 0 — Foundation (weeks 1 to 2)
+### Phase 0 — Foundation (weeks 1 to 3)
 Goal: the farm plays identically at a URL on your phone, from a codebase agents can work in.
 - Repo scaffold, CI, deploy to the dev URL on merge (infra).
 - Port the sim to `packages/sim` with the behaviour registry, fixed timestep, seeded RNG; parity tests against the prototype's `RULES` and observed behaviour (sim).
@@ -165,28 +165,28 @@ Goal: the farm plays identically at a URL on your phone, from a codebase agents 
 
 Exit: v31 parity at the dev URL, saves survive reload, CI green, watch test passes, you have pinned it once.
 
-### Phase 1 — Alive (weeks 3 to 4)
+### Phase 1 — Alive (weeks 4 to 6)
 Goal: the farm surprises you.
 - Ledger for the farm district; offline catch-up; "while you were gone" storybook (sim, client).
 - Director with a pacing curve and a 15-event farm deck: fog morning, crows, lost lamb, merchant caravan, shearing day, DL's birthday (sim, world).
-- First three deity powers: weather, bless, drop (client, sim).
+- First deity powers: weather, then direct actions on individual inhabitants (client, sim).
 - Flock social behaviours from the backlog: grooming, headbutts, lamb zoomies (sim, art for two new frames each).
 - Crows as the first new creature, DL chases them off (art, world, sim).
 
 Exit: five unattended minutes show three moments; a day away produces a storybook; three powers react within one second; crows pinned and approved.
 
-### Phase 2 — Village (weeks 5 to 8)
+### Phase 2 — Village (weeks 7 to 12)
 Goal: Sheepcliff is a place, not a field.
 - World map and district switching; Ledger summarise and re-spawn (sim, client).
 - Village Green: background, five villagers, cats and chickens, cottages, well, market (art, world).
 - Economy loop across districts: wool to weaver, bread to farm, coins to buildings; unlock tree with six visible builds (economy).
-- Pick up and move, summon (client, sim).
+- Bless, drop, summon (client, sim).
 - Households, jobs, and a daily schedule per villager (sim, world).
 - Sound sketch: four ambient loops, off by default (client).
 
 Exit: two districts linked by visible carts; a build appears from surplus without your help; every villager has a habit you can predict.
 
-### Phase 3 — Civilization (weeks 9 to 14)
+### Phase 3 — Civilization (weeks 13 to 20)
 Goal: growth you can come back to.
 - Cliff Harbour and Wildwood (art, world).
 - Full event deck to 50 with seasonal and cross-district events; festival; wolf incident (world, sim).
@@ -214,7 +214,7 @@ Polish passes driven by pins, performance, sharing a read-only view of your worl
 | infra | scaffold, CI, deploy, migrations | palette and ownership checks | preview builds | server deploy |
 | qa | watch test, goldens | event coverage | district switch tests | phone performance suite |
 
-Suggested lane activation: Phase 0 runs infra, sim, client, art. Phase 1 adds world and qa. Phase 2 adds economy. That is the Standard tier with a peak of five to six lanes, which is where the Foreman's three-pin cap matters most.
+Suggested lane activation under Lean: Phase 0 runs infra then sim, then client with art. Phase 1 runs sim with world, then client with qa. Phase 2 runs world with art, then economy with client. Two lanes at a time, switched at ticket boundaries.
 
 ---
 
@@ -265,7 +265,7 @@ These seed the backlog so the team can start the morning after you say which ass
 Answer in one comment whenever convenient; the defaults are the assumptions in section 1.
 
 1. Confirm A1 to A8 or correct them.
-2. Budget tier: Lean, Standard, or Push.
+2. Budget tier: Lean, confirmed 2026-09-02.
 3. The live dev environment: host and how a static build gets there, so ticket 1 can deploy.
 4. Whether you want the two missing Sheepcliff artifacts folded in (attach them like the zip).
-5. Which two deity powers you most want to feel first, if not weather and bless.
+5. Deity powers: weather first, then direct per-inhabitant actions. No pick-up-and-move. Confirmed 2026-09-02.

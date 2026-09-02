@@ -181,35 +181,15 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
 
   uint32(w['seed'], 'world.seed');
   uint32(obj(w['rng'], 'world.rng')['s'], 'world.rng.s');
-
-  const clock = obj(w['clock'], 'world.clock');
-  const t = num(clock['t'], 'world.clock.t');
-  if (t < 0 || t >= 1) fail('world.clock.t', 'a number in [0, 1)', t);
-  if (!(num(clock['periodSec'], 'world.clock.periodSec') > 0)) fail('world.clock.periodSec', 'a positive number', clock['periodSec']);
-  bool(clock['paused'], 'world.clock.paused');
-  const tick = nonNegative(clock['tick'], 'world.clock.tick');
-  if (!Number.isInteger(tick)) fail('world.clock.tick', 'an integer', tick);
-  nonNegative(clock['nowMs'], 'world.clock.nowMs');
-  nonNegative(clock['dayCount'], 'world.clock.dayCount');
-
-  const season = obj(w['season'], 'world.season');
-  nonNegative(season['elapsedMs'], 'world.season.elapsedMs');
-  nullOr(season['override'], 'world.season.override', (v, p) => oneOf(v, p, SEASONS));
-
-  const weather = obj(w['weather'], 'world.weather');
-  const kind = oneOf(weather['kind'], 'world.weather.kind', WEATHER_KINDS);
-  if (bool(weather['rain'], 'world.weather.rain') !== (kind === 'rain')) fail('world.weather.rain', `${kind === 'rain'} to mirror kind "${kind}"`, weather['rain']);
-  num(weather['temp'], 'world.weather.temp');
-  oneOf(weather['mode'], 'world.weather.mode', WEATHER_MODES);
-  num(weather['rollAtMs'], 'world.weather.rollAtMs');
-  num(weather['untilMs'], 'world.weather.untilMs');
+  clockShape(w['clock'], 'world.clock');
+  seasonShape(w['season'], 'world.season');
+  weatherShape(w['weather'], 'world.weather');
 
   const tufts = arr(w['tufts'], 'world.tufts');
   tufts.forEach((tuft, i) => {
     const p = `world.tufts[${i}]`;
     const tf = point(tuft, p);
-    const level = num(tf['level'], `${p}.level`);
-    if (level < 0 || level > 1) fail(`${p}.level`, 'a number in [0, 1]', level);
+    level(tf['level'], `${p}.level`);
     nullOr(tf['claimed'], `${p}.claimed`, str);
   });
 
@@ -269,10 +249,7 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
   num(npcs['merchantAtMs'], 'world.npcs.merchantAtMs');
   num(npcs['lastVisitKey'], 'world.npcs.lastVisitKey');
 
-  const banks = obj(w['banks'], 'world.banks');
-  nonNegative(banks['wool'], 'world.banks.wool');
-  nonNegative(banks['coins'], 'world.banks.coins');
-  arr(banks['owned'], 'world.banks.owned').forEach((item, i) => str(item, `world.banks.owned[${i}]`));
+  banksShape(w['banks'], 'world.banks');
 
   const life = obj(w['life'], 'world.life');
   nullOr(life['rabbit'], 'world.life.rabbit', point);
@@ -296,6 +273,75 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
   nonNegative(w['accumulatorMs'], 'world.accumulatorMs');
 
   arr(w['pendingIntents'], 'world.pendingIntents').forEach((intent, i) => intentShape(intent, `world.pendingIntents[${i}]`));
+
+  ledgerShape(w['ledger'], 'world.ledger');
+  nonNegative(w['lastLedgerAt'], 'world.lastLedgerAt');
+}
+
+function level(value: unknown, path: string): number {
+  const n = num(value, path);
+  if (n < 0 || n > 1) fail(path, 'a number in [0, 1]', n);
+  return n;
+}
+
+function clockShape(value: unknown, path: string): void {
+  const clock = obj(value, path);
+  const t = num(clock['t'], `${path}.t`);
+  if (t < 0 || t >= 1) fail(`${path}.t`, 'a number in [0, 1)', t);
+  if (!(num(clock['periodSec'], `${path}.periodSec`) > 0)) fail(`${path}.periodSec`, 'a positive number', clock['periodSec']);
+  bool(clock['paused'], `${path}.paused`);
+  const tick = nonNegative(clock['tick'], `${path}.tick`);
+  if (!Number.isInteger(tick)) fail(`${path}.tick`, 'an integer', tick);
+  nonNegative(clock['nowMs'], `${path}.nowMs`);
+  nonNegative(clock['dayCount'], `${path}.dayCount`);
+}
+
+function seasonShape(value: unknown, path: string): void {
+  const season = obj(value, path);
+  nonNegative(season['elapsedMs'], `${path}.elapsedMs`);
+  nullOr(season['override'], `${path}.override`, (v, p) => oneOf(v, p, SEASONS));
+}
+
+function weatherShape(value: unknown, path: string): void {
+  const weather = obj(value, path);
+  const kind = oneOf(weather['kind'], `${path}.kind`, WEATHER_KINDS);
+  if (bool(weather['rain'], `${path}.rain`) !== (kind === 'rain')) fail(`${path}.rain`, `${kind === 'rain'} to mirror kind "${kind}"`, weather['rain']);
+  num(weather['temp'], `${path}.temp`);
+  oneOf(weather['mode'], `${path}.mode`, WEATHER_MODES);
+  num(weather['rollAtMs'], `${path}.rollAtMs`);
+  num(weather['untilMs'], `${path}.untilMs`);
+}
+
+function banksShape(value: unknown, path: string): void {
+  const banks = obj(value, path);
+  nonNegative(banks['wool'], `${path}.wool`);
+  nonNegative(banks['coins'], `${path}.coins`);
+  arr(banks['owned'], `${path}.owned`).forEach((item, i) => str(item, `${path}.owned[${i}]`));
+}
+
+/** The Ledger snapshot: the same clock, season, weather, and banks checks as the world, plus its own arrays. */
+export function ledgerShape(value: unknown, path: string): void {
+  const l = obj(value, path);
+  uint32(l['seed'], `${path}.seed`);
+  clockShape(l['clock'], `${path}.clock`);
+  seasonShape(l['season'], `${path}.season`);
+  weatherShape(l['weather'], `${path}.weather`);
+  arr(l['grass'], `${path}.grass`).forEach((g, i) => level(g, `${path}.grass[${i}]`));
+  const wool = arr(l['wool'], `${path}.wool`);
+  wool.forEach((w, i) => num(w, `${path}.wool[${i}]`));
+  arr(l['lambs'], `${path}.lambs`).forEach((lamb, i) => {
+    const p = `${path}.lambs[${i}]`;
+    const lb = obj(lamb, p);
+    const mother = nonNegative(lb['mother'], `${p}.mother`);
+    if (!Number.isInteger(mother) || mother >= wool.length) fail(`${p}.mother`, `a sheep index below ${wool.length}`, mother);
+    num(lb['ageMs'], `${p}.ageMs`);
+  });
+  banksShape(l['banks'], `${path}.banks`);
+  num(l['merchantAtMs'], `${path}.merchantAtMs`);
+  num(l['lastVisitKey'], `${path}.lastVisitKey`);
+  const nameIdx = nonNegative(l['nameIdx'], `${path}.nameIdx`);
+  if (!Number.isInteger(nameIdx)) fail(`${path}.nameIdx`, 'an integer', nameIdx);
+  level(l['mood'], `${path}.mood`);
 }
 
 /** A pet target: `luna`, `flock`, or a sheep id. Ids are not checked against the flock: a stale one is a no-op when applied. */

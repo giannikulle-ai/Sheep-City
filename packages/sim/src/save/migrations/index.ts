@@ -8,6 +8,7 @@ import { v1WrapWorld } from './v1-wrap-world';
 import { v2LunaFetchFields } from './v2-luna-fetch-fields';
 import { v3FlockAndNpcFields } from './v3-flock-and-npc-fields';
 import { v4GroundAndStamps } from './v4-ground-and-stamps';
+import { v5LedgerSnapshot } from './v5-ledger-snapshot';
 
 export interface Migration {
   /** The document version this migration reads. It must write `from + 1`. */
@@ -19,7 +20,7 @@ export interface Migration {
 }
 
 /** In order. `MIGRATIONS[i].from === i`, and the last one writes `SAVE_VERSION`. */
-export const MIGRATIONS: readonly Migration[] = [v1WrapWorld, v2LunaFetchFields, v3FlockAndNpcFields, v4GroundAndStamps];
+export const MIGRATIONS: readonly Migration[] = [v1WrapWorld, v2LunaFetchFields, v3FlockAndNpcFields, v4GroundAndStamps, v5LedgerSnapshot];
 
 /**
  * Check that a migration list is a complete, ordered chain from 0 to `target`. Throws

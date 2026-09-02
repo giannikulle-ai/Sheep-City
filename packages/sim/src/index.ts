@@ -43,7 +43,7 @@ export {
   type Season,
   type SeasonName,
 } from './clock';
-export { createWeather, setWeather, tickWeather, type Weather, type WeatherKind, type WeatherMode } from './weather';
+export { createWeather, setWeather, tickWeather, tempTarget, type Weather, type WeatherKind, type WeatherMode } from './weather';
 export {
   SAVE_VERSION,
   NAMES,
@@ -129,3 +129,26 @@ export { hashState, hashValue, canonicalJson, fnv1a, mix32 } from './hash';
 export { SAVE_FORMAT, SaveError, type SaveDoc, type SaveWorld, type SaveErrorCode, type UnknownSaveDoc } from './save/doc';
 export { toSave, fromSave, toSaveText, fromSaveText, validateWorld, findUnserializable } from './save/serialize';
 export { MIGRATIONS, migrateSave, assertMigrationChain, readVersion, type Migration } from './save/migrations/index';
+export {
+  LEDGER_STEP_MS,
+  dayMs,
+  meanOf,
+  moodOf,
+  summarise,
+  cloneLedger,
+  ledgerFlock,
+  advanceLedger,
+  GRAZE_SHARE,
+  WALK_IN_MS,
+  WALK_OUT_MS,
+  respawn,
+  diffLedger,
+  catchUp,
+  type Ledger,
+  type LedgerLamb,
+  type LedgerDiff,
+  type LedgerChange,
+  type CatchUp,
+  type CatchUpMode,
+  type CatchUpOptions,
+} from './ledger/index';

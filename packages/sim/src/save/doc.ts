@@ -9,6 +9,8 @@
 //                        `entering`, `job`, `shearing`, `cart`, `icon`, `iconUntilMs` for the job plans.
 // v4 (#33):              same envelope; `world` gains `ground` (`prints`, `mud`, `wasSnowy`), and each
 //                        sheep and `world.luna` gain `lastStamp` and `stampSide` for the ground stamps.
+// v5 (#39):              same envelope; `world` gains `ledger` (the district's numbers as the Ledger
+//                        path last wrote them, see ledger/ledger.ts) and `lastLedgerAt`.
 
 import type { SimState } from '../state';
 

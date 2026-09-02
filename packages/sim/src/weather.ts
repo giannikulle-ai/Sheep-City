@@ -1,7 +1,7 @@
 // Weather, ported from the prototype's `autoWeather` and `setWeather`. Live open-meteo mode is a
 // host concern: the host feeds observations in as intents and the sim never fetches anything.
 
-import { currentSeason, SEASON_ODDS, SEASON_TEMP, type Clock, type Season } from './clock';
+import { currentSeason, SEASON_ODDS, SEASON_TEMP, type Clock, type Season, type SeasonName } from './clock';
 import { nextFloat, type Rng } from './rng';
 import { RULES } from './rules';
 
@@ -32,16 +32,25 @@ export function setWeather(weather: Weather, kind: WeatherKind): Weather {
 }
 
 /**
+ * The temperature the world relaxes towards: the season's nominal degrees, the time of day
+ * (coldest before dawn, warmest mid-afternoon), and a penalty for rain or snow. The Ledger sets
+ * its temperature straight to this at the end of each step.
+ */
+export function tempTarget(name: SeasonName, t: number, kind: WeatherKind): number {
+  const base = SEASON_TEMP[name];
+  const diurnal = Math.sin((t - 0.05) * Math.PI * 2 - Math.PI / 2) * 6 + 3;
+  const wx = kind === 'rain' ? -4 : kind === 'snow' ? -2 : 0;
+  return base + diurnal + wx;
+}
+
+/**
  * One tick of the prototype's `autoWeather`. Temperature tracks season plus time of day whatever
  * the mode; rolls for rain and snow happen only in `season` mode. Returns a new weather object.
  */
 export function tickWeather(weather: Weather, clock: Clock, season: Season, rng: Rng): Weather {
   const name = currentSeason(season);
-  const base = SEASON_TEMP[name];
-  const diurnal = Math.sin((clock.t - 0.05) * Math.PI * 2 - Math.PI / 2) * 6 + 3;
-  const wx = weather.kind === 'rain' ? -4 : weather.kind === 'snow' ? -2 : 0;
   const k = RULES.tempBlendPerTick;
-  let next: Weather = { ...weather, temp: weather.temp * (1 - k) + (base + diurnal + wx) * k };
+  let next: Weather = { ...weather, temp: weather.temp * (1 - k) + tempTarget(name, clock.t, weather.kind) * k };
   if (next.mode !== 'season') return next;
 
   const now = clock.nowMs;

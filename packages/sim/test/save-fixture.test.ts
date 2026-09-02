@@ -10,6 +10,7 @@ import { hashState } from '../src/hash';
 import { V2_LUNA_DEFAULTS } from '../src/save/migrations/v2-luna-fetch-fields';
 import { v3NpcDefaults } from '../src/save/migrations/v3-flock-and-npc-fields';
 import { V4_STAMP_DEFAULTS, v4GroundDefault } from '../src/save/migrations/v4-ground-and-stamps';
+import { summarise } from '../src/ledger/ledger';
 import { SAVE_FORMAT } from '../src/save/doc';
 import { fromSave, toSave, toSaveText } from '../src/save/serialize';
 import { createInitialState, SAVE_VERSION, type SimState } from '../src/state';
@@ -27,6 +28,8 @@ export const FIXTURE_SEED = 8;
  * of the schema the 1,200 ticks do not reach (lambs, a shear timer, an NPC with a plan, small
  * life, two snow prints, a queued intent) filled in by hand so the fixture covers every type in
  * the state. The mud is real: the shower's first 30 s walked the flock and DL to the barn door.
+ * The ledger snapshot is the one `createInitialState` took, so the fixture shows a snapshot
+ * older than its world, as a save mid-session does.
  */
 export function buildFixtureState(): SimState {
   let s = createInitialState(FIXTURE_SEED);
@@ -130,6 +133,9 @@ describe('save fixtures', () => {
     expect(loaded.ground).toEqual({ prints: [], mud: [], wasSnowy: false });
     expect(loaded.luna).toMatchObject(V4_STAMP_DEFAULTS);
     for (const q of loaded.sheep) expect(q).toMatchObject(V4_STAMP_DEFAULTS);
+    // The v5 migration took the ledger snapshot off the world, at its clock.
+    expect(loaded.ledger).toEqual(summarise(loaded));
+    expect(loaded.lastLedgerAt).toBe(loaded.clock.nowMs);
 
     const after = advance(loaded, 100);
     expect(after.clock.tick).toBe(1300);
@@ -166,17 +172,23 @@ describe('save fixtures', () => {
       const sheep = (out['sheep'] as Record<string, unknown>[]).map((q) => ({ ...q, ...V4_STAMP_DEFAULTS }));
       out = { ...out, ground: v4GroundDefault(), sheep, luna: { ...(out['luna'] as Record<string, unknown>), ...V4_STAMP_DEFAULTS } };
     }
+    if (from < 5) {
+      const clock = out['clock'] as { nowMs: number };
+      out = { ...out, ledger: summarise(out as unknown as SimState), lastLedgerAt: clock.nowMs };
+    }
     return out;
   }
 
-  for (const from of [1, 2, 3]) {
+  for (const from of [1, 2, 3, 4]) {
     it(`save-v${from}.json comes back as a current-version document with the same world plus exactly the migrated fields`, () => {
       const old = readFixture(`save-v${from}.json`) as OldDoc;
       const again = toSave(fromSave(old));
       expect(old.version).toBe(from);
       expect(again.version).toBe(SAVE_VERSION);
       expect(again.world).toEqual(migratedWorld(from, old.world));
-      expect(old.world).not.toHaveProperty('ground');
+      expect(old.world).not.toHaveProperty('ledger');
+      expect(old.world).not.toHaveProperty('lastLedgerAt');
+      if (from < 4) expect(old.world).not.toHaveProperty('ground');
       if (from < 3) expect(old.world).not.toHaveProperty('nameIdx');
     });
   }

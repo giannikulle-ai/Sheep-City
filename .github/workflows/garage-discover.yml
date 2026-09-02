@@ -150,6 +150,55 @@ jobs:
                   for label, method, path, status in summary:
                       fh.write(f"| {label} | {method} | `{path}` | {status} |\n")
 
+      - name: Dump the full OpenAPI spec (the unauthenticated pass found it at /api/openapi.json)
+        shell: python3 {0}
+        run: |
+          import json, os, urllib.request, urllib.error
+          token = os.environ["GARAGE_TOKEN"]
+          base = os.environ["BASE_URL"].rstrip("/")
+          url = base + "/api/openapi.json"
+          headers = {"User-Agent": "sheepcliff-garage-discover/1 (github-actions)", "Accept": "application/json"}
+          if token:
+              headers["Authorization"] = f"Bearer {token}"
+          try:
+              with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as resp:
+                  raw = resp.read()
+          except urllib.error.HTTPError as e:
+              print(f"{url} -> {e.code}; no spec to dump")
+              raise SystemExit(0)
+          text = raw.decode("utf-8", errors="replace")
+          if token:
+              text = text.replace(token, "[REDACTED]")
+          spec = json.loads(text)
+          with open("garage-openapi.json", "w") as fh:
+              json.dump(spec, fh, indent=2)
+          print(f"{url} -> {len(raw)} bytes, openapi {spec.get('openapi')}, title {spec.get('info', {}).get('title')!r} version {spec.get('info', {}).get('version')!r}")
+          print()
+          print("PATHS")
+          for path, ops in spec.get("paths", {}).items():
+              for method, op in ops.items():
+                  if method.lower() not in ("get", "post", "put", "patch", "delete", "options", "head"):
+                      continue
+                  body = op.get("requestBody", {}).get("content", {})
+                  ctypes = ",".join(body.keys()) or "-"
+                  params = ",".join(f"{p['in']}:{p['name']}" for p in op.get("parameters", []) if p.get("in") in ("path", "query"))
+                  print(f"  {method.upper():7} {path:40} body={ctypes:35} params={params or '-':30} {op.get('summary', '')}")
+          print()
+          print("SCHEMAS")
+          for name, schema in spec.get("components", {}).get("schemas", {}).items():
+              print(f"  {name}: {json.dumps(schema)}")
+          print()
+          print("FULL SPEC (pretty)")
+          print(json.dumps(spec, indent=2))
+
+      - name: Upload the OpenAPI spec as an artifact
+        if: hashFiles('garage-openapi.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: garage-openapi
+          path: garage-openapi.json
+          retention-days: 30
+
       - name: Fail if the token was missing
         if: steps.token.outputs.has_token != 'true'
         run: |

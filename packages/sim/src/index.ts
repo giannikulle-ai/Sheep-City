@@ -74,7 +74,7 @@ export {
   type Butterfly,
   type Fly,
 } from './state';
-export { applyIntent, applyDueIntents, type Intent, type IntentType, type LunaAction, LUNA_ACTIONS } from './intents';
+export { applyIntent, applyDueIntents, INTENT_TYPES, LUNA_ACTIONS, type Intent, type IntentType, type LunaAction } from './intents';
 export { createRegistry, DEFAULT_CHAIN, type Behaviour, type Registry } from './behaviours/registry';
 export {
   LUNA_BEHAVIOURS,
@@ -94,3 +94,6 @@ export { tickRabbit } from './life';
 export { tick, tickInPlace, advance } from './tick';
 export { step, type StepOptions } from './step';
 export { hashState, hashValue, canonicalJson, fnv1a, mix32 } from './hash';
+export { SAVE_FORMAT, SaveError, type SaveDoc, type SaveWorld, type SaveErrorCode, type UnknownSaveDoc } from './save/doc';
+export { toSave, fromSave, toSaveText, fromSaveText, validateWorld, findUnserializable } from './save/serialize';
+export { MIGRATIONS, migrateSave, assertMigrationChain, readVersion, type Migration } from './save/migrations/index';

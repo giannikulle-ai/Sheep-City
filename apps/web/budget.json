@@ -1,0 +1,6 @@
+{
+  "comment": "Size budget for the built apps/web bundle, checked after vite build. Kilobytes on disk, uncompressed.",
+  "maxJsKb": 48,
+  "maxCssKb": 8,
+  "maxTotalKb": 400
+}

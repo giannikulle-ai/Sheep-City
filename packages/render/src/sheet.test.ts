@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameAt, frameRect, type SheetMeta } from './index';
+import { frameAt, frameRect, type SheetMeta } from './sheet';
 
 const meta: SheetMeta = {
   palette: [],

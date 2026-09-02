@@ -119,6 +119,24 @@ jobs:
           echo "::add-mask::${GARAGE_TOKEN}"
           bash tools/deploy/deploy.sh
 
+      - name: Kick the tile and open the root path
+        env:
+          GARAGE_TOKEN: ${{ secrets.GARAGE_TOKEN }}
+        run: |
+          set -u
+          echo "::add-mask::${GARAGE_TOKEN}"
+          umask 077
+          printf 'Authorization: Bearer %s\n' "${GARAGE_TOKEN}" > "${RUNNER_TEMP}/auth-header"
+          api() { local m="$1" p="$2"; shift 2; code=$(curl -sS -o "${RUNNER_TEMP}/body" -w '%{http_code}' -X "$m" -H @"${RUNNER_TEMP}/auth-header" --max-time 60 "$@" "${GARAGE_URL}${p}" || echo 000); echo "${m} ${p} -> ${code}"; head -c 1500 "${RUNNER_TEMP}/body" | sed "s/${GARAGE_TOKEN}/[REDACTED]/g"; echo; }
+          # The push alone left the tile answering 502, so also ask the Garage to deploy and restart.
+          api POST "/api/tiles/${GARAGE_TILE}/deploy"
+          api POST "/api/tiles/${GARAGE_TILE}/restart"
+          # Make "/" reachable without the lab login so the live URL is viewable.
+          api PUT "/api/tiles/${GARAGE_TILE}/open-paths" -H 'Content-Type: application/json' --data '{"open_paths":["/"]}'
+          sleep 10
+          api GET "/api/tiles/${GARAGE_TILE}"
+          rm -f "${RUNNER_TEMP}/auth-header" "${RUNNER_TEMP}/body"
+
       - name: Verify the live URL answers 200
         env:
           GARAGE_TOKEN: ${{ secrets.GARAGE_TOKEN }}
@@ -149,6 +167,25 @@ jobs:
             echo "::error::${LIVE_URL} did not return 200 after the deploy (anonymous ${code}, with token ${authed})."
           fi
           exit 1
+
+      - name: Diagnostics when the live URL is not 200
+        if: failure()
+        env:
+          GARAGE_TOKEN: ${{ secrets.GARAGE_TOKEN }}
+        run: |
+          set -u
+          echo "::add-mask::${GARAGE_TOKEN}"
+          umask 077
+          printf 'Authorization: Bearer %s\n' "${GARAGE_TOKEN}" > "${RUNNER_TEMP}/auth-header"
+          api() { local m="$1" p="$2"; shift 2; code=$(curl -sS -o "${RUNNER_TEMP}/body" -w '%{http_code}' -X "$m" -H @"${RUNNER_TEMP}/auth-header" --max-time 60 "$@" "${GARAGE_URL}${p}" || echo 000); echo "=== ${m} ${p} -> ${code}"; head -c 6000 "${RUNNER_TEMP}/body" | sed "s/${GARAGE_TOKEN}/[REDACTED]/g" | sed -e 's/<[^>]*>/ /g' | tr -s ' \n' | head -c 6000; echo; }
+          api GET "/api/status"
+          api GET "/api/tiles/${GARAGE_TILE}"
+          api GET "/api/tiles/${GARAGE_TILE}/logs?lines=120"
+          api GET "/api/tiles/${GARAGE_TILE}/files?path=."
+          api GET "/api/tiles/${GARAGE_TILE}/files?path=index.html" | head -c 400
+          api GET "/tile/${GARAGE_TILE}"
+          api GET "/"
+          rm -f "${RUNNER_TEMP}/auth-header" "${RUNNER_TEMP}/body"
 
       - name: Screenshot the live site through The Garage (best effort)
         id: shot

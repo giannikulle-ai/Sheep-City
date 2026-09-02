@@ -1,0 +1,4 @@
+# Art pipeline. Pillow is enough for hand_sprites.py, build_all_frames.py and palette_check.py.
+# Playwright (plus a Chromium) is needed only by render_v3.py for the vector scenery backgrounds.
+Pillow>=10
+playwright>=1.40

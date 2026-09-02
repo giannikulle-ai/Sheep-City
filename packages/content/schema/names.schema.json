@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepcliff.com/content/schema/names.schema.json",
+  "title": "Farm name lists",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "source": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "sheep": { "$ref": "#/$defs/nameList" },
+    "tagColours": {
+      "type": "object",
+      "properties": {
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "hex": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "_defs.schema.json#/$defs/hexColour" } }
+      },
+      "required": ["hex"], "additionalProperties": false
+    },
+    "lambNamesStartAt": { "type": "integer", "minimum": 0 }
+  },
+  "required": ["source", "sheep", "lambNamesStartAt"],
+  "additionalProperties": false,
+  "$defs": {
+    "nameList": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Z][a-z]{1,11}$" }
+    }
+  }
+}

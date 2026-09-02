@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepcliff.com/content/schema/_defs.schema.json",
+  "title": "Shared definitions for Sheepcliff content",
+  "$defs": {
+    "comment": { "type": "string", "minLength": 1, "description": "One short line for humans. Never read by the sim." },
+    "point": {
+      "type": "object",
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
+      "required": ["x", "y"],
+      "additionalProperties": false
+    },
+    "pair": { "type": "array", "prefixItems": [{ "type": "number" }, { "type": "number" }], "minItems": 2, "maxItems": 2 },
+    "id": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$" },
+    "hexColour": { "type": "string", "pattern": "^#[0-9a-f]{6}$" }
+  }
+}

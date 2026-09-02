@@ -1,0 +1,39 @@
+{
+  "$schema": "../schema/spots.schema.json",
+  "source": "prototype/luna-farm/src/sim_template.html (SPOT, TOOLS, POSTS, FLOWERS, W/H, C/RX/RY, BARN)",
+  "comment": "Landmark foot coordinates in world px. A sprite stands on a spot when its foot point equals the spot.",
+  "world": { "w": 640, "h": 400 },
+  "field": {
+    "comment": "Walkable diamond: |x-cx|/rx + |y-cy|/ry < m, with m .9 for targets and .97 for the soft clamp. Not an ellipse.",
+    "center": { "x": 320, "y": 208 },
+    "rx": 304,
+    "ry": 164
+  },
+  "barn": {
+    "comment": "Solid rectangle nobody walks through; the path router detours below it (y1 + 10, x0 - 12 or x1 + 12).",
+    "x0": 268, "x1": 388, "y0": 0, "y1": 76
+  },
+  "spots": {
+    "trough":   { "x": 150, "y": 216, "comment": "Water trough. Sheep drink at trough + (16, 4); the farmer tops it up." },
+    "hay":      { "x": 240, "y": 146, "comment": "Hay bale. Sheep feed at hay + (-20..-8, 10); the farmer refills it." },
+    "gate":     { "x": 506, "y": 262, "comment": "Inner gate. NPCs pass it on the way in and out." },
+    "web":      { "x": 488, "y": 250, "comment": "Cobweb corner by the gate. Legacy tool alias `web`; nothing walks here today." },
+    "gateOut":  { "x": 560, "y": 290, "comment": "Outer gate on the field's edge. NPCs cross the inside/outside line here." },
+    "offstage": { "x": 690, "y": 330, "comment": "Off-canvas spawn and despawn point for NPCs (past the right edge)." },
+    "barnDoor": { "x": 316, "y": 80,  "comment": "Barn doorway. Sheep shelter here in rain; DL waits at door + (-34, 4) and sleeps at door + (24, 2)." },
+    "tree":     { "x": 78,  "y": 200, "comment": "The tree on the left. Landmark only in v31; no behaviour targets it yet." },
+    "front":    { "x": 320, "y": 300, "comment": "Front-of-field mark. DL's `come` action walks her here." }
+  },
+  "aliases": {
+    "comment": "TOOLS map inherited from the agent-era demo; each name resolves to a spot above.",
+    "file": "trough", "shell": "hay", "web": "web", "db": "barnDoor"
+  },
+  "posts": {
+    "comment": "Fence post tops the bird perches on, as [x, y].",
+    "points": [[168, 108], [222, 82], [452, 104], [516, 136]]
+  },
+  "flowers": {
+    "comment": "Flower patches; the two butterflies home on the first two, as [x, y].",
+    "points": [[120, 240], [400, 312], [500, 224], [280, 184]]
+  }
+}

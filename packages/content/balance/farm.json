@@ -1,0 +1,58 @@
+{
+  "$schema": "../schema/balance-farm.schema.json",
+  "source": "prototype/luna-farm/src/sim_template.html (RULES; plus clock, SEASONS, SEASON_TEMP, SEASON_ODDS and reset() for the outsideRules block)",
+  "comment": "Every number in the prototype's RULES object, copied exactly, one comment each. `rules` mirrors RULES key for key; RULES.upgrades lives in farm/upgrades.json and is pointed to from here so it is not written twice. `outsideRules` holds tunables the prototype keeps outside RULES.",
+  "rules": {
+    "flockCap":         { "value": 9,     "comment": "Max sheep + lambs on the farm; no lamb is born at or above it." },
+    "woolGrowSec":      { "value": 150,   "comment": "Seconds for a fleece to grow from shorn to full." },
+    "shearReadyAt":     { "value": 0.8,   "comment": "Wool level (0..1) where a click shears instead of pets." },
+    "lambChancePerSec": { "value": 0.002, "comment": "Per-sheep chance of a lamb each second while settled and lamb-less." },
+    "lambGrowMs":       { "value": 90000, "comment": "Time for a lamb to become a named sheep." },
+    "tuftRegrowPerSec": { "value": 0.018, "comment": "Grass level a tuft regains per second, capped at 1." },
+    "tuftBitePerSec":   { "value": 0.07,  "comment": "Grass level a grazing sheep removes per second." },
+    "rain": {
+      "rollEveryMs": { "value": [60000, 180000], "comment": "Weather rolls again after a uniform delay in this range [min, max]." },
+      "chance":      { "value": 0.35,            "comment": "Base chance a roll brings rain (the season table below overrides it in season mode)." },
+      "lengthMs":    { "value": [20000, 45000],  "comment": "Rain lasts a uniform time in this range; snow lasts up to 1.5x the spread." }
+    },
+    "season":  { "realDays": { "value": 9, "comment": "One in-world season lasts this many real days (10% of a real season) in auto mode." } },
+    "speed": {
+      "sheepWander":   { "value": 9,  "comment": "Sheep px/s when wandering." },
+      "sheepWalk":     { "value": 16, "comment": "Sheep px/s when walking to a need (tuft, hay, trough, barn)." },
+      "lunaRun":       { "value": 80, "comment": "DL px/s when running (fetch out, chase, routine moves)." },
+      "lunaFetchBack": { "value": 45, "comment": "DL px/s carrying the stick back from a throw." },
+      "lunaCarry":     { "value": 34, "comment": "DL px/s carrying the stick during idle play." }
+    },
+    "rideMs":       { "value": 6000, "comment": "How long an autopilot sheep ride lasts." },
+    "rideManualMs": { "value": 8000, "comment": "How long a button-forced sheep ride lasts." },
+    "farmer": {
+      "visitsAt": { "value": [0.06, 0.38], "comment": "clock.t fractions (0..1 day) when the farmer arrives; both are daytime." },
+      "shearAt":  { "value": 0.6,          "comment": "Wool level at or above which the farmer shears a sheep." }
+    },
+    "merchant": {
+      "everyMs":   { "value": 240000, "comment": "Delay between the merchant leaving and being summoned again." },
+      "stayMs":    { "value": 30000,  "comment": "How long the merchant trades before leaving." },
+      "woolPrice": { "value": 3,      "comment": "Coins paid per banked wool." }
+    },
+    "upgrades": { "see": "farm/upgrades.json", "comment": "RULES.upgrades, the ordered [name, cost] list the merchant auto-buys; kept in its own file with a schema." },
+    "petTagMs": { "value": 1800, "comment": "How long a sheep's name tag shows after a pet." }
+  },
+  "outsideRules": {
+    "comment": "Tunables the prototype keeps outside RULES. Copied exactly from the named constants.",
+    "clock": {
+      "startT":  { "value": 0.18, "comment": "clock.t at load: mid-morning." },
+      "periodSec": { "value": 180, "comment": "Default seconds per in-world day; 86400 means follow real time." },
+      "phases":  { "value": { "day": 0, "dusk": 0.42, "night": 0.52, "dawn": 0.92 }, "comment": "clock.t where each phase begins (phaseOf)." }
+    },
+    "seasons": {
+      "order": { "value": ["spring", "summer", "autumn", "winter"], "comment": "SEASONS, cycled in auto mode." },
+      "temp":  { "value": { "spring": 12, "summer": 26, "autumn": 10, "winter": -3 }, "comment": "SEASON_TEMP: nominal °C per season." },
+      "odds":  {
+        "value": { "spring": { "rain": 0.35, "snow": 0.02 }, "summer": { "rain": 0.18, "snow": 0 }, "autumn": { "rain": 0.42, "snow": 0.05 }, "winter": { "rain": 0.05, "snow": 0.5 } },
+        "comment": "SEASON_ODDS: per weather roll, chance of snow then rain, in season mode."
+      }
+    },
+    "merchant": { "firstVisitMs": { "value": 45000, "comment": "Delay from reset to the first merchant visit." } },
+    "flock":    { "initial": { "value": 5, "comment": "Sheep on the field at reset (indices 0..4 of farm/names.json)." } }
+  }
+}

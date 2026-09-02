@@ -1,0 +1,13 @@
+{
+  "name": "@sheepcliff/content",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sheepcliff world content as plain JSON with a schema per file.",
+  "type": "module",
+  "scripts": {
+    "validate:content": "node scripts/validate.mjs",
+    "validate": "node scripts/validate.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "engines": { "node": ">=20" }
+}

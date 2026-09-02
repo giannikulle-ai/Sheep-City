@@ -1,0 +1,328 @@
+{
+  "$schema": "../schema/events.schema.json",
+  "source": "New for Sheepcliff (#41). Timings lean on balance/farm.json: the merchant's cadence, the clock phases, the season odds.",
+  "comment": "The farm's event deck. The Director (packages/sim, #40) draws a card whose preconditions hold, weighted, respecting cooldowns; runs its start hooks; ends it after its duration with the end hooks. Every card has a beat the player sees within one second. Cozy only: nothing here hurts anyone.",
+  "district": "farm",
+  "timeScale": {
+    "simMinutesPerDay": 1440,
+    "simHoursPerDay": 24,
+    "realSecondsPerSimDayWatching": 180,
+    "comment": "One sim day is the clock's 180-second period when watching, so a sim minute is 0.125 real seconds and a sim hour is 7.5 real seconds. When away, a sim day is about a real day."
+  },
+  "events": [
+    {
+      "id": "fogMorning",
+      "title": "Fog morning",
+      "comment": "The reference visibility event for #40. The flock huddles; DL counts them by ear.",
+      "weight": 10,
+      "cooldownSimHours": 48,
+      "preconditions": { "season": ["autumn", "winter", "spring"], "weather": ["sun"], "timeOfDay": ["dawn"] },
+      "durationSimMinutes": 240,
+      "hooks": {
+        "start": [
+          { "op": "setVisibility", "value": 0.35, "comment": "Fog layer over the field; the barn and the tree stay as shapes." },
+          { "op": "flag", "name": "fog", "value": true, "comment": "Sheep drift closer together; DL walks the edge of the field." }
+        ],
+        "end": [
+          { "op": "setVisibility", "value": 1 },
+          { "op": "flag", "name": "fog", "value": false }
+        ]
+      },
+      "storybook": { "line": "A fog came down at dawn and {dl} counted the flock by their bleats.", "picture": "fogMorning" },
+      "moment": { "kind": "weather", "detail": "fog" },
+      "beat": { "start": "The field greys out to shapes within a second; the flock bunches up.", "end": "The fog thins from the top down and the barn's red comes back first." }
+    },
+    {
+      "id": "crowsOnTheField",
+      "title": "Crows on the field",
+      "comment": "Crows are data here and art in #47; DL's chase is sim work in #48. Fires when the hay is worth stealing.",
+      "weight": 12,
+      "cooldownSimHours": 36,
+      "preconditions": { "season": ["summer", "autumn"], "weather": ["sun"], "timeOfDay": ["day"], "flockSize": { "min": 1 } },
+      "durationSimMinutes": 90,
+      "hooks": {
+        "start": [
+          { "op": "spawn", "what": "crow", "count": 3, "at": "hay", "untilEnd": true, "comment": "Three crows land on and around the hay bale." },
+          { "op": "mood", "target": "flock", "delta": -1, "comment": "The sheep do not like being watched." }
+        ],
+        "end": [
+          { "op": "mood", "target": "dl", "delta": 1, "comment": "She chased them off. Good dog." }
+        ]
+      },
+      "storybook": { "line": "Three crows landed on the hay and {dl} sent them packing.", "picture": "crows" },
+      "moment": { "kind": "dl-trick", "detail": "crow-chase" },
+      "beat": { "start": "Three crows drop onto the hay bale; the nearest sheep backs off a step.", "end": "DL runs at them, they scatter over the fence, she trots back with her tail up." }
+    },
+    {
+      "id": "lostLamb",
+      "title": "Lost lamb",
+      "comment": "Reference event for #40: a lamb wanders off the field at dusk and DL fetches it home.",
+      "weight": 8,
+      "cooldownSimHours": 48,
+      "preconditions": { "lambPresent": true, "timeOfDay": ["dusk"], "weather": ["sun", "rain"] },
+      "durationSimMinutes": 120,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "lambLost", "value": true, "comment": "The sim picks a lamb and walks it out past the outer gate; DL's fetch-the-lamb behaviour reads this." },
+          { "op": "mood", "target": "flock", "delta": -2, "comment": "Its mother calls." }
+        ],
+        "end": [
+          { "op": "flag", "name": "lambLost", "value": false },
+          { "op": "mood", "target": "flock", "delta": 2 },
+          { "op": "mood", "target": "dl", "delta": 1 }
+        ]
+      },
+      "storybook": { "line": "{lamb} wandered off at dusk and {dl} brought them home before dark.", "picture": "lostLamb" },
+      "moment": { "kind": "lamb", "detail": "lost" },
+      "beat": { "start": "A lamb slips out the gate; its mother stands up and bleats after it.", "end": "DL walks the lamb back through the gate, slowly, right behind it, and the ewe meets them." }
+    },
+    {
+      "id": "merchantCaravan",
+      "title": "Merchant caravan",
+      "comment": "Replaces the fixed merchant timer (#40). Cooldown 32 sim hours is balance merchant.everyMs (240 s real) in in-world time; duration 240 sim minutes is merchant.stayMs (30 s real).",
+      "weight": 14,
+      "cooldownSimHours": 32,
+      "preconditions": { "merchantPresent": false, "timeOfDay": ["day", "dusk"] },
+      "durationSimMinutes": 240,
+      "hooks": {
+        "start": [
+          { "op": "spawn", "what": "merchant", "at": "offstage", "comment": "The merchant walks the plan in farm/npcs.json: in at the gate, trade, gone. The trade pays the coins; no coins hook here." }
+        ],
+        "end": []
+      },
+      "storybook": { "line": "The merchant's cart rolled in and {coins} coins changed hands.", "picture": "merchant" },
+      "moment": { "kind": "npc-arrival", "detail": "merchant" },
+      "beat": { "start": "The cart rolls in from the right edge; DL looks up.", "end": "A coin bubble, the cart rolls out, and a new thing stands on the farm if the coins stretched to it." }
+    },
+    {
+      "id": "shearingDay",
+      "title": "Shearing day",
+      "comment": "Reference event for #40: the sim tops every fleece up to ready and summons the farmer, who shears the lot.",
+      "weight": 6,
+      "cooldownSimHours": 72,
+      "preconditions": { "season": ["spring", "summer"], "weather": ["sun"], "timeOfDay": ["day"], "flockSize": { "min": 3 } },
+      "durationSimMinutes": 300,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "shearingDay", "value": true, "comment": "Every fleece is ready; the farmer's shear job keeps re-queuing until the field is trim." },
+          { "op": "spawn", "what": "farmer", "at": "offstage", "comment": "An extra visit outside farmer.visitsAt." }
+        ],
+        "end": [
+          { "op": "flag", "name": "shearingDay", "value": false },
+          { "op": "mood", "target": "flock", "delta": 2, "comment": "Lighter, cooler, bouncier." }
+        ]
+      },
+      "storybook": { "line": "Shearing day. The farmer clipped {flock} fleeces and the sheep felt the breeze.", "picture": "shearing" },
+      "moment": { "kind": "bubble", "detail": "shears" },
+      "beat": { "start": "Every sheep on the field goes fluffy at once; the farmer walks in with the shears bubble.", "end": "The last sheep is trim, the wool bank is full, and the flock does a little hop." }
+    },
+    {
+      "id": "dlBirthday",
+      "title": "DL's birthday",
+      "comment": "Rare and warm. Pinned to spring because we do not know the real date; the owner can move it. Cake bubble is an art ask.",
+      "weight": 1,
+      "cooldownSimHours": 720,
+      "preconditions": { "season": ["spring"], "weather": ["sun"], "timeOfDay": ["day"] },
+      "durationSimMinutes": 180,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "party", "value": true, "comment": "The flock gathers round DL; heart bubbles all round; DL does her spin." },
+          { "op": "mood", "target": "all", "delta": 3 }
+        ],
+        "end": [
+          { "op": "flag", "name": "party", "value": false }
+        ]
+      },
+      "storybook": { "line": "It was {dl}'s birthday. The whole flock came over to say so.", "picture": "birthday" },
+      "moment": { "kind": "bubble", "detail": "cake" },
+      "beat": { "start": "A cake bubble over DL; every sheep turns and walks towards her.", "end": "The ring of sheep drifts apart and DL flops down in the middle, done in." }
+    },
+    {
+      "id": "firstSnow",
+      "title": "First snow",
+      "comment": "The flock's first look at snow. The cooldown, not the calendar, makes it rare; a once-per-season field would be cleaner (see the PR).",
+      "weight": 10,
+      "cooldownSimHours": 720,
+      "preconditions": { "season": ["winter"], "weather": ["snow"] },
+      "durationSimMinutes": 120,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "firstSnow", "value": true, "comment": "Sheep look up and stand still; lambs bounce; DL snaps at flakes." },
+          { "op": "mood", "target": "flock", "delta": 1 }
+        ],
+        "end": [
+          { "op": "flag", "name": "firstSnow", "value": false }
+        ]
+      },
+      "storybook": { "line": "The first snow fell and {dl} tried to catch it in her mouth.", "picture": "firstSnow" },
+      "moment": { "kind": "dl-trick", "detail": "snow-bite" },
+      "beat": { "start": "Every sheep stops and looks up; DL leaps at a flake.", "end": "The flock goes back to grazing with white on their backs." }
+    },
+    {
+      "id": "rainbowAfterRain",
+      "title": "Rainbow after rain",
+      "comment": "Needs the proposed recentWeather precondition: sun now, rain within the last twenty sim minutes.",
+      "weight": 12,
+      "cooldownSimHours": 24,
+      "preconditions": { "weather": ["sun"], "recentWeather": { "kind": "rain", "withinSimMinutes": 20 }, "timeOfDay": ["day", "dusk"] },
+      "durationSimMinutes": 90,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "rainbow", "value": true, "comment": "A rainbow arc over the barn on the weather layer." },
+          { "op": "mood", "target": "all", "delta": 1 }
+        ],
+        "end": [
+          { "op": "flag", "name": "rainbow", "value": false }
+        ]
+      },
+      "storybook": { "line": "The rain stopped and a rainbow stood over the barn for a while.", "picture": "rainbow" },
+      "moment": { "kind": "weather", "detail": "rainbow" },
+      "beat": { "start": "The arc fades in over the barn as the last drops fall; the sheep come out of the doorway.", "end": "It fades from the outside in and is gone." }
+    },
+    {
+      "id": "strayCatVisits",
+      "title": "A stray cat visits",
+      "comment": "The cat is a new creature: data here, art and behaviour in their own tickets (High gate). It sits on a fence post and leaves on its own.",
+      "weight": 7,
+      "cooldownSimHours": 60,
+      "preconditions": { "weather": ["sun"], "timeOfDay": ["dusk", "night"] },
+      "durationSimMinutes": 150,
+      "hooks": {
+        "start": [
+          { "op": "spawn", "what": "cat", "count": 1, "at": "gate", "untilEnd": true, "comment": "Walks in along the fence and settles on the post nearest the gate." }
+        ],
+        "end": []
+      },
+      "storybook": { "line": "A stray cat sat on the fence at dusk. {dl} pretended not to care.", "picture": "cat" },
+      "moment": { "kind": "dl-trick", "detail": "cat-standoff" },
+      "beat": { "start": "A cat pads in along the fence; DL freezes mid-step and stares.", "end": "The cat hops down and leaves the way it came; DL does a stretch as if she meant it." }
+    },
+    {
+      "id": "farmersDayOff",
+      "title": "The farmer's day off",
+      "comment": "Fires at dawn so both of the farmer's visits (farmer.visitsAt) are skipped. DL walks the farmer's rounds instead.",
+      "weight": 6,
+      "cooldownSimHours": 96,
+      "preconditions": { "timeOfDay": ["dawn"] },
+      "durationSimMinutes": 720,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "farmerAway", "value": true, "comment": "The farmer's clock schedule is skipped while set; DL visits the trough, the hay, and each sheep in turn." },
+          { "op": "mood", "target": "flock", "delta": -1, "comment": "Nobody topped up the trough." }
+        ],
+        "end": [
+          { "op": "flag", "name": "farmerAway", "value": false },
+          { "op": "mood", "target": "dl", "delta": 2, "comment": "She managed." }
+        ]
+      },
+      "storybook": { "line": "The farmer took the day off, so {dl} did the rounds herself.", "picture": "dayOff" },
+      "moment": { "kind": "dl-trick", "detail": "rounds" },
+      "beat": { "start": "The gate stays shut at the usual time; DL trots to the trough and looks into it.", "end": "The farmer is back next morning with a heart bubble for DL." }
+    },
+    {
+      "id": "nightOfTheFireflies",
+      "title": "Night of the fireflies",
+      "comment": "Fireflies exist as small life from #33; this card brings a swarm. DL snaps at them and catches none.",
+      "weight": 10,
+      "cooldownSimHours": 48,
+      "preconditions": { "season": ["summer"], "weather": ["sun"], "timeOfDay": ["night"] },
+      "durationSimMinutes": 200,
+      "hooks": {
+        "start": [
+          { "op": "spawn", "what": "firefly", "count": 12, "at": "tree", "untilEnd": true, "comment": "A drifting swarm from the tree across the field." },
+          { "op": "flag", "name": "fireflies", "value": true, "comment": "DL's idle play prefers snapping at fireflies while set." }
+        ],
+        "end": [
+          { "op": "flag", "name": "fireflies", "value": false }
+        ]
+      },
+      "storybook": { "line": "Fireflies filled the field and {dl} snapped at every one and caught none.", "picture": "fireflies" },
+      "moment": { "kind": "dl-trick", "detail": "firefly-snap" },
+      "beat": { "start": "A dozen lights blink on around the tree and drift out; DL bounces after the nearest.", "end": "The lights thin out one by one and DL sits down, panting." }
+    },
+    {
+      "id": "lambZoomiesHour",
+      "title": "Lamb zoomies hour",
+      "comment": "Short and daft. Every lamb runs rings round the trough; the ewes do not move.",
+      "weight": 12,
+      "cooldownSimHours": 24,
+      "preconditions": { "lambPresent": true, "weather": ["sun"], "timeOfDay": ["day", "dusk"] },
+      "durationSimMinutes": 60,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "zoomies", "value": true, "comment": "Lambs run laps of the trough at DL's run speed; DL may join." },
+          { "op": "mood", "target": "flock", "delta": 1 }
+        ],
+        "end": [
+          { "op": "flag", "name": "zoomies", "value": false }
+        ]
+      },
+      "storybook": { "line": "{lamb} got the zoomies and ran rings round the trough.", "picture": "zoomies" },
+      "moment": { "kind": "lamb", "detail": "zoomies" },
+      "beat": { "start": "A lamb bolts from its mother's side and tears round the trough.", "end": "It stops dead, wobbles, and lies down next to its mother." }
+    },
+    {
+      "id": "wellRunsLow",
+      "title": "The well runs low",
+      "comment": "A hot dry spell. The trough is drawn low and the sheep queue at it until the farmer comes with buckets. Drop bubble is an art ask.",
+      "weight": 7,
+      "cooldownSimHours": 72,
+      "preconditions": { "season": ["summer"], "weather": ["sun"], "timeOfDay": ["day"], "flockSize": { "min": 5 } },
+      "durationSimMinutes": 180,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "troughLow", "value": true, "comment": "The trough draws empty; drinking gives less; sheep gather round it." },
+          { "op": "mood", "target": "flock", "delta": -2 }
+        ],
+        "end": [
+          { "op": "spawn", "what": "farmer", "at": "offstage", "comment": "An extra visit: the farmer walks in and the trough job refills it." },
+          { "op": "flag", "name": "troughLow", "value": false },
+          { "op": "mood", "target": "flock", "delta": 2 }
+        ]
+      },
+      "storybook": { "line": "The well ran low in the heat until the farmer came with buckets.", "picture": "wellLow" },
+      "moment": { "kind": "bubble", "detail": "drop" },
+      "beat": { "start": "The trough's water drops to a line; a drop bubble over the nearest sheep.", "end": "The farmer walks in, tops it up, and the queue breaks up drinking." }
+    },
+    {
+      "id": "windfall",
+      "title": "A windfall",
+      "comment": "DL digs by the tree and finds a purse. Twelve coins is four wool at the merchant's price: a nice surprise, not a jackpot.",
+      "weight": 5,
+      "cooldownSimHours": 72,
+      "preconditions": { "weather": ["sun", "rain"], "timeOfDay": ["day"] },
+      "durationSimMinutes": 30,
+      "hooks": {
+        "start": [
+          { "op": "coins", "delta": 12, "comment": "Into the bank straight away; the merchant can spend it on his next visit." },
+          { "op": "mood", "target": "dl", "delta": 1 }
+        ],
+        "end": []
+      },
+      "storybook": { "line": "{dl} dug up a purse by the tree. {coins} coins, and nobody asked whose.", "picture": "windfall" },
+      "moment": { "kind": "bubble", "detail": "coin" },
+      "beat": { "start": "DL digs at the foot of the tree; a coin bubble pops over her.", "end": "She trots back to the field with her nose muddy; the coin count is up." }
+    },
+    {
+      "id": "stargazingNight",
+      "title": "Stargazing night",
+      "comment": "A clear night. Everybody lies down and looks up; the sky layer brightens its stars.",
+      "weight": 8,
+      "cooldownSimHours": 48,
+      "preconditions": { "season": ["summer", "autumn"], "weather": ["sun"], "timeOfDay": ["night"] },
+      "durationSimMinutes": 240,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "starsBright", "value": true, "comment": "More and brighter stars on the night sky; sheep lie down facing up; DL sits by the gate." },
+          { "op": "mood", "target": "all", "delta": 1 }
+        ],
+        "end": [
+          { "op": "flag", "name": "starsBright", "value": false }
+        ]
+      },
+      "storybook": { "line": "A clear night. {dl} sat by the gate and watched the stars with the flock.", "picture": "stars" },
+      "moment": { "kind": "dl-trick", "detail": "stargaze" },
+      "beat": { "start": "The stars come up bright; DL sits down by the gate with her head tipped back.", "end": "The sky dims to its usual night and DL walks to the barn door to sleep." }
+    }
+  ]
+}

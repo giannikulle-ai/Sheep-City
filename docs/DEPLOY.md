@@ -62,8 +62,9 @@ UTF-8 text because that API takes the content as a JSON string.
 
 ## The Garage API, as observed
 
-Observed by `garage-discover.yml` run 3 on 2026-09-02
-(https://github.com/giannikulle-ai/Sheep-City/actions/runs/33649874165),
+Observed by `garage-discover.yml` runs 3 and 4 on 2026-09-02
+(https://github.com/giannikulle-ai/Sheep-City/actions/runs/33649874165,
+https://github.com/giannikulle-ai/Sheep-City/actions/runs/33650621929),
 **without a token** because the secret was not set yet. The lab is a FastAPI
 app ("The Garage" 0.1.0, OpenAPI 3.1.0) behind Caddy and Cloudflare.
 
@@ -77,6 +78,7 @@ Auth behaviour seen:
 | `/api/docs` | 200, Swagger UI titled "The Garage - Swagger UI", loads `/api/openapi.json` |
 | `/api/openapi.json` | 200, the full spec (22 057 bytes; the run uploads it as the `garage-openapi` artifact) |
 | `/robots.txt` | 200, Cloudflare managed content signals |
+| `https://sheep-city.sheepcliff.com/` (the live URL) | 401 `{"detail":"Login or token required"}`, same Caddy + Cloudflare front |
 
 Every operation takes an optional `authorization` header and an optional
 `garage_session` cookie; the workflows use the header.
@@ -128,9 +130,13 @@ TokenBody      { resident: string }
 Not yet observed, because no run has had a token: the JSON shape of a tile
 (`GET /api/tiles/{name}`), what "deploy" does after a git push (is a static
 `index.html` at the repo root served as-is, or does the tile expect a build
-step or a Dockerfile?), whether the tile subdomain is public or gated by the
-lab's login (`open-paths` looks like the switch), and which branch the tile
-repo uses (`deploy.sh` reads the remote HEAD and falls back to `main`).
+step or a Dockerfile?), and which branch the tile repo uses (`deploy.sh` reads
+the remote HEAD and falls back to `main`). One thing is known: today the live
+URL answers 401 to an anonymous visitor, so either the tile is not serving
+anything yet or the tile subdomain sits behind the lab login. `open-paths`
+looks like the switch for the latter. The deploy workflow's verify step
+reports both the anonymous status and the status with the token so the two
+cases can be told apart.
 
 ### Claiming the tile
 

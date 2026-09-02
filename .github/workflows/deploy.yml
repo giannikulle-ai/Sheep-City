@@ -116,10 +116,14 @@ jobs:
           bash tools/deploy/deploy.sh
 
       - name: Verify the live URL answers 200
+        env:
+          GARAGE_TOKEN: ${{ secrets.GARAGE_TOKEN }}
         run: |
           set -u
+          echo "::add-mask::${GARAGE_TOKEN}"
+          code=000
           for attempt in $(seq 1 12); do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${LIVE_URL}" || echo "000")
+            code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 20 "${LIVE_URL}" || echo "000")
             echo "attempt ${attempt}: ${LIVE_URL} -> ${code}"
             if [ "$code" = "200" ]; then
               echo "Live: ${LIVE_URL}" >> "$GITHUB_STEP_SUMMARY"
@@ -127,7 +131,19 @@ jobs:
             fi
             sleep 5
           done
-          echo "::error::${LIVE_URL} did not return 200 after the deploy (last status ${code})."
+          echo "anonymous response body (first 300 bytes):"; head -c 300 body.txt; echo
+          # Tell "not deployed" apart from "deployed but gated by the lab login":
+          # the same URL with the bearer token.
+          umask 077
+          printf 'Authorization: Bearer %s\n' "${GARAGE_TOKEN}" > "${RUNNER_TEMP}/auth-header"
+          authed=$(curl -sS -o /dev/null -w '%{http_code}' -H @"${RUNNER_TEMP}/auth-header" --max-time 20 "${LIVE_URL}" || echo "000")
+          rm -f "${RUNNER_TEMP}/auth-header"
+          echo "with the token: ${LIVE_URL} -> ${authed}"
+          if [ "$authed" = "200" ]; then
+            echo "::error::${LIVE_URL} is deployed but not public: anonymous ${code}, with token 200. The tile is behind the lab login; see docs/DEPLOY.md (open-paths)."
+          else
+            echo "::error::${LIVE_URL} did not return 200 after the deploy (anonymous ${code}, with token ${authed})."
+          fi
           exit 1
 
       - name: Screenshot the live site through The Garage (best effort)

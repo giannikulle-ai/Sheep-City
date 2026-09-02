@@ -7,6 +7,10 @@
 // prototype's `tickLife` did, and that one new draw per tick shifts every later one; the ground
 // stamps also draw in rain (a mud radius) and on a melt. These are the hashes after that change.
 //
+// They moved again in #39, for the schema only: the state now carries `ledger` and `lastLedgerAt`
+// and is v5, and the hash covers the whole state. test/ledger.test.ts pins the same six worlds on
+// their v4 view (those two fields and the version taken off) to the hashes from before #39.
+//
 // If a hash here moves, some sheep, DL, or NPC took a different path or drew a different die.
 // That is a parity break, not a number to update: find the behaviour change first, and if it is a
 // deliberate new draw, say so in the PR.
@@ -20,12 +24,12 @@ import { advance } from '../src/tick';
 const TICKS = 6000;
 
 const BEFORE: readonly { seed: number; sheep: number; hash: string }[] = [
-  { seed: 6, sheep: 5, hash: 'e85cbb53bef79387' },
-  { seed: 6, sheep: 40, hash: '681d0cbae2eace49' },
-  { seed: 7, sheep: 5, hash: 'bf1769cf3184be53' },
-  { seed: 7, sheep: 40, hash: '1591607e60b10a89' },
-  { seed: 11, sheep: 5, hash: 'a5735abd6b19878b' },
-  { seed: 11, sheep: 40, hash: '71769756e8746076' },
+  { seed: 6, sheep: 5, hash: 'c983956cb0872c74' },
+  { seed: 6, sheep: 40, hash: 'f836d10c0aed5264' },
+  { seed: 7, sheep: 5, hash: '69db4e4556aa8ea2' },
+  { seed: 7, sheep: 40, hash: 'a3b4eea04dd329e6' },
+  { seed: 11, sheep: 5, hash: '9c86b689cdc67c8b' },
+  { seed: 11, sheep: 40, hash: '0e6105a485b187d3' },
 ];
 
 describe('hot path parity (#27)', () => {

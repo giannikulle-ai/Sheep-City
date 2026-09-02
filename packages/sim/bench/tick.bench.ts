@@ -7,11 +7,16 @@
 // - catch-up: one sim-hour (36,000 ticks) at actor resolution under 1 s. A short absence is
 //   replayed actor by actor before the Ledger takes over for long ones (plan, section 2).
 //
+// The ledger line (#39) is a reference too: a real week away (3,360 sim-days of 180 s at ledger
+// resolution, then 45 s of actors) for the 40-actor district. The ticket's bound, a 7-day gap
+// under 50 ms in Node, is asserted in test/ledger.test.ts.
+//
 // The two 1,000-tick lines are throughput references for comparing runs, not budgets. The
 // per-tick line ticks a district ten sim-minutes in (sheep out grazing, not the fresh field) and
 // clones the state each call, as `step` does once per host call; a live frame pays that clone
 // too. Timings use vitest's own timer; the sim itself never reads a clock.
 import { bench, describe, type BenchTask } from 'vitest';
+import { catchUp } from '../src/ledger/catch-up';
 import { createInitialState } from '../src/state';
 import { advance } from '../src/tick';
 
@@ -62,6 +67,10 @@ describe('tick throughput', () => {
     },
     { setup: budget('live, one tick of 40 actors', LIVE_BUDGET_MS) },
   );
+
+  bench('ledger catch-up: a real week away, 40 sheep: 3,360 ledger days then 450 actor ticks (mean = ms per week)', () => {
+    catchUp(busy, 7 * 24 * 3600 * 1000 + 45_000);
+  });
 
   bench(
     'catch-up budget: one sim-hour, 40 sheep: 36,000 ticks (mean must stay under 1 s)',

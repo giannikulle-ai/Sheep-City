@@ -7,6 +7,8 @@ import { assertMigrationChain, MIGRATIONS, migrateSave, readVersion, type Migrat
 import { V2_LUNA_DEFAULTS, v2LunaFetchFields } from '../src/save/migrations/v2-luna-fetch-fields';
 import { v3FlockAndNpcFields, v3NameIdxDefault, v3NpcDefaults } from '../src/save/migrations/v3-flock-and-npc-fields';
 import { V4_STAMP_DEFAULTS, v4GroundAndStamps, v4GroundDefault } from '../src/save/migrations/v4-ground-and-stamps';
+import { v5LedgerDefault, v5LedgerSnapshot } from '../src/save/migrations/v5-ledger-snapshot';
+import { summarise } from '../src/ledger/ledger';
 import { applyIntent } from '../src/intents';
 import { makeNpc } from '../src/npcs';
 import { createRng } from '../src/rng';
@@ -255,7 +257,7 @@ describe('v3 to v4', () => {
       for (const q of v3.world.sheep) expect(q).not.toHaveProperty(key);
     }
     const before = hashValue(v3);
-    const migrated = migrateSave(v3) as unknown as Doc;
+    const migrated = v4GroundAndStamps.up(v3 as unknown as UnknownSaveDoc) as unknown as Doc;
     expect(migrated.version).toBe(4);
     expect(hashValue(v3)).toBe(before);
     const { sheep, luna, ...rest } = v3.world;
@@ -299,5 +301,64 @@ describe('v3 to v4', () => {
     const out = advance(applyIntent(cloneState(after), { type: 'setWeather', weather: 'sun' }), 100);
     expect(out.sheep.some((q) => q.lastStamp !== null)).toBe(true);
     expect(out.ground.mud).toEqual([]); // dry ground: the gate moves, nothing is left behind
+  });
+});
+
+describe('v4 to v5', () => {
+  type Doc = { version: number; world: Record<string, unknown> };
+
+  it('the default snapshot is what a fresh state carries: its own numbers, taken at its clock', () => {
+    const fresh = createInitialState(1);
+    expect(fresh.ledger).toEqual(summarise(fresh));
+    expect(fresh.lastLedgerAt).toBe(0);
+    const { version: _v, ...world } = fresh;
+    expect(v5LedgerDefault(world as unknown as Record<string, unknown>)).toEqual(fresh.ledger);
+  });
+
+  it('takes the ledger off a v4 world, stamps lastLedgerAt with its clock, and touches nothing else', () => {
+    const v4 = fixture('save-v4.json') as Doc;
+    expect(v4.version).toBe(4);
+    expect(v4.world).not.toHaveProperty('ledger');
+    expect(v4.world).not.toHaveProperty('lastLedgerAt');
+    const before = hashValue(v4);
+    const migrated = v5LedgerSnapshot.up(v4 as unknown as UnknownSaveDoc) as unknown as Doc;
+    expect(migrated.version).toBe(5);
+    expect(hashValue(v4)).toBe(before);
+    const { ledger, lastLedgerAt, ...rest } = migrated.world;
+    expect(rest).toEqual(v4.world);
+    expect(lastLedgerAt).toBe((v4.world['clock'] as { nowMs: number }).nowMs);
+    // The snapshot is the loaded world's own summary: the migration and `summarise` agree.
+    expect(ledger).toEqual(summarise(fromSave(v4)));
+    expect(migrateSave(v4)).toEqual(migrated);
+  });
+
+  it('keeps a snapshot and a stamp that are already present', () => {
+    const v4 = fixture('save-v4.json') as Doc;
+    const ledger = { fake: true };
+    const doc = { ...v4, world: { ...v4.world, ledger, lastLedgerAt: 12 } };
+    const migrated = v5LedgerSnapshot.up(doc as unknown as UnknownSaveDoc) as unknown as Doc;
+    expect(migrated.world['ledger']).toBe(ledger);
+    expect(migrated.world['lastLedgerAt']).toBe(12);
+  });
+
+  it('bumps the version and leaves a world it cannot read for validation to refuse', () => {
+    expect(v5LedgerSnapshot.up({ version: 4, world: 'nope' })).toEqual({ version: 5, world: 'nope' });
+    expect(v5LedgerSnapshot.up({ version: 4, world: { luna: null, sheep: 'x' } })).toEqual({ version: 5, world: { luna: null, sheep: 'x', lastLedgerAt: 0 } });
+    expect(code(() => fromSave({ format: SAVE_FORMAT, version: 4, world: { luna: null } }))).toBe('invalid-world');
+    // A world with a snapshot that fails its own checks is refused too.
+    const v4 = fixture('save-v4.json') as Doc;
+    const bad = migrateSave(v4) as unknown as Doc;
+    const broken = { ...bad, world: { ...bad.world, ledger: { ...(bad.world['ledger'] as Record<string, unknown>), grass: [2] } } };
+    expect(code(() => fromSave(broken))).toBe('invalid-world');
+  });
+
+  it('a loaded v4 world is complete, steps, and its snapshot stays as taken while the actors tick', () => {
+    const loaded = fromSave(fixture('save-v4.json'));
+    expect(loaded.ledger).toEqual(summarise(loaded));
+    expect(loaded.lastLedgerAt).toBe(loaded.clock.nowMs);
+    const after = advance(loaded, 100);
+    expect(after.ledger).toEqual(loaded.ledger);
+    expect(after.lastLedgerAt).toBe(loaded.lastLedgerAt);
+    expect(summarise(after)).not.toEqual(after.ledger);
   });
 });

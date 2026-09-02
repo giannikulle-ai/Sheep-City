@@ -8,7 +8,7 @@ import { bubble, findSheep } from './actors';
 import { NPC_SIZE, SFOOT, SPOT, type Point } from './geometry';
 import { stepToward } from './movement';
 import { RULES, TICK_SEC } from './rules';
-import type { Npc, NpcJob, SimState } from './state';
+import type { Banks, Npc, NpcJob, SimState } from './state';
 
 /** NPC foot offset: `[NPC_W / 2, NPC_H - 1]`. One pixel lower than the sheep's and DL's. */
 export const NPC_FOOT: readonly [number, number] = [NPC_SIZE.w / 2, NPC_SIZE.h - 1];
@@ -127,8 +127,8 @@ export function npcStep(n: Npc, dt: number, now: number, onJob: JobHook): 'done'
   }
 }
 
-/** The prototype's `buyUpgrades`: walk the list in order and buy whatever the coins cover. */
-export function buyUpgrades(s: SimState): void {
+/** The prototype's `buyUpgrades`: walk the list in order and buy whatever the coins cover. Takes anything with banks: the state, or the Ledger. */
+export function buyUpgrades(s: { banks: Banks }): void {
   for (const [name, cost] of RULES.upgrades) {
     if (!s.banks.owned.includes(name) && s.banks.coins >= cost) {
       s.banks.coins -= cost;

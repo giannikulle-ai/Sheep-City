@@ -192,12 +192,15 @@ describe('scripted sheep day', () => {
     expect(state.ground.mud.length).toBe(MUD_AT_DAY_END);
   });
 
+  // The hash covers the whole end-of-day state, so it moved in #39 for the schema only (save v5:
+  // `ledger`, `lastLedgerAt`); the lists above did not, and test/ledger.test.ts pins this day on
+  // its v4 view to the hash from before.
   it('seed 71 twice gives the same day and the same hash', () => {
     const a = scriptedDay(71);
     const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('14d17f24e11a589a');
+    expect(hashState(a.state)).toBe('779eafbf4da9aa0d');
   });
 
   it('the shape of the day holds for other seeds: needs by day, rest by night, in the barn in rain', () => {

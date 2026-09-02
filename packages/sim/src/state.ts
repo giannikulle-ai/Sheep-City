@@ -5,6 +5,7 @@
 import { createClock, createSeason, type Clock, type Season } from './clock';
 import { FLOWERS, inBarn, LFOOT, randomDir, randomFoot, SFOOT, type Point } from './geometry';
 import type { Intent } from './intents';
+import { cloneLedger, summarise, type Ledger } from './ledger/ledger';
 import { createRng, nextFloat, type Rng } from './rng';
 import { RULES } from './rules';
 import { createWeather, type Weather } from './weather';
@@ -16,9 +17,10 @@ import { createWeather, type Weather } from './weather';
  * Digital Luna's stick, bedtime circling, door re-face, name tag, and trundle timers; v3 (#5b) adds
  * `nameIdx` and the NPC job-plan fields (`wp`, `outside`, `entering`, `job`, `shearing`, `cart`,
  * `icon`, `iconUntilMs`); v4 (#33) adds `ground` (snow footprints, mud patches, `wasSnowy`) and the
- * per-walker stamp fields `lastStamp` and `stampSide` on each sheep and on Digital Luna.
+ * per-walker stamp fields `lastStamp` and `stampSide` on each sheep and on Digital Luna; v5 (#39)
+ * adds `ledger` (the district's numbers as the Ledger path last wrote them) and `lastLedgerAt`.
  */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** Stable actor ids. Sheep are `sheep-<n>`; Digital Luna is `luna`. */
 export type ActorId = string;
@@ -234,6 +236,14 @@ export interface SimState {
   accumulatorMs: number;
   /** Intents waiting for their tick boundary. */
   pendingIntents: Intent[];
+  /**
+   * The district's numbers as the Ledger path last wrote them: at creation, on `respawn`, and at
+   * the end of a ledger catch-up. The actor tick does not keep it current; `summarise(state)` is
+   * the live reading, and the client diffs the two for "since you last looked".
+   */
+  ledger: Ledger;
+  /** Sim time (`clock.nowMs`) `ledger` was taken. */
+  lastLedgerAt: number;
 }
 
 export const NAMES = ['Clover', 'Daisy', 'Biscuit', 'Pepper', 'Maple', 'Willow', 'Poppy', 'Hazel', 'Juniper'] as const;
@@ -366,7 +376,7 @@ export function createInitialState(seed: number, options: InitialStateOptions = 
   });
   const flies: Fly[] = [];
   for (let i = 0; i < 14; i++) flies.push({ ...randomFoot(rng), p: nextFloat(rng) * 6, s: 0.5 + nextFloat(rng) });
-  return {
+  const state: SimState = {
     version: SAVE_VERSION,
     seed: seed >>> 0,
     rng,
@@ -384,7 +394,11 @@ export function createInitialState(seed: number, options: InitialStateOptions = 
     nameIdx: count,
     accumulatorMs: 0,
     pendingIntents: [],
+    ledger: null as unknown as Ledger,
+    lastLedgerAt: 0,
   };
+  state.ledger = summarise(state);
+  return state;
 }
 
 /**
@@ -426,6 +440,7 @@ export function cloneState(state: SimState): SimState {
       wasSnowy: state.ground.wasSnowy,
     },
     pendingIntents: state.pendingIntents.slice(),
+    ledger: cloneLedger(state.ledger),
   };
 }
 

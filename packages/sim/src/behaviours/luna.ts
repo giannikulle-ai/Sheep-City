@@ -2,15 +2,19 @@
 // prototype/luna-farm/src/sim_template.html (the `tick`, `manualLuna`, `dismount`, and `walkLuna`
 // functions). The prototype runs, every frame:
 //
-//   1. the riding block, then the fetch pre-empt (which `return`s out of tick);
-//   2. chain one: riding | mounting | manual;
-//   3. chain two: tilt | pant | rain shepherd | bed and dawn | hot pant | idle play | timers;
-//   4. the movement pass, then clamp, wet, and snow.
+//   1. the riding pre-pass (move the mount, or dismount on the timer or rain);
+//   2. the fetch pre-empt (which `return`s out of tick);
+//   3. chain one: riding (handled above) | mounting | manual;
+//   4. chain two: tilt | pant | rain shepherd | bed and dawn | hot pant | idle play | timers;
+//   5. the movement pass, then clamp, wet, and snow.
 //
 // Chains one and two are not one if/else: both run each frame, so a manual hold and the bed
-// routine, or riding and the bed routine, can be active at once. That is kept here as four
-// registry chains (`fetch`, `command`, `routine`, `move`) so the port is faithful and the oddities
-// are visible in one place. Priorities inside a chain follow the prototype's `else if` order.
+// routine, or riding and the bed routine, can be active at once. That is kept here as five
+// registry chains (`riding`, `fetch`, `command`, `routine`, `move`) so the port is faithful and
+// the oddities are visible in one place. Priorities inside a chain follow the prototype's
+// `else if` order. The riding pre-pass has its own chain ahead of `fetch` because the prototype
+// dismounts before the fetch check runs: on the dismount frame a stick still out is fetched at
+// once (even in rain), and an expired button hold becomes a sit at once.
 //
 // Owner-facing order (issue #5): fetch > manual > riding > rain shepherd > dusk bed and dawn
 // stretch > idle play (flop, stick, ride, nibble, rabbit). Everything else is a posture timer.
@@ -104,6 +108,36 @@ export function leaveBarn(l: Luna): void {
   l.x = SPOT.barnDoor.x - LFOOT[0];
   l.y = SPOT.barnDoor.y - LFOOT[1] + 2;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Chain `riding`: the prototype's pre-pass, before the fetch check and before chain one.
+// ---------------------------------------------------------------------------------------------
+
+/** Riding a sheep: the mount wanders on its own until the timer runs out or it rains. */
+export const riding: LunaBehaviour = {
+  id: 'riding',
+  chain: 'riding',
+  priority: 110,
+  condition: (_, l) => l.riding !== null,
+  tick: ({ state, rng, now, dt, rain }, l) => {
+    const sheep = findSheep(state, l.riding);
+    if (!sheep) {
+      l.riding = null;
+      return;
+    }
+    if (now > l.rideUntilMs || rain) {
+      dismount(state, now);
+      return;
+    }
+    if (sheep.tx === null && chance(rng, dt * 0.9)) {
+      const f = randomFoot(rng);
+      sheep.tx = f.x;
+      sheep.ty = f.y;
+    }
+    if (sheep.tx !== null && stepToward(sheep, SFOOT, 22, dt)) sheep.tx = sheep.ty = null;
+    clampField(sheep, SFOOT);
+  },
+};
 
 // ---------------------------------------------------------------------------------------------
 // Chain `fetch`: a thrown stick overrides everything but a hold, a ride, the barn, and bed.
@@ -207,34 +241,18 @@ export const manual: LunaBehaviour = {
   },
 };
 
-/** Mounting a sheep, then riding it until the timer runs out or it rains. */
+/**
+ * Mounting a sheep: run to it, climb on, and hand over to the `riding` chain. The prototype's
+ * chain one is `if (riding) {} else if (mounting) … else if (manual) …`, so nothing here runs
+ * while she is on a sheep; `manual` and `ride` are mutually exclusive by condition, and their
+ * priorities never decide between them.
+ */
 export const ride: LunaBehaviour = {
   id: 'ride',
   chain: 'command',
   priority: 80,
-  condition: (_, l) => l.riding !== null || l.mounting !== null,
-  tick: (ctx, l) => {
-    const { state, rng, now, dt, rain } = ctx;
-    if (l.riding !== null) {
-      const sheep = findSheep(state, l.riding);
-      if (!sheep) {
-        l.riding = null;
-        return;
-      }
-      if (now > l.rideUntilMs || rain) {
-        dismount(state, now);
-        return;
-      }
-      // The mount wanders on its own while ridden.
-      if (sheep.tx === null && chance(rng, dt * 0.9)) {
-        const f = randomFoot(rng);
-        sheep.tx = f.x;
-        sheep.ty = f.y;
-      }
-      if (sheep.tx !== null && stepToward(sheep, SFOOT, 22, dt)) sheep.tx = sheep.ty = null;
-      clampField(sheep, SFOOT);
-      return;
-    }
+  condition: (_, l) => l.mounting !== null && !l.riding,
+  tick: ({ state, now, dt, rain }, l) => {
     const sheep = findSheep(state, l.mounting);
     if (!sheep || sheep.resting || rain) {
       l.mounting = null;
@@ -558,7 +576,7 @@ export const walk: LunaBehaviour = {
 // ---------------------------------------------------------------------------------------------
 
 export const LUNA_BEHAVIOURS = createRegistry<LunaContext, Luna>();
-for (const b of [fetch, manual, ride, tiltRecover, pantRest, rainShepherd, bedtime, hotPant, idlePlay, flopUp, nibble, sleepFix, walk]) {
+for (const b of [riding, fetch, manual, ride, tiltRecover, pantRest, rainShepherd, bedtime, hotPant, idlePlay, flopUp, nibble, sleepFix, walk]) {
   LUNA_BEHAVIOURS.register(b);
 }
 

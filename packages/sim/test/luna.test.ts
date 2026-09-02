@@ -27,8 +27,10 @@ function centreLuna(s: SimState): SimState {
 }
 
 describe('the registry holds DL in the owner’s order', () => {
-  it('fetch > manual > ride, then the routine chain, then the movement pass', () => {
-    expect(LUNA_BEHAVIOURS.chains()).toEqual(['fetch', 'command', 'routine', 'move']);
+  it('the riding pre-pass, then fetch > manual > ride, then the routine chain, then the movement pass', () => {
+    expect(LUNA_BEHAVIOURS.chains()).toEqual(['riding', 'fetch', 'command', 'routine', 'move']);
+    expect(LUNA_BEHAVIOURS.behaviours('riding').map((b) => b.id)).toEqual(['riding']);
+    expect(LUNA_BEHAVIOURS.get('riding')?.exclusive).toBeFalsy();
     expect(LUNA_BEHAVIOURS.behaviours('fetch').map((b) => b.id)).toEqual(['fetch']);
     expect(LUNA_BEHAVIOURS.get('fetch')?.exclusive).toBe(true);
     expect(LUNA_BEHAVIOURS.behaviours('command').map((b) => b.id)).toEqual(['manual', 'ride']);
@@ -137,10 +139,11 @@ describe('fetch', () => {
     runUntil(s, (w) => w.luna.riding !== null);
     expect(s.luna.stick).not.toBeNull();
     runUntil(s, (w) => w.luna.riding === null);
-    expect(s.luna.anim).toBe('pant');
-    run(s, 1);
-    expect(s.luna.anim).toBe('run');
+    // The riding pre-pass dismounts before the fetch check, so the fetch starts on the dismount
+    // tick: she is already running for the stick, with no pant in between.
+    expect(s.luna).toMatchObject({ anim: 'run', manual: null });
     expect(s.luna.stick?.phase).toBe('out');
+    expect(s.luna.target).toEqual({ x: 400, y: 254 });
   });
 });
 
@@ -325,8 +328,32 @@ describe('riding', () => {
     run(s, 40);
     expect(s.luna.riding).toBe(id);
     runUntil(s, (w) => w.luna.riding === null);
-    expect(s.luna.anim).toBe('pant');
-    runUntil(s, (w) => w.luna.manual === null, 5);
+    // The 6 s hold expired under the 8 s ride. Chain one sees `riding` null on the dismount tick,
+    // so the expired hold becomes a sit at once.
+    expect(s.clock.nowMs).toBeGreaterThan(s.luna.manualUntilMs);
+    expect(s.luna).toMatchObject({ manual: null, anim: 'sit' });
+  });
+
+  it('a rain dismount with a stick out fetches first and shelters after, as the prototype', () => {
+    const s = centreLuna(world());
+    throwStick(s);
+    press(s, 'ride');
+    runUntil(s, (w) => w.luna.riding !== null);
+    expect(s.luna.stick).not.toBeNull();
+    rain(s, true);
+    run(s, 1);
+    // The fetch check never looks at the rain, and it pre-empts the routine chain every tick.
+    expect(s.luna.riding).toBeNull();
+    expect(s.luna).toMatchObject({ anim: 'run', routine: null });
+    expect(s.luna.stick?.phase).toBe('out');
+    run(s, 10);
+    expect(s.luna).toMatchObject({ routine: null, anim: 'run' });
+    expect(s.luna.stick?.phase).toBe('out');
+    const home = runUntil(s, (w) => w.luna.stick === null);
+    expect(home).toBeGreaterThan(10);
+    expect(s.luna).toMatchObject({ anim: 'pant', routine: null, icon: 'heart' });
+    run(s, 1);
+    expect(s.luna).toMatchObject({ routine: 'shelterWait', anim: 'run' });
   });
 });
 

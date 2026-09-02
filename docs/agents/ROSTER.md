@@ -21,6 +21,7 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | qa | done | session_01XwNiAQpm1ectYv8dsxiMWX | #9 watch test and goldens, merged as PR #21 | 2026-09-02 |
 | client | in review | session_01NFdtsZpVraCTq3LGBUmLoQ | #28 real sim in the app at parity, PR #34 open, needs-owner-pin (Verifier session_019H7jjiz5rus2A3GboAqHpb for the technical pass; owner pins on sheep-city-next) | 2026-09-02 |
 | infra | done | session_0139MAKFzvgv1t7v38D7yX5H | #29 second tile sheep-city-next, merged as PR #31; live at https://sheep-city-next.sheepcliff.com | 2026-09-02 |
+| infra | active | session_011rFrY7DKvF7JPLiZUzgoRm | #35 CI re-runs on PR body edits (found on PR #32: an ownership exception added after the push did not re-run the check) | 2026-09-02 |
 | economy | not started | — | Phase 2 | — |
 
 Budget tier: Standard (about four lanes), set 2026-09-02.

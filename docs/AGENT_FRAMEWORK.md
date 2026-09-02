@@ -202,6 +202,7 @@ What the Foreman actually uses, so a replacement Foreman can do the same:
 - **Repo conventions.** `CLAUDE.md` is read by every session automatically, so the non-negotiables live there. Charters live in `docs/agents/charters/`. Labels: `lane:*`, `gate:*`, `size:*`, `needs-owner-pin`, `blocked`.
 - **Deploy.** CI on `main` builds the web app and pushes it to the dev URL. Workers never deploy by hand.
 - **Secrets.** API keys live in the environment configuration only. A worker that finds a key in a file stops and reports.
+- **CI guards.** Two jobs in `.github/workflows/ci.yml` enforce the lane rules on every PR. `ownership` runs `node tools/ci/ownership.mjs`: it takes the lane from the word before the colon in the PR title, reads the backtick-quoted globs under "Owns (paths)" in `docs/agents/charters/<lane>.md` (text inside parentheses on those bullets is prose, not a path), diffs the PR against its base, and fails on any changed path outside those globs unless the PR body has a line starting with `ownership-exception:` followed by a reason (this is how the Foreman's one-ticket exception from section 3 is written down; the job prints the reason and passes). `palette` runs `python3 tools/art/palette_check.py` against the committed `tools/art/build/spritesheet.png` when anything under `tools/art/**` changed, and always on trunk pushes; it does not rebuild the sheet, so the art lane must commit the sheet it built.
 
 ---
 

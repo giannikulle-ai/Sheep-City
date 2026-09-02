@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema/upgrades.schema.json",
+  "source": "prototype/luna-farm/src/sim_template.html (RULES.upgrades, buyUpgrades)",
+  "comment": "The merchant auto-buys these in list order whenever coins cover the cost; nothing is ever sold back. v31 does not yet draw any of them.",
+  "currency": "coins",
+  "autoBuyInOrder": true,
+  "upgrades": [
+    { "id": "flowerbed", "cost": 12, "comment": "First purchase. A flower bed for the field; art not yet drawn." },
+    { "id": "hay2",      "cost": 30, "comment": "A second hay bale; art not yet drawn." },
+    { "id": "scarecrow", "cost": 60, "comment": "A scarecrow; art not yet drawn." }
+  ]
+}

@@ -1,46 +1,35 @@
-import { expect, test, type Page } from '@playwright/test';
+import { test } from '@playwright/test';
+import { appDriver } from './lib/app';
+import { type Driver, PHASES, WEATHERS, expectGolden, goldenPath, goldenTarget, updatingGoldens } from './lib/golden';
+import { prototypeDriver } from './lib/prototype';
 
-// Golden screenshots of the native 640x400 world canvas at the four clock
-// phases, on grass and on snow, plus one rainy day for the weather layers.
-// The fixture and render clock are fixed by the query string, so the picture
-// is a pure function of the renderer. Tags and HUD live on the UI canvas and
-// are not part of the golden, which keeps font rendering out of the diff.
-//
-// Update goldens deliberately: `npx playwright test golden --update-snapshots`
-// and include the before/after in the PR.
+// Golden screenshots: four clock phases in sun and snow, deterministic seed and
+// clock, compared to the committed PNGs under e2e/golden/<target>/ with a small
+// tolerance (see lib/golden.ts). SHEEPCLIFF_GOLDEN_TARGET picks the world:
+// `prototype` (default, the frozen Luna Farm build) or `app` (apps/web via the
+// window.sheepcliff.qa hooks). SHEEPCLIFF_GOLDEN_UPDATE=1 rewrites the goldens.
+const SEED = 9;
+const SETTLE_FRAMES = 120;
 
-const PHASES: ReadonlyArray<readonly [name: string, t: number]> = [
-  ['day', 0.18],
-  ['dusk', 0.47],
-  ['night', 0.7],
-  ['dawn', 0.95],
-];
+const target = goldenTarget();
+const drivers: Record<typeof target, Driver> = { prototype: prototypeDriver, app: appDriver };
+const driver = drivers[target];
 
-const NOW = 100000;
+test.describe(`golden screenshots (${target})`, () => {
+  for (const weather of WEATHERS) {
+    for (const phase of PHASES) {
+      test(`${phase} in ${weather}`, async ({ page }, testInfo) => {
+        const errors: string[] = [];
+        page.on('pageerror', (e) => errors.push(String(e)));
+        await driver.open(page, SEED);
+        const actual = await driver.capture(page, phase, weather, SETTLE_FRAMES);
+        if (errors.length) throw new Error(`page errors while capturing: ${errors.join('; ')}`);
+        await expectGolden(page, testInfo, actual, goldenPath(target, phase, weather));
+      });
+    }
+  }
+});
 
-async function worldPng(page: Page, query: string): Promise<Buffer> {
-  const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(`/?${query}&now=${NOW}`);
-  await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
-  expect(errors).toEqual([]);
-  const dataUrl = await page.locator('canvas#world').evaluate((el) => (el as HTMLCanvasElement).toDataURL('image/png'));
-  return Buffer.from(dataUrl.split(',')[1] ?? '', 'base64');
-}
-
-for (const [name, t] of PHASES) {
-  test(`golden ${name}`, async ({ page }) => {
-    const png = await worldPng(page, `t=${t}&weather=sun&season=spring`);
-    expect(png).toMatchSnapshot(`${name}.png`, { maxDiffPixelRatio: 0.01 });
-  });
-
-  test(`golden snow ${name}`, async ({ page }) => {
-    const png = await worldPng(page, `t=${t}&weather=snow&season=winter`);
-    expect(png).toMatchSnapshot(`snow_${name}.png`, { maxDiffPixelRatio: 0.01 });
-  });
-}
-
-test('golden rain day', async ({ page }) => {
-  const png = await worldPng(page, 't=0.18&weather=rain&season=spring');
-  expect(png).toMatchSnapshot('rain_day.png', { maxDiffPixelRatio: 0.01 });
+test('golden update mode is off in CI', () => {
+  if (process.env['CI'] && updatingGoldens()) throw new Error('SHEEPCLIFF_GOLDEN_UPDATE=1 must not be set in CI');
 });

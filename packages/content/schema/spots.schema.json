@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepcliff.com/content/schema/spots.schema.json",
+  "title": "Farm landmarks",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "source": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "world": {
+      "type": "object",
+      "properties": { "w": { "type": "integer", "minimum": 1 }, "h": { "type": "integer", "minimum": 1 } },
+      "required": ["w", "h"], "additionalProperties": false
+    },
+    "field": {
+      "type": "object",
+      "properties": {
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "center": { "$ref": "_defs.schema.json#/$defs/point" },
+        "rx": { "type": "number", "exclusiveMinimum": 0 },
+        "ry": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "required": ["center", "rx", "ry"], "additionalProperties": false
+    },
+    "barn": {
+      "type": "object",
+      "properties": {
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "x0": { "type": "number" }, "x1": { "type": "number" }, "y0": { "type": "number" }, "y1": { "type": "number" }
+      },
+      "required": ["x0", "x1", "y0", "y1"], "additionalProperties": false
+    },
+    "spots": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "_defs.schema.json#/$defs/id" },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "x": { "type": "number" }, "y": { "type": "number" },
+          "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+        },
+        "required": ["x", "y", "comment"], "additionalProperties": false
+      }
+    },
+    "aliases": {
+      "type": "object",
+      "properties": { "comment": { "$ref": "_defs.schema.json#/$defs/comment" } },
+      "additionalProperties": { "$ref": "_defs.schema.json#/$defs/id" }
+    },
+    "posts": { "$ref": "#/$defs/pointGroup" },
+    "flowers": { "$ref": "#/$defs/pointGroup" }
+  },
+  "required": ["source", "world", "field", "barn", "spots"],
+  "additionalProperties": false,
+  "$defs": {
+    "pointGroup": {
+      "type": "object",
+      "properties": {
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "points": { "type": "array", "items": { "$ref": "_defs.schema.json#/$defs/pair" } }
+      },
+      "required": ["points"], "additionalProperties": false
+    }
+  }
+}

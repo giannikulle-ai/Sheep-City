@@ -1,0 +1,6 @@
+# Read by The Garage on every push to the tile's git remote.
+# The tile page documents: build / start / test / open_paths; the app must listen on port 3000.
+start: node server.js
+open_paths:
+  - /
+  - /*

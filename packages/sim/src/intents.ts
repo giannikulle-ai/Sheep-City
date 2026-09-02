@@ -28,6 +28,14 @@ export type Intent =
 
 export type IntentType = Intent['type'];
 
+/** Every intent type, for validating documents that come in from outside (saves, a future server). */
+export const INTENT_TYPES = ['setWeather', 'setWeatherMode', 'setClock', 'setPeriod', 'pauseClock', 'setSeason'] as const satisfies readonly IntentType[];
+
+// Compile-time guard: the list above must name every member of the union.
+type MissingIntentType = Exclude<IntentType, (typeof INTENT_TYPES)[number]>;
+const _everyIntentTypeListed: MissingIntentType extends never ? true : never = true;
+void _everyIntentTypeListed;
+
 /** Apply one intent to a state that is already a private copy. Mutates and returns it. */
 export function applyIntent(state: SimState, intent: Intent): SimState {
   switch (intent.type) {

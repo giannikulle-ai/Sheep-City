@@ -9,8 +9,12 @@ import { createRng, nextFloat, type Rng } from './rng';
 import { RULES } from './rules';
 import { createWeather, type Weather } from './weather';
 
-/** Bumped by the sim lane whenever the save schema changes. */
-export const SAVE_VERSION = 0;
+/**
+ * Bumped by the sim lane whenever the save schema changes. Every bump ships a migration in
+ * `save/migrations` and a fixture in `test/fixtures/save-v<n>.json`. v0 was the bare state from
+ * the clock ticket (#4); v1 (#8) wraps it in a `{ format, version, world }` envelope.
+ */
+export const SAVE_VERSION = 1;
 
 /** Stable actor ids. Sheep are `sheep-<n>`; Digital Luna is `luna`. */
 export type ActorId = string;

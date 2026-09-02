@@ -22,6 +22,11 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | client | in review | session_01NFdtsZpVraCTq3LGBUmLoQ | #28 real sim in the app at parity, PR #34 open, needs-owner-pin (Verifier session_019H7jjiz5rus2A3GboAqHpb for the technical pass; owner pins on sheep-city-next) | 2026-09-02 |
 | infra | done | session_0139MAKFzvgv1t7v38D7yX5H | #29 second tile sheep-city-next, merged as PR #31; live at https://sheep-city-next.sheepcliff.com | 2026-09-02 |
 | infra | done | session_011rFrY7DKvF7JPLiZUzgoRm | #35 CI re-runs on PR body edits, merged as PR #36 | 2026-09-02 |
+| sim | active | session_019434DtXF9qU91ChVnK8V8J | #33 small life: bird, butterflies, fireflies, mud, footprints | 2026-09-02 |
+| client | active | session_01Heu2V5bR36DSzk728E9y9c | #37 flaky three-taps e2e | 2026-09-02 |
+| infra | active | session_017tkbiMa17hfXxX8Npx71TT | #38 sheep-city tile swap to the app (owner merges the PR) | 2026-09-02 |
+| world | active | session_01YW2Xp4rCiWGvW6RyY5b8jw | #41 farm event deck, fifteen events as data | 2026-09-02 |
+| art | active | session_01XZ7wcpkNLc5hTBfC8zxZGJ | #47 crow brief and frames (owner pin) | 2026-09-02 |
 | economy | not started | — | Phase 2 | — |
 
 Budget tier: Standard (about four lanes), set 2026-09-02.
@@ -35,7 +40,16 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 #25 sim player intents (landed as PR #30) and #27 sim perf (PR #32 in review), both after #5
 
 ## Phase 0 exit
-All ten tickets landed 2026-09-02. Exit gate: #28 client runs the real sim at parity (owner pin) on the second tile from #29 (landed, PR #31); PR #34 is the candidate. Then the sheep-city tile swaps from the prototype to the app (one matrix line in deploy.yml).
+Passed 2026-09-02 21:22 UTC: the owner merged PR #34 (real sim in the app at v31 parity) after the Verifier's approval; that merge is the pin. PR #32 followed. Remaining Phase 0 tail: #33 small life, #37 flaky e2e, #38 the sheep-city tile swap (owner merges).
+
+## Phase 1 ticket order
+Now: #41 world event deck (data) and #47 art crows (owner pin), which touch nothing the sim workers touch.
+After #33 lands: #39 sim Ledger, #40 sim Director, #45 sim social behaviours, #43 sim deity intents (one or two sim workers at a time; the save version bump is shared, so the second merges trunk before its PR).
+After #39 and #40: #42 client storybook (owner pin), #48 sim crows.
+After #43: #44 client deity powers UX (owner pin).
+After #45: #46 art social frames (owner pin).
+After #40, #41, #42: #49 qa event coverage.
+Cap: no more than three needs-owner-pin PRs open at once (#38, #47, then #46, #42, #44 in turn).
 
 ## Health note 2026-09-02 20:50 UTC
 The usage cap lifted at 20:20 UTC. All three stalled sessions resumed from a scheduled poke with their context intact and opened PRs #31, #32, #34 within twenty minutes; no work was lost. The cap cost about an hour of wall time. Rule kept from it: workers push early, and the Foreman treats a session over three hours with no push as a health signal.

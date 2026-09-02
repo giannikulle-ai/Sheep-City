@@ -7,7 +7,7 @@
 // That is a parity break, not a number to update: find the behaviour change first.
 import { describe, expect, it } from 'vitest';
 import { LUNA_BEHAVIOURS, lunaContext } from '../src/behaviours/luna';
-import { SHEEP_BEHAVIOURS, sheepContext } from '../src/behaviours/sheep';
+import { SHEEP_BEHAVIOURS, sheepContext, type SheepBehaviour, type SheepContext } from '../src/behaviours/sheep';
 import { hashState } from '../src/hash';
 import { createInitialState } from '../src/state';
 import { advance } from '../src/tick';
@@ -34,23 +34,48 @@ describe('hot path parity (#27)', () => {
 });
 
 /**
- * A `contextOnly` behaviour promises its condition never reads the actor or the generator. Hold
- * every flagged behaviour to it: the actor is a trap that throws on any read, and so is the
- * generator's state. Rain on and off, since the flagged conditions branch on it.
+ * A `contextOnly` behaviour promises its condition reads only the tick-invariant fields of the
+ * context: never the actor, the generator, the world state, or a field written per actor (for
+ * sheep, `fx`, `fy`, `flock`). Hold every flagged behaviour to it with traps: the actor throws on
+ * any read, and the context exposes only the invariant scalars and throws on everything else,
+ * `state`, `rng`, `fx`, `fy`, `flock` included. Rain on and off, since the flagged conditions
+ * branch on it.
  */
 describe('contextOnly behaviours keep their promise', () => {
-  const trap = <T extends object>(what: string): T =>
-    new Proxy({} as T, {
-      get: (_t, key) => {
-        throw new Error(`${what} read (${String(key)}) inside a contextOnly condition`);
-      },
-    });
+  /** The context fields set once at the top of a tick, per actor kind. Nothing else is readable. */
+  const INVARIANT = {
+    sheep: ['now', 'dt', 'night', 'rain', 'snow'],
+    luna: ['now', 'dt', 'phase', 'night', 'rain', 'temp', 'calm'],
+  } as const;
 
-  it('every flagged sheep and DL behaviour reads only the context', () => {
+  const trapActor = (): never =>
+    new Proxy(
+      {},
+      {
+        get: (_t, key) => {
+          throw new Error(`actor read (${String(key)}) inside a contextOnly condition`);
+        },
+      },
+    ) as never;
+
+  /** A context that answers only the invariant fields from `real` and throws on any other read. */
+  const trapContext = (real: object, allowed: readonly string[]): never =>
+    new Proxy(
+      {},
+      {
+        get: (_t, key) => {
+          if (typeof key === 'string' && allowed.includes(key)) return (real as Record<string, unknown>)[key];
+          throw new Error(`context.${String(key)} read inside a contextOnly condition; only ${allowed.join(', ')} are tick-invariant`);
+        },
+        has: (_t, key) => typeof key === 'string' && allowed.includes(key),
+      },
+    ) as never;
+
+  it('every flagged sheep and DL behaviour reads only the tick-invariant context fields', () => {
     let flagged = 0;
-    for (const [reg, context] of [
-      [SHEEP_BEHAVIOURS, sheepContext] as const,
-      [LUNA_BEHAVIOURS, lunaContext] as const,
+    for (const [reg, context, allowed] of [
+      [SHEEP_BEHAVIOURS, sheepContext, INVARIANT.sheep] as const,
+      [LUNA_BEHAVIOURS, lunaContext, INVARIANT.luna] as const,
     ]) {
       for (const chain of reg.chains()) {
         for (const b of reg.behaviours(chain)) {
@@ -59,8 +84,10 @@ describe('contextOnly behaviours keep their promise', () => {
           for (const rain of [false, true]) {
             const s = createInitialState(7);
             s.weather = { ...s.weather, rain };
-            const ctx = { ...context(s), rng: trap<typeof s.rng>('generator') };
-            expect(() => b.condition(ctx as never, trap('actor'))).not.toThrow();
+            const real = context(s);
+            expect(() => b.condition(trapContext(real, allowed), trapActor()), `${b.id}, rain ${rain}`).not.toThrow();
+            // And the trap answers as the real context would, so the promise test tests the real condition.
+            expect(b.condition(trapContext(real, allowed), trapActor())).toBe(b.condition(real as never, s.sheep[0] as never));
           }
         }
       }
@@ -69,5 +96,17 @@ describe('contextOnly behaviours keep their promise', () => {
     expect(flagged).toBe(3);
     expect(SHEEP_BEHAVIOURS.behaviours('shelter').every((b) => b.contextOnly)).toBe(true);
     expect(SHEEP_BEHAVIOURS.behaviours('lambs').every((b) => b.contextOnly)).toBe(true);
+  });
+
+  it('the trap context catches a condition that reads a per-sheep field', () => {
+    const s = createInitialState(7);
+    const ctx = trapContext(sheepContext(s), INVARIANT.sheep) as SheepContext;
+    expect(() => ctx.rain).not.toThrow();
+    expect(() => ctx.fx).toThrow(/context\.fx/);
+    expect(() => ctx.flock).toThrow(/context\.flock/);
+    expect(() => ctx.state).toThrow(/context\.state/);
+    expect(() => ctx.rng).toThrow(/context\.rng/);
+    const lookAtFlock: SheepBehaviour['condition'] = ({ flock }) => flock < 9;
+    expect(() => lookAtFlock(ctx, trapActor())).toThrow(/context\.flock/);
   });
 });

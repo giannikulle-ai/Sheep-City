@@ -21,13 +21,18 @@
 // prototype made anyway. `run` is the traced form for tests and a debug overlay; it returns the
 // ids that ran and so allocates one small array per call.
 //
-// - `contextOnly`: a condition that reads the context alone (never the actor, never the
-//   generator) cannot change between one actor and the next within a tick. When every behaviour
-//   of a chain says so, the registry evaluates that chain once per context object and reuses the
-//   winner for every actor stepped under it: the sheep's `shelter` and `lambs` chains, which
-//   only ask whether it is raining. A context object therefore stands for one tick. Build a
-//   fresh one per tick, as `sheepContext` and `lunaContext` do, and never mutate one between
-//   runs. The registry keeps a reference to the last such context until the next tick replaces it.
+// - `contextOnly`: a condition that reads only the tick-invariant fields of the context (the
+//   scalars set once at the top of the tick: `now`, `dt`, `rain`, `night`, and the like) gives the
+//   same answer for every actor within a tick. It must not read the actor, the generator, the
+//   world state, or any context field written per actor: for sheep that excludes `fx`, `fy`
+//   (rewritten per sheep), `flock` (mutated as lambs are born mid-loop), and `state`. When every
+//   behaviour of a chain says so, the registry evaluates that chain once per context object and
+//   reuses the winner for every actor stepped under it: the sheep's `shelter` and `lambs` chains,
+//   which only ask whether it is raining. A context object therefore stands for one tick. Build a
+//   fresh one per tick, as `sheepContext` and `lunaContext` do, and never mutate its invariant
+//   fields between runs. The registry keeps a reference to the last such context until the next
+//   tick replaces it. test/hot-path-parity.test.ts holds every flagged behaviour to this with a
+//   trap context that throws on any field outside the invariant set.
 
 import { nextFloat, type Rng } from '../rng';
 
@@ -43,9 +48,11 @@ export interface Behaviour<C, A> {
   /** When this behaviour runs, later chains are skipped for the tick. */
   readonly exclusive?: boolean;
   /**
-   * The condition reads the context alone: not the actor, not the generator. A chain of such
-   * behaviours is selected once per context object (see the note at the top). Not allowed with
-   * `weight`, since a draw reads the generator.
+   * The condition reads only the tick-invariant fields of the context (`now`, `dt`, `rain`,
+   * `night`, ...): never the actor, the generator, the world state, or a per-actor context field
+   * (for sheep: `fx`, `fy`, `flock`, `state`). A chain of such behaviours is selected once per
+   * context object (see the note at the top). Not allowed with `weight`, since a draw reads the
+   * generator.
    */
   readonly contextOnly?: boolean;
   condition(ctx: C, actor: A): boolean;

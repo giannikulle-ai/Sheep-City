@@ -150,6 +150,24 @@ curl -sS -X POST -H "Authorization: Bearer $GARAGE_TOKEN" -H 'Content-Type: appl
   -d '{"name":"sheep-city","note":"Sheepcliff dev build"}' https://lab.sheepcliff.com/api/tiles
 ```
 
+## What a tile runs (observed 2026-09-02)
+
+The tile page at `/tile/sheep-city` says: "ports app on 3000 · editor on 8080",
+"runs as dev in /work", and "Add a lab.yml to build/start/test on push"
+(`build: npm ci && npm run build`, `start: npm start`, `test: npx playwright
+test --base-url $TILE_URL`, `open_paths: [...]`). A push that carries only
+static files deploys fine but nothing listens, so the live URL answers 502.
+`deploy.sh` therefore adds `tools/deploy/tile/server.js` (a dependency-free
+static server on port 3000) and `tools/deploy/tile/lab.yml` to every payload
+that does not already contain them. `open_paths` is also set through
+`PUT /api/tiles/sheep-city/open-paths` by the deploy workflow.
+
+Observed with the token: `POST /api/tiles` (claim) answers 201 with the tile
+JSON; `POST .../deploy` answers `{"deployed":true,"head":...,"build_output":""}`;
+`POST .../restart` answers `{"restarted":true}`; `GET .../logs` answers
+`(no app log yet)` until something starts; `GET .../files?path=.` is a `cat`
+and 404s on a directory.
+
 ## Discovery workflow
 
 `garage-discover.yml` runs on manual trigger (once it exists on the trunk) and

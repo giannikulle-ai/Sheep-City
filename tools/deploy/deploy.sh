@@ -94,6 +94,11 @@ elif [ -f "$SOURCE" ]; then
 else
   die "source $SOURCE does not exist"
 fi
+# The Garage runs an app per tile (lab.yml "start", proxied from port 3000); a bare
+# static site never starts, so ship a tiny Node server and a lab.yml with the site.
+TILE_FILES="$REPO_ROOT/tools/deploy/tile"
+[ -f "$STAGE/server.js" ] || cp "$TILE_FILES/server.js" "$STAGE/server.js"
+[ -f "$STAGE/lab.yml" ] || cp "$TILE_FILES/lab.yml" "$STAGE/lab.yml"
 FILE_COUNT="$(find "$STAGE" -type f | wc -l | tr -d ' ')"
 log "source: $SOURCE"
 log "staged $FILE_COUNT file(s), $(du -sh "$STAGE" | cut -f1) total, upload mode: $GARAGE_UPLOAD, tile: $GARAGE_TILE at $GARAGE_URL"

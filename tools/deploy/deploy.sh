@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deploy the built web app to The Garage tile `sheep-city` (issue #12).
+# Deploy a site to one Garage tile (issues #12, #29). deploy.yml runs this once per
+# tile: `sheep-city` (the prototype) and `sheep-city-next` (apps/web/dist).
 #
 # Usage:  GARAGE_TOKEN=... tools/deploy/deploy.sh [--dry-run]
 #
@@ -10,7 +11,7 @@
 # Environment:
 #   GARAGE_TOKEN          required. Bearer token for The Garage. Never printed.
 #   GARAGE_URL            default https://lab.sheepcliff.com
-#   GARAGE_TILE           default sheep-city
+#   GARAGE_TILE           default sheep-city; deploy.yml also passes sheep-city-next
 #   GARAGE_UPLOAD         git (default) or files. See docs/DEPLOY.md.
 #   GARAGE_BRANCH         branch to push in git mode; default: the tile repo's HEAD, else main
 #   GARAGE_AFTER          optional comma list of "deploy","restart": tile actions to call after upload

@@ -1,10 +1,15 @@
 // The registry and movement hot paths were made leaner in #27. The bar for that work is that no
-// state hash moves: these hashes were taken on the trunk before the change (the merge of #26,
-// 78fa585) and must hold after it. Three seeds, both the default flock and the 40-sheep bench
-// district, 6,000 ticks (10 sim-minutes) each.
+// state hash moves: these hashes pin the world after three seeds, both the default flock and the
+// 40-sheep bench district, 6,000 ticks (10 sim-minutes) each.
+//
+// The pins were taken on the trunk before #27 (the merge of #26, 78fa585) and held through it.
+// They moved once since, in #33: the bird rolls for a landing every tick it is away, the way the
+// prototype's `tickLife` did, and that one new draw per tick shifts every later one; the ground
+// stamps also draw in rain (a mud radius) and on a melt. These are the hashes after that change.
 //
 // If a hash here moves, some sheep, DL, or NPC took a different path or drew a different die.
-// That is a parity break, not a number to update: find the behaviour change first.
+// That is a parity break, not a number to update: find the behaviour change first, and if it is a
+// deliberate new draw, say so in the PR.
 import { describe, expect, it } from 'vitest';
 import { LUNA_BEHAVIOURS, lunaContext } from '../src/behaviours/luna';
 import { SHEEP_BEHAVIOURS, sheepContext, type SheepBehaviour, type SheepContext } from '../src/behaviours/sheep';
@@ -15,17 +20,17 @@ import { advance } from '../src/tick';
 const TICKS = 6000;
 
 const BEFORE: readonly { seed: number; sheep: number; hash: string }[] = [
-  { seed: 6, sheep: 5, hash: '16b719c3a6bd440f' },
-  { seed: 6, sheep: 40, hash: 'b92064dc37b91d1f' },
-  { seed: 7, sheep: 5, hash: '385b513bb90971de' },
-  { seed: 7, sheep: 40, hash: '7dbe55df7a926bb4' },
-  { seed: 11, sheep: 5, hash: 'e66d5e8da809acba' },
-  { seed: 11, sheep: 40, hash: '19ce2f87e5d69adb' },
+  { seed: 6, sheep: 5, hash: 'e85cbb53bef79387' },
+  { seed: 6, sheep: 40, hash: '681d0cbae2eace49' },
+  { seed: 7, sheep: 5, hash: 'bf1769cf3184be53' },
+  { seed: 7, sheep: 40, hash: '1591607e60b10a89' },
+  { seed: 11, sheep: 5, hash: 'a5735abd6b19878b' },
+  { seed: 11, sheep: 40, hash: '71769756e8746076' },
 ];
 
 describe('hot path parity (#27)', () => {
   for (const { seed, sheep, hash } of BEFORE) {
-    it(`seed ${seed}, ${sheep} sheep, ${TICKS} ticks hashes as it did before the leaner registry`, () => {
+    it(`seed ${seed}, ${sheep} sheep, ${TICKS} ticks hashes as pinned`, () => {
       const s = advance(createInitialState(seed, { sheep }), TICKS);
       expect(s.clock.tick).toBe(TICKS);
       expect(hashState(s)).toBe(hash);

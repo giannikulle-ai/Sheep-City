@@ -6,7 +6,7 @@
 //   2. the fetch pre-empt (which `return`s out of tick);
 //   3. chain one: riding (handled above) | mounting | manual;
 //   4. chain two: tilt | pant | rain shepherd | bed and dawn | hot pant | idle play | timers;
-//   5. the movement pass, then clamp, wet, and snow.
+//   5. the movement pass, then clamp, the ground stamp, wet, and snow.
 //
 // Chains one and two are not one if/else: both run each frame, so a manual hold and the bed
 // routine, or riding and the bed routine, can be active at once. That is kept here as five
@@ -22,6 +22,7 @@
 import { LUNA_ID, bubble, findSheep, nearestTuft } from '../actors';
 import { type Phase, phaseOf } from '../clock';
 import { LFOOT, SFOOT, SPOT, randomFoot, type Point } from '../geometry';
+import { groundSnowy, stampGround } from '../ground';
 import { clampField, clampTarget, stepToward } from '../movement';
 import { chance, nextFloat, pick, type Rng } from '../rng';
 import { RULES, TICK_SEC } from '../rules';
@@ -607,6 +608,8 @@ export function tickLuna(s: SimState): string[] {
   const ran = LUNA_BEHAVIOURS.run(ctx, l);
   if (ran.includes(fetch.id)) return ran; // the prototype returns out of tick from the fetch branch
   clampField(l, LFOOT);
+  // Walking to a target on the field leaves prints in snow and mud in rain; not from a sheep's back.
+  if (l.target && !l.inBarn && !l.riding) stampGround(s, l, LFOOT, ctx.now, groundSnowy(s));
   const { dt, rain } = ctx;
   l.wet = Math.max(0, Math.min(1, l.wet + (rain && !l.inBarn ? dt / 6 : -dt / 45)));
   const snowing = s.weather.kind === 'snow' && !l.inBarn && !l.target;

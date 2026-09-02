@@ -114,8 +114,10 @@ describe('npcStep', () => {
 describe('the farmer’s visit', () => {
   it('walks the plan: in at the gates, trough (heart), hay (hay-trip sheep eat), shear, pat, out, gone', () => {
     const s = calm();
-    s.sheep[1]!.hayTrip = true; // parked and waiting by the bale (ridden, so it picks nothing else meanwhile)
-    s.sheep[1]!.ridden = true;
+    s.sheep[1]!.hayTrip = true; // parked and waiting by the bale
+    // Every sheep ridden: none picks a need, and DL's idle play cannot mount one mid-visit (a
+    // ride when the farmer reaches her skips the pat, and the plan is what this test is about).
+    for (const q of s.sheep) q.ridden = true;
     for (const q of s.sheep) q.wool = 0.3; // nobody to shear this visit
     applyIntent(s, { type: 'farmAction', action: 'farmer' });
     const f = s.npcs.farmer!;
@@ -148,6 +150,7 @@ describe('the farmer’s visit', () => {
     c.wool = 0.65;
     c.shearAtMs = 1e9; // already being shorn (a click): skipped, as a sheep in the barn is
     for (const q of s.sheep.slice(3)) q.wool = 0; // will not reach .6 during the visit
+    s.npcs.merchantAtMs = 1e9; // the merchant's 45 s visit would sell the bank mid-count
     applyIntent(s, { type: 'farmAction', action: 'farmer' });
     const f = s.npcs.farmer!;
     runUntil(s, (w) => w.npcs.farmer!.shearing !== null, 1500);
@@ -166,7 +169,8 @@ describe('the farmer’s visit', () => {
     run(s, 13);
     expect(s.banks.wool).toBe(2);
     expect(a.wool).toBeLessThan(0.1);
-    expect(b.wool).toBeLessThan(0.1);
+    // b was shorn to .05 while the farmer walked over to a, and has been regrowing at 1/150 per second since.
+    expect(b.wool).toBeLessThan(0.3);
   });
 
   it('the pat calls DL over, drops whatever she was doing, and ends in a heart and a pant; skipped in the barn or riding', () => {

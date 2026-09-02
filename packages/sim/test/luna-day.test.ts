@@ -1,14 +1,16 @@
-// Scripted day: Digital Luna's states over one sim day (1,800 ticks of 100 ms) from seed 5.
+// Scripted day: Digital Luna's states over one sim day (1,800 ticks of 100 ms) from seed 11.
 //
 // Each entry is the tick a change first shows, then `anim/routine[/flags] weather phase`. Flags:
-// R riding, M mounting, C chasing the rabbit, B in the barn, S a stick is out. Seed 5's day has
-// most of the chain in it: two nibbles, a ride, bed at dusk, the farmer's afternoon visit running
-// into the night (five sheep to shear) so that his pat at tick 1074 gets her out of bed and back
-// (the "pant/asleep" and "sit/asleep" entries are that pat landing on a dog already back asleep,
-// as the prototype has it), the dawn stretch, stick zoomies, a rabbit chase. No shower this day:
-// the sheep now draw from the generator before the weather roll, so the seed-5 day from part (a)
-// (which had a night shower) is not the same day. Rain shelter is pinned in luna.test.ts and
-// sheep.test.ts instead.
+// R riding, M mounting, C chasing the rabbit, B in the barn, S a stick is out. Seed 11's day has
+// the whole chain in it: a rabbit chase, a ride, a nibble, bed at dusk, the farmer's afternoon
+// visit running into the night (five sheep to shear) so that his pat at tick 1054 gets her out of
+// bed and back (the "pant/asleep" and "sit/asleep" entries are that pat landing on a dog already
+// back asleep, as the prototype has it), the dawn stretch, stick zoomies, three flops. No shower
+// this day; rain shelter is pinned in luna.test.ts and sheep.test.ts instead.
+//
+// Seed 5 was the pinned day until #33: the bird now rolls for a landing every tick it is away (the
+// prototype's `Math.random() < dt * .03`), and that draw moves every later one, so seed 5's day is
+// a different day (no ride, no stick). Seed 11 was picked for having the whole chain again.
 //
 // If DL's priority order or any of her timers change on purpose, regenerate this list and say so
 // in the PR: the owner pins the behaviour order.
@@ -24,35 +26,33 @@ const TICKS_PER_DAY = 1800;
 
 const EXPECTED = [
   '1 sit/- sun day',
-  '71 run/- sun day',
-  '74 nibble/- sun day',
-  '115 sit/- sun day',
-  '186 nibble/- sun day',
-  '227 sit/- sun day',
-  '298 sit/-/M sun day',
-  '299 run/-/M sun day',
-  '309 run/-/R sun day',
-  '370 pant/- sun day',
-  '396 sit/- sun day',
+  '71 run/-/C sun day',
+  '166 sit/- sun day',
+  '237 sit/-/M sun day',
+  '238 run/-/M sun day',
+  '255 run/-/R sun day',
+  '316 pant/- sun day',
+  '342 sit/- sun day',
+  '413 run/- sun day',
+  '422 nibble/- sun day',
   '433 run/bed sun dusk',
-  '474 sleep/asleep sun dusk',
+  '488 sleep/asleep sun dusk',
   '613 sleep/asleep sun night',
-  '1074 run/- sun night',
-  '1075 run/bed sun night',
-  '1095 sleep/asleep sun night',
-  '1101 pant/asleep sun night',
-  '1127 sit/asleep sun night',
+  '1054 run/- sun night',
+  '1055 run/bed sun night',
+  '1075 sleep/asleep sun night',
+  '1081 pant/asleep sun night',
+  '1107 sit/asleep sun night',
   '1333 stretch/- sun dawn',
   '1361 sit/- sun dawn',
-  '1396 stick/- sun dawn',
-  '1437 sit/- sun dawn',
+  '1432 stick/- sun dawn',
+  '1461 sit/- sun dawn',
   '1477 sit/- sun day',
-  '1508 stick/- sun day',
-  '1539 sit/- sun day',
-  '1610 run/-/C sun day',
+  '1532 flop/- sun day',
+  '1583 sit/- sun day',
+  '1654 flop/- sun day',
   '1705 sit/- sun day',
-  '1776 run/- sun day',
-  '1783 nibble/- sun day',
+  '1776 flop/- sun day',
 ];
 
 function describeLuna(s: SimState): string {
@@ -77,23 +77,23 @@ function scriptedDay(seed: number): { transitions: string[]; state: SimState } {
 }
 
 describe('scripted day', () => {
-  it('seed 5: the sequence of DL states over one sim day', () => {
-    const { transitions, state } = scriptedDay(5);
+  it('seed 11: the sequence of DL states over one sim day', () => {
+    const { transitions, state } = scriptedDay(11);
     expect(state.clock.tick).toBe(TICKS_PER_DAY);
     expect(state.clock.dayCount).toBe(1);
     expect(transitions).toEqual(EXPECTED);
   });
 
-  it('seed 5 twice gives the same day and the same hash', () => {
-    const a = scriptedDay(5);
-    const b = scriptedDay(5);
+  it('seed 11 twice gives the same day and the same hash', () => {
+    const a = scriptedDay(11);
+    const b = scriptedDay(11);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('8e677c647a5d371f');
+    expect(hashState(a.state)).toBe('22fec366499b4508');
   });
 
   it('the shape of the day holds for other seeds: bed at dusk, asleep by night, up by day', () => {
-    for (const seed of [1, 7, 11, 42]) {
+    for (const seed of [1, 2, 5, 42]) {
       const { transitions } = scriptedDay(seed);
       const text = transitions.join('\n');
       expect(text, `seed ${seed}`).toMatch(/^433 run\/bed sun dusk$/m);

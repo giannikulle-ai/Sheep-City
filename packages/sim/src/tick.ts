@@ -1,11 +1,13 @@
 // One fixed step of the world, in the prototype's order: clock, weather, grass and fleece
-// bookkeeping, sheep, Digital Luna, then `tickLife` (the NPCs, then the rabbit).
+// bookkeeping, sheep, Digital Luna, the ground stamps, then `tickLife` (the NPCs, the rabbit, the
+// butterflies, the bird).
 
-import { tickLuna } from './behaviours/luna';
+import { fetch as fetchStick, tickLuna } from './behaviours/luna';
 import { tickSheep } from './behaviours/sheep';
 import { advanceClock, advanceSeason } from './clock';
+import { groundSnowy, tickGround } from './ground';
 import { applyDueIntents } from './intents';
-import { tickRabbit } from './life';
+import { tickBird, tickButterflies, tickRabbit } from './life';
 import { tickNpcs } from './npcs';
 import { RULES, TICK_MS, TICK_SEC } from './rules';
 import { cloneState, type SimState } from './state';
@@ -31,10 +33,15 @@ export function tickInPlace(s: SimState): SimState {
   // Fleece growth and pending shears are the first lines of the prototype's per-sheep loop and
   // live in `tickSheep`, so a lamb that grows up mid-loop gets its first frame like every other.
   tickSheep(s);
-  tickLuna(s);
-  // The prototype's `tickLife` runs the NPCs first, then the rabbit.
+  const ran = tickLuna(s);
+  // The prototype's fetch branch `return`s before `tickGround` but after `tickLife`, so a fetch
+  // tick moves the NPCs and the small life but leaves the ground alone.
+  if (!ran.includes(fetchStick.id)) tickGround(s, groundSnowy(s));
+  // The prototype's `tickLife`: the NPCs first, then the rabbit, the butterflies, the bird.
   tickNpcs(s);
   tickRabbit(s);
+  tickButterflies(s);
+  tickBird(s);
 
   return s;
 }

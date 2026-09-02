@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { hashState } from '../src/hash';
 import { V2_LUNA_DEFAULTS } from '../src/save/migrations/v2-luna-fetch-fields';
 import { v3NpcDefaults } from '../src/save/migrations/v3-flock-and-npc-fields';
+import { V4_STAMP_DEFAULTS, v4GroundDefault } from '../src/save/migrations/v4-ground-and-stamps';
 import { SAVE_FORMAT } from '../src/save/doc';
 import { fromSave, toSave, toSaveText } from '../src/save/serialize';
 import { createInitialState, SAVE_VERSION, type SimState } from '../src/state';
@@ -23,8 +24,9 @@ export const FIXTURE_SEED = 8;
 
 /**
  * The world the current fixture is taken from: 1,200 ticks with a few intents, then the corners
- * of the schema the bookkeeping tick never reaches yet (lambs, a shear timer, an NPC with a plan,
- * small life, a queued intent) filled in by hand so the fixture covers every type in the state.
+ * of the schema the 1,200 ticks do not reach (lambs, a shear timer, an NPC with a plan, small
+ * life, two snow prints, a queued intent) filled in by hand so the fixture covers every type in
+ * the state. The mud is real: the shower's first 30 s walked the flock and DL to the barn door.
  */
 export function buildFixtureState(): SimState {
   let s = createInitialState(FIXTURE_SEED);
@@ -73,6 +75,7 @@ export function buildFixtureState(): SimState {
   s.life.rabbit = { x: 90, y: 300, t0Ms: now - 1_000 };
   s.life.bird = { x: 168, y: 108, tx: 168, ty: 108, state: 'sit', t0Ms: now - 2_000 };
   s.banks = { wool: 2, coins: 6, owned: ['flowerbed'] };
+  s.ground.prints.push({ x: 300, y: 250, tMs: now - 20_000 }, { x: 306, y: 248, tMs: now - 19_300 });
   s.pendingIntents.push({ type: 'setSeason', season: 'winter', at: s.clock.tick + 500 });
   return s;
 }
@@ -123,6 +126,10 @@ describe('save fixtures', () => {
     // The v3 migration filled the flock counter and the farmer's job-plan fields.
     expect(loaded.nameIdx).toBe(5);
     expect(loaded.npcs.farmer).toMatchObject(v3NpcDefaults('farmer'));
+    // The v4 migration filled the ground and the stamp fields on every walker.
+    expect(loaded.ground).toEqual({ prints: [], mud: [], wasSnowy: false });
+    expect(loaded.luna).toMatchObject(V4_STAMP_DEFAULTS);
+    for (const q of loaded.sheep) expect(q).toMatchObject(V4_STAMP_DEFAULTS);
 
     const after = advance(loaded, 100);
     expect(after.clock.tick).toBe(1300);
@@ -155,17 +162,22 @@ describe('save fixtures', () => {
       const fill = (n: Record<string, unknown> | null): Record<string, unknown> | null => (n ? { ...n, ...v3NpcDefaults(n['kind']) } : null);
       out = { ...out, nameIdx: (world['sheep'] as unknown[]).length, npcs: { ...world.npcs, farmer: fill(world.npcs.farmer), merchant: fill(world.npcs.merchant) } };
     }
+    if (from < 4) {
+      const sheep = (out['sheep'] as Record<string, unknown>[]).map((q) => ({ ...q, ...V4_STAMP_DEFAULTS }));
+      out = { ...out, ground: v4GroundDefault(), sheep, luna: { ...(out['luna'] as Record<string, unknown>), ...V4_STAMP_DEFAULTS } };
+    }
     return out;
   }
 
-  for (const from of [1, 2]) {
+  for (const from of [1, 2, 3]) {
     it(`save-v${from}.json comes back as a current-version document with the same world plus exactly the migrated fields`, () => {
       const old = readFixture(`save-v${from}.json`) as OldDoc;
       const again = toSave(fromSave(old));
       expect(old.version).toBe(from);
       expect(again.version).toBe(SAVE_VERSION);
       expect(again.world).toEqual(migratedWorld(from, old.world));
-      expect(old.world).not.toHaveProperty('nameIdx');
+      expect(old.world).not.toHaveProperty('ground');
+      if (from < 3) expect(old.world).not.toHaveProperty('nameIdx');
     });
   }
 

@@ -7,6 +7,8 @@
 //                        `tagUntilMs`, `forceBoundUntilMs` for the behaviour chain.
 // v3 (#5b):              same envelope; `world` gains `nameIdx`, and each NPC gains `wp`, `outside`,
 //                        `entering`, `job`, `shearing`, `cart`, `icon`, `iconUntilMs` for the job plans.
+// v4 (#33):              same envelope; `world` gains `ground` (`prints`, `mud`, `wasSnowy`), and each
+//                        sheep and `world.luna` gain `lastStamp` and `stampSide` for the ground stamps.
 
 import type { SimState } from '../state';
 

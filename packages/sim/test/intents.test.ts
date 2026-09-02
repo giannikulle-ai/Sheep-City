@@ -152,9 +152,12 @@ describe('throwStick', () => {
     expect(b.luna.anim).toBe('run');
     expect(b.luna.target).toEqual({ x: 400, y: 254 });
     expect(b.luna.x).toBeGreaterThan(a.luna.x); // she is already running for it
-    const back = step(b, [], 20000);
+    // Out and back at the fetch speeds takes well under 20 s; the tick the stick is dropped she pants.
+    let back = b;
+    for (let i = 0; i < 200 && back.luna.stick; i++) back = step(back, [], 100);
     expect(back.luna.stick).toBeNull();
-    expect(back.luna.anim).not.toBe('run');
+    expect(back.luna.anim).toBe('pant');
+    expect(back.luna.icon).toBe('heart');
   });
 
   it('is refused in rain, in the barn, in bed, or off the field, as the prototype', () => {
@@ -334,7 +337,8 @@ describe('saved intents', () => {
     expect(code(() => fromSave(withIntent({ type: 'dlAction', action: 'moonwalk' })))).toBe('invalid-world');
     expect(code(() => fromSave(withIntent({ type: 'sheepAction', action: 'graze', target: 'flock' })))).toBe('ok');
     expect(code(() => fromSave(withIntent({ type: 'sheepAction', action: 'fly', target: 'flock' })))).toBe('invalid-world');
-    expect(code(() => fromSave(withIntent({ type: 'farmAction', action: 'bird' })))).toBe('invalid-world');
+    expect(code(() => fromSave(withIntent({ type: 'farmAction', action: 'bird' })))).toBe('ok');
+    expect(code(() => fromSave(withIntent({ type: 'farmAction', action: 'circus' })))).toBe('invalid-world');
     expect(code(() => fromSave(withIntent({ type: 'setWeather', weather: 'hail' })))).toBe('invalid-world');
   });
 });

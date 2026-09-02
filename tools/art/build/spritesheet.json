@@ -363,6 +363,42 @@
      "meaning": "edible tuft: 0 nub .. 3 tall"
     }
    }
+  },
+  "crow": {
+   "w": 22,
+   "h": 16,
+   "anims": {
+    "fly": {
+     "y": 950,
+     "frames": 2,
+     "fps": 6,
+     "meaning": "wingbeat, three a second"
+    },
+    "land": {
+     "y": 966,
+     "frames": 2,
+     "fps": 4,
+     "meaning": "touchdown then settle, play once"
+    },
+    "peck": {
+     "y": 982,
+     "frames": 2,
+     "fps": 4,
+     "meaning": "pecking at a tuft, loop two to four times"
+    },
+    "hop": {
+     "y": 998,
+     "frames": 2,
+     "fps": 6,
+     "meaning": "one hop sideways, play once"
+    },
+    "takeoff": {
+     "y": 1014,
+     "frames": 2,
+     "fps": 6,
+     "meaning": "spring then first upstroke, play once, then fly"
+    }
+   }
   }
  }
 }

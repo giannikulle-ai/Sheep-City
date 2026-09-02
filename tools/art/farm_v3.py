@@ -496,7 +496,7 @@ ANIMS = {
     "merchant":     {"pil": True, "anims": __import__("hand_sprites").as_pil(__import__("hand_sprites").MERCHANT_ANIMS)},
     "cart":         {"pil": True, "anims": __import__("hand_sprites").as_pil(__import__("hand_sprites").CART_ANIMS)},
     "upgrade":      {"pil": True, "anims": __import__("hand_sprites").as_pil(__import__("hand_sprites").UPGRADE_ANIMS)},
-    "grass":  {"px": 34, "vb": "-14 -8 140 120", "anims": {"grow": ([(lambda i: (lambda: tuft(i)))(i) for i in range(4)], 1, "edible tuft: 0 nub .. 3 tall")}},
+    "grass":  {"px": 34, "vb": "-14 -8 140 120", "anims": {"grow": ([(lambda i: (lambda: tuft(i)))(i) for i in range(4)], 1, "edible tuft: 0 nub .. 3 tall")}},    "crow":         {"pil": True, "anims": __import__("hand_sprites").as_pil(__import__("hand_sprites").CROW_ANIMS)},   # after grass so no existing row moves
 }
 
 def frame_svg(inner, vb):

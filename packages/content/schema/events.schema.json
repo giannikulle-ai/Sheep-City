@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepcliff.com/content/schema/events.schema.json",
+  "title": "Event deck",
+  "description": "A deck of event cards the Director draws from. A card is data only: when it may fire (preconditions), how often (weight, cooldown), how long (duration), what the sim does at its start and end (hooks from a fixed vocabulary), how the storybook tells it, and which watch-test moment it produces. Times are in-world: 1 sim day = 24 sim hours = 1440 sim minutes = 180 real seconds when watching.",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "source": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "district": { "$ref": "_defs.schema.json#/$defs/id" },
+    "timeScale": {
+      "type": "object",
+      "description": "Unit conversions for the numbers on the cards. Copied from balance/farm.json outsideRules.clock.periodSec; never tuned here.",
+      "properties": {
+        "simMinutesPerDay": { "type": "integer", "const": 1440 },
+        "simHoursPerDay": { "type": "integer", "const": 24 },
+        "realSecondsPerSimDayWatching": { "type": "number", "exclusiveMinimum": 0 },
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+      },
+      "required": ["simMinutesPerDay", "simHoursPerDay", "realSecondsPerSimDayWatching", "comment"],
+      "additionalProperties": false
+    },
+    "events": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/card" } }
+  },
+  "required": ["source", "comment", "district", "timeScale", "events"],
+  "additionalProperties": false,
+  "$defs": {
+    "season":  { "type": "string", "enum": ["spring", "summer", "autumn", "winter"] },
+    "weather": { "type": "string", "enum": ["sun", "rain", "snow"] },
+    "phase":   { "type": "string", "enum": ["dawn", "day", "dusk", "night"] },
+    "shortLine": { "type": "string", "minLength": 1, "maxLength": 140 },
+    "preconditions": {
+      "type": "object",
+      "description": "Every listed condition must hold at the moment of the draw. An absent key means no constraint. `season`, `weather`, `timeOfDay` are allow-lists (any listed value passes).",
+      "properties": {
+        "season":    { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": { "$ref": "#/$defs/season" } },
+        "weather":   { "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": { "$ref": "#/$defs/weather" } },
+        "timeOfDay": { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": { "$ref": "#/$defs/phase" }, "description": "The band of the day the card may start in, as clock phases (balance/farm.json outsideRules.clock.phases)." },
+        "flockSize": {
+          "type": "object",
+          "description": "Sheep plus lambs on the field, inclusive bounds. Max defaults to the flock cap.",
+          "properties": { "min": { "type": "integer", "minimum": 0 }, "max": { "type": "integer", "minimum": 0 } },
+          "minProperties": 1, "additionalProperties": false
+        },
+        "merchantPresent": { "type": "boolean", "description": "true: the merchant must be on the field. false: the merchant must be away." },
+        "lambPresent":     { "type": "boolean", "description": "true: at least one lamb on the field. false: none." },
+        "recentWeather": {
+          "type": "object",
+          "description": "PROPOSED beyond the issue's list (see the PR): passes when `kind` was the weather at any point in the last `withinSimMinutes`. Pair with `weather` to say 'sun now, rain a moment ago'.",
+          "properties": { "kind": { "$ref": "#/$defs/weather" }, "withinSimMinutes": { "type": "integer", "minimum": 1 } },
+          "required": ["kind", "withinSimMinutes"], "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "hook": {
+      "description": "One named effect the sim implements. `op` picks the effect; the other keys are its arguments.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Fade the scene's visibility (fog). 1 is clear, 0 is a wall of fog.",
+          "properties": { "op": { "const": "setVisibility" }, "value": { "type": "number", "minimum": 0, "maximum": 1 }, "comment": { "$ref": "_defs.schema.json#/$defs/comment" } },
+          "required": ["op", "value"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Put something on the field at a landmark from farm/spots.json. NPCs walk their own plan and leave by themselves; small life and creatures stay until the card ends when `untilEnd` is true.",
+          "properties": {
+            "op": { "const": "spawn" },
+            "what": { "type": "string", "enum": ["crow", "cat", "firefly", "farmer", "merchant"] },
+            "count": { "type": "integer", "minimum": 1, "maximum": 24 },
+            "at": { "$ref": "_defs.schema.json#/$defs/id" },
+            "untilEnd": { "type": "boolean" },
+            "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+          },
+          "required": ["op", "what", "at"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Nudge mood on the Ledger. Small whole numbers; the Ledger clamps.",
+          "properties": {
+            "op": { "const": "mood" },
+            "target": { "type": "string", "enum": ["flock", "dl", "all"] },
+            "delta": { "type": "integer", "minimum": -5, "maximum": 5 },
+            "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+          },
+          "required": ["op", "target", "delta"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Add (or take) whole coins from the bank.",
+          "properties": { "op": { "const": "coins" }, "delta": { "type": "integer", "minimum": -100, "maximum": 100 }, "comment": { "$ref": "_defs.schema.json#/$defs/comment" } },
+          "required": ["op", "delta"], "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Set a named boolean on the state that behaviours and the renderer read. A flag set at start is cleared at end (the test checks).",
+          "properties": { "op": { "const": "flag" }, "name": { "$ref": "_defs.schema.json#/$defs/id" }, "value": { "type": "boolean" }, "comment": { "$ref": "_defs.schema.json#/$defs/comment" } },
+          "required": ["op", "name", "value"], "additionalProperties": false
+        }
+      ]
+    },
+    "hooks": {
+      "type": "object",
+      "description": "`start` runs when the card fires, `end` when its duration runs out (or the sim ends it early). Both are lists so a card can do several things; an empty list is allowed.",
+      "properties": {
+        "start": { "type": "array", "items": { "$ref": "#/$defs/hook" } },
+        "end":   { "type": "array", "items": { "$ref": "#/$defs/hook" } }
+      },
+      "required": ["start", "end"], "additionalProperties": false
+    },
+    "storybook": {
+      "type": "object",
+      "description": "How 'while you were gone' tells the card. One past-tense line under 90 characters; placeholders in braces are filled by the client from the event log.",
+      "properties": {
+        "line": { "type": "string", "minLength": 1, "maxLength": 89, "pattern": "^[^{}]*(\\{(dl|lamb|sheep|farmer|merchant|coins|flock)\\}[^{}]*)*$" },
+        "picture": { "$ref": "_defs.schema.json#/$defs/id" }
+      },
+      "required": ["line", "picture"], "additionalProperties": false
+    },
+    "moment": {
+      "type": "object",
+      "description": "The watch-test moment the card's start produces (tools/qa/README.md). Distinctness is kind:detail, so pick a detail no ordinary moment uses.",
+      "properties": {
+        "kind": { "type": "string", "enum": ["bubble", "npc-arrival", "weather", "dl-trick", "lamb", "phase", "bird", "rabbit"] },
+        "detail": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+      },
+      "required": ["kind", "detail"], "additionalProperties": false
+    },
+    "beat": {
+      "type": "object",
+      "description": "For people: what the player sees within one second of the start, and what marks the end.",
+      "properties": { "start": { "$ref": "#/$defs/shortLine" }, "end": { "$ref": "#/$defs/shortLine" } },
+      "required": ["start", "end"], "additionalProperties": false
+    },
+    "card": {
+      "type": "object",
+      "properties": {
+        "id":    { "$ref": "_defs.schema.json#/$defs/id" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "weight": { "type": "number", "exclusiveMinimum": 0, "maximum": 100, "description": "Relative draw weight among the cards whose preconditions hold. 10 is ordinary." },
+        "cooldownSimHours": { "type": "number", "minimum": 0, "description": "In-world hours after the card ends before it may fire again." },
+        "preconditions": { "$ref": "#/$defs/preconditions" },
+        "durationSimMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+        "hooks": { "$ref": "#/$defs/hooks" },
+        "storybook": { "$ref": "#/$defs/storybook" },
+        "moment": { "$ref": "#/$defs/moment" },
+        "beat": { "$ref": "#/$defs/beat" }
+      },
+      "required": ["id", "title", "weight", "cooldownSimHours", "preconditions", "durationSimMinutes", "hooks", "storybook", "moment", "beat"],
+      "additionalProperties": false
+    }
+  }
+}

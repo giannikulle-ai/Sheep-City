@@ -27,13 +27,9 @@ export interface Clock {
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter'] as const;
 export type SeasonName = (typeof SEASONS)[number];
 
-export const SEASON_TEMP: Record<SeasonName, number> = { spring: 12, summer: 26, autumn: 10, winter: -3 };
-export const SEASON_ODDS: Record<SeasonName, { rain: number; snow: number }> = {
-  spring: { rain: 0.35, snow: 0.02 },
-  summer: { rain: 0.18, snow: 0 },
-  autumn: { rain: 0.42, snow: 0.05 },
-  winter: { rain: 0.05, snow: 0.5 },
-};
+/** Nominal degrees C per season and the per-roll weather odds, read from balance/farm.json through RULES. */
+export const SEASON_TEMP: Record<SeasonName, number> = RULES.seasons.temp;
+export const SEASON_ODDS: Record<SeasonName, { rain: number; snow: number }> = RULES.seasons.odds;
 
 /** Length of one season in sim milliseconds: nine days, as the prototype's `RULES.season`. */
 export const SEASON_MS = RULES.season.realDays * 86400e3;
@@ -55,7 +51,8 @@ export function createSeason(): Season {
 
 /** Phase boundaries exactly as the prototype: day < .42, dusk < .52, night < .92, then dawn. */
 export function phaseOf(t: number): Phase {
-  return t < 0.42 ? 'day' : t < 0.52 ? 'dusk' : t < 0.92 ? 'night' : 'dawn';
+  const p = RULES.clock.phases;
+  return t < p.dusk ? 'day' : t < p.night ? 'dusk' : t < p.dawn ? 'night' : 'dawn';
 }
 
 /** Advance the clock by one tick. Returns a new clock; the input is untouched. */

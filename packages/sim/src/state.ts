@@ -109,6 +109,7 @@ export interface Luna extends Point {
 
 export type NpcJob = { job: string; at?: Point };
 
+/** A visiting NPC; field names follow the prototype's `summonFarmer` / `summonMerchant`. */
 export interface Npc extends Point {
   kind: 'farmer' | 'merchant';
   dir: Dir;
@@ -116,8 +117,22 @@ export interface Npc extends Point {
   t0Ms: number;
   tx: number | null;
   ty: number | null;
+  wp: Point | null;
+  /** Off the field: skips the barn router. Flips at the gate, see `npcStep`. */
+  outside: boolean;
+  /** Set on the farmer at spawn, as the prototype does; nothing reads it there either. */
+  entering: boolean;
+  /** Remaining steps of the job plan; the current one is `job`. */
   plan: NpcJob[];
+  job: string | null;
   jobUntilMs: number;
+  /** The sheep the farmer is walking to shear, or null. */
+  shearing: ActorId | null;
+  /** The merchant pulls a cart (a renderer hint the prototype keeps on the NPC). */
+  cart: boolean;
+  icon: string | null;
+  iconUntilMs: number;
+  /** Coins the merchant paid on this visit, for the HUD. */
   sold: number;
 }
 
@@ -179,6 +194,8 @@ export interface SimState {
   npcs: Npcs;
   banks: Banks;
   life: Life;
+  /** Next index into `NAMES` / `COLORS` for a lamb that grows up: the prototype's `nameIdx`. */
+  nameIdx: number;
   /** Sim milliseconds owed to the next tick by the fixed-step loop. */
   accumulatorMs: number;
   /** Intents waiting for their tick boundary. */
@@ -189,7 +206,7 @@ export const NAMES = ['Clover', 'Daisy', 'Biscuit', 'Pepper', 'Maple', 'Willow',
 export const COLORS = ['#3a7bd5', '#e0a52c', '#2fa07a', '#7c4dbf', '#e0602c', '#d33a2f', '#2aa0b8', '#a04ad0', '#8b8b2a'] as const;
 
 export interface InitialStateOptions {
-  /** How many sheep to spawn. The prototype starts with 5. */
+  /** How many sheep to spawn. Default `RULES.flock.initial` (the prototype's 5). */
   sheep?: number;
 }
 
@@ -300,7 +317,7 @@ export function makeLuna(): Luna {
  */
 export function createInitialState(seed: number, options: InitialStateOptions = {}): SimState {
   const rng = createRng(seed);
-  const count = options.sheep ?? 5;
+  const count = options.sheep ?? RULES.flock.initial;
   const tufts = makeTufts(rng);
   const sheep: Sheep[] = [];
   for (let i = 0; i < count; i++) sheep.push(makeSheep(rng, i, randomFoot(rng)));
@@ -324,6 +341,8 @@ export function createInitialState(seed: number, options: InitialStateOptions = 
     npcs: { farmer: null, merchant: null, merchantAtMs: RULES.merchantFirstAtMs, lastVisitKey: -1 },
     banks: { wool: 0, coins: 0, owned: [] },
     life: { rabbit: null, bird: null, bflies, flies },
+    // The prototype resets `nameIdx` to 5 whatever the flock; a bigger flock here continues from its own size so ids stay unique.
+    nameIdx: count,
     accumulatorMs: 0,
     pendingIntents: [],
   };
@@ -370,7 +389,7 @@ function cloneSheep(s: Sheep): Sheep {
 }
 
 function cloneNpc(n: Npc): Npc {
-  return { ...n, plan: n.plan.map((j) => ({ ...j })) };
+  return { ...n, wp: n.wp ? { ...n.wp } : null, plan: n.plan.map((j) => ({ ...j })) };
 }
 
 /** Where a sheep's feet are, for callers that think in foot coordinates. */

@@ -1,11 +1,12 @@
 // One fixed step of the world, in the prototype's order: clock, weather, grass and fleece
-// bookkeeping, sheep, Digital Luna, small life. Sheep needs and the NPC job plans are issue #5
-// part (b) and plug in where the comment marks the seam.
+// bookkeeping, sheep, Digital Luna, then `tickLife` (the NPCs, then the rabbit).
 
 import { tickLuna } from './behaviours/luna';
+import { tickSheep } from './behaviours/sheep';
 import { advanceClock, advanceSeason } from './clock';
 import { applyDueIntents } from './intents';
 import { tickRabbit } from './life';
+import { tickNpcs } from './npcs';
 import { RULES, TICK_MS, TICK_SEC } from './rules';
 import { cloneState, type SimState } from './state';
 import { tickWeather } from './weather';
@@ -25,23 +26,14 @@ export function tickInPlace(s: SimState): SimState {
   s.clock = advanceClock(s.clock, TICK_MS);
   s.season = advanceSeason(s.season, TICK_MS);
   s.weather = tickWeather(s.weather, s.clock, s.season, s.rng);
-  const now = s.clock.nowMs;
-
   for (const t of s.tufts) t.level = Math.min(1, t.level + TICK_SEC * RULES.tuftRegrowPerSec);
 
-  for (const sheep of s.sheep) {
-    sheep.wool = Math.min(1, sheep.wool + TICK_SEC / RULES.woolGrowSec);
-    if (sheep.shearAtMs !== null && now > sheep.shearAtMs) {
-      sheep.shearAtMs = null;
-      sheep.wool = 0.05;
-      s.banks.wool++;
-    }
-    for (const lamb of sheep.lambs) if (!lamb.grown && now - lamb.bornMs > RULES.lambGrowMs) lamb.grown = true;
-  }
-
-  // Seam for issue #5 part (b): sheep needs, lambs, and NPC job plans run here, before DL.
-
+  // Fleece growth and pending shears are the first lines of the prototype's per-sheep loop and
+  // live in `tickSheep`, so a lamb that grows up mid-loop gets its first frame like every other.
+  tickSheep(s);
   tickLuna(s);
+  // The prototype's `tickLife` runs the NPCs first, then the rabbit.
+  tickNpcs(s);
   tickRabbit(s);
 
   return s;

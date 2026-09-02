@@ -4,10 +4,12 @@
 
 import { LUNA_ID, bubble, nearestTuft } from './actors';
 import { leaveBarn, petLuna } from './behaviours/luna';
+import { newLamb, setPath } from './behaviours/sheep';
 import type { SeasonName } from './clock';
-import { LFOOT, LUNA_SIZE, SHEEP_SIZE, SPOT, insideField, randomFoot } from './geometry';
+import { LFOOT, LUNA_SIZE, SFOOT, SHEEP_SIZE, SPOT, insideField, randomFoot } from './geometry';
 import { nextFloat } from './rng';
 import { RULES } from './rules';
+import { buyUpgrades, summonFarmer, summonMerchant } from './npcs';
 import type { Luna, SimState } from './state';
 import { setWeather, type WeatherKind, type WeatherMode } from './weather';
 
@@ -39,6 +41,13 @@ export const LUNA_ACTIONS = [
 ] as const;
 export type LunaAction = (typeof LUNA_ACTIONS)[number];
 
+/**
+ * The prototype's "Sheep" and "Farm" entries in its `ACTIONS` table. `bird` is not here because
+ * the bird is not ported yet; `reset` is a new state, not an intent.
+ */
+export const FARM_ACTIONS = ['shearAll', 'petAll', 'lamb', 'graze', 'rest', 'scatter', 'wool', 'farmer', 'merchant', 'rabbitOnly', 'coins'] as const;
+export type FarmAction = (typeof FARM_ACTIONS)[number];
+
 export type Intent =
   /** The prototype's weather buttons: sets the weather and switches to manual mode. */
   | (IntentBase & { type: 'setWeather'; weather: WeatherKind })
@@ -58,7 +67,9 @@ export type Intent =
   /** Throw a stick to (x, y) for DL, if she is free to fetch. */
   | (IntentBase & { type: 'throwStick'; x: number; y: number })
   /** One of the Digital Luna buttons. */
-  | (IntentBase & { type: 'lunaAction'; action: LunaAction });
+  | (IntentBase & { type: 'lunaAction'; action: LunaAction })
+  /** One of the sheep or farm actions. */
+  | (IntentBase & { type: 'farmAction'; action: FarmAction });
 
 export type IntentType = Intent['type'];
 
@@ -92,6 +103,9 @@ export function applyIntent(state: SimState, intent: Intent): SimState {
       return state;
     case 'lunaAction':
       lunaAction(state, intent.action);
+      return state;
+    case 'farmAction':
+      farmAction(state, intent.action);
       return state;
     default: {
       const never: never = intent;
@@ -239,6 +253,82 @@ function lunaAction(state: SimState, act: LunaAction): void {
     if (best) {
       l.manual = 'ride';
       l.mounting = best.id;
+    }
+  }
+}
+
+/** The prototype's sheep and farm actions, each one as its `ACTIONS` entry wrote it. */
+function farmAction(state: SimState, act: FarmAction): void {
+  const now = state.clock.nowMs;
+  switch (act) {
+    case 'shearAll':
+      // Note the .5 threshold: lower than a click's shearReadyAt, as the prototype has it.
+      for (const s of state.sheep) {
+        if (s.wool >= 0.5 && s.shearAtMs === null) {
+          s.shearAtMs = now + 1200;
+          bubble(s, 'shears', 1200, now);
+        }
+      }
+      return;
+    case 'petAll':
+      for (const s of state.sheep) {
+        bubble(s, 'heart', 1600, now);
+        s.tagUntilMs = now + 1800;
+      }
+      return;
+    case 'lamb': {
+      // No flock cap check here, as in the prototype's action.
+      const s = state.sheep.find((q) => !q.lambs.length && !q.inBarn);
+      if (s) s.lambs.push(newLamb(s, now));
+      return;
+    }
+    case 'graze':
+      // Always stands 16 px to the left of the tuft and never releases a tuft already held; kept.
+      for (const s of state.sheep) {
+        s.resting = false;
+        const i = nearestTuft(state.tufts, { x: s.x + SFOOT[0], y: s.y + SFOOT[1] }, 0.3);
+        if (i === null) continue;
+        const t = state.tufts[i]!;
+        t.claimed = s.id;
+        s.tuft = i;
+        setPath(s, [{ x: t.x - 16, y: t.y + 2 }]);
+        s.wander = 1;
+      }
+      return;
+    case 'rest':
+      for (const s of state.sheep) {
+        s.tx = s.ty = null;
+        s.path = [];
+        s.eating = false;
+        s.resting = true;
+      }
+      return;
+    case 'scatter':
+      for (const s of state.sheep) {
+        s.resting = false;
+        setPath(s, [randomFoot(state.rng)]);
+        s.wander = 0;
+      }
+      return;
+    case 'wool':
+      for (const s of state.sheep) s.wool = 1;
+      return;
+    case 'farmer':
+      summonFarmer(state);
+      return;
+    case 'merchant':
+      summonMerchant(state);
+      return;
+    case 'rabbitOnly':
+      state.life.rabbit = { x: 30, y: 150 + nextFloat(state.rng) * 120, t0Ms: now };
+      return;
+    case 'coins':
+      state.banks.coins += 50;
+      buyUpgrades(state);
+      return;
+    default: {
+      const never: never = act;
+      throw new Error(`unknown farm action ${String(never)}`);
     }
   }
 }

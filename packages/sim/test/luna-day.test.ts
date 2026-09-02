@@ -1,12 +1,14 @@
 // Scripted day: Digital Luna's states over one sim day (1,800 ticks of 100 ms) from seed 5.
 //
 // Each entry is the tick a change first shows, then `anim/routine[/flags] weather phase`. Flags:
-// R riding, M mounting, C chasing the rabbit, B in the barn, S a stick is out. Seed 5 was chosen
-// because its day has most of the chain in it: a ride, stick zoomies, a nibble, bed at dusk, a
-// night shower that pulls her out of bed to the door (the sheep never come in, because their
-// shelter walk is issue #5 part (b)), back to bed when it clears, the dawn stretch, a rabbit
-// chase, and another shower at the end. The blocks of tilt / pant / run at the door are the
-// prototype's head-tilt flicker, kept at parity and listed as a weak spot in the PR.
+// R riding, M mounting, C chasing the rabbit, B in the barn, S a stick is out. Seed 5's day has
+// most of the chain in it: two nibbles, a ride, bed at dusk, the farmer's afternoon visit running
+// into the night (five sheep to shear) so that his pat at tick 1074 gets her out of bed and back
+// (the "pant/asleep" and "sit/asleep" entries are that pat landing on a dog already back asleep,
+// as the prototype has it), the dawn stretch, stick zoomies, a rabbit chase. No shower this day:
+// the sheep now draw from the generator before the weather roll, so the seed-5 day from part (a)
+// (which had a night shower) is not the same day. Rain shelter is pinned in luna.test.ts and
+// sheep.test.ts instead.
 //
 // If DL's priority order or any of her timers change on purpose, regenerate this list and say so
 // in the PR: the owner pins the behaviour order.
@@ -20,111 +22,35 @@ const TICKS_PER_DAY = 1800;
 
 const EXPECTED = [
   '1 sit/- sun day',
-  '71 sit/-/M sun day',
-  '72 run/-/M sun day',
-  '91 run/-/R sun day',
-  '152 pant/- sun day',
-  '178 sit/- sun day',
-  '249 stick/- sun day',
-  '298 sit/- sun day',
-  '369 run/- sun day',
-  '371 nibble/- sun day',
-  '412 sit/- sun day',
+  '71 run/- sun day',
+  '74 nibble/- sun day',
+  '115 sit/- sun day',
+  '186 nibble/- sun day',
+  '227 sit/- sun day',
+  '298 sit/-/M sun day',
+  '299 run/-/M sun day',
+  '309 run/-/R sun day',
+  '370 pant/- sun day',
+  '396 sit/- sun day',
   '433 run/bed sun dusk',
-  '470 sleep/asleep sun dusk',
+  '474 sleep/asleep sun dusk',
   '613 sleep/asleep sun night',
-  '773 run/shelterWait rain night',
-  '781 tilt/shelterWait rain night',
-  '782 pant/- rain night',
-  '783 run/shelterWait rain night',
-  '784 tilt/shelterWait rain night',
-  '785 pant/- rain night',
-  '786 run/shelterWait rain night',
-  '787 tilt/shelterWait rain night',
-  '788 pant/- rain night',
-  '789 run/shelterWait rain night',
-  '790 tilt/shelterWait rain night',
-  '791 pant/- rain night',
-  '792 run/shelterWait rain night',
-  '793 tilt/shelterWait rain night',
-  '794 pant/- rain night',
-  '795 run/shelterWait rain night',
-  '796 sit/shelterWait rain night',
-  '840 tilt/shelterWait rain night',
-  '841 pant/- rain night',
-  '842 run/shelterWait rain night',
-  '843 tilt/shelterWait rain night',
-  '844 pant/- rain night',
-  '845 run/shelterWait rain night',
-  '846 tilt/shelterWait rain night',
-  '847 pant/- rain night',
-  '848 run/shelterWait rain night',
-  '849 tilt/shelterWait rain night',
-  '850 pant/- rain night',
-  '851 run/shelterWait rain night',
-  '852 tilt/shelterWait rain night',
-  '853 pant/- rain night',
-  '854 run/shelterWait rain night',
-  '855 sit/shelterWait rain night',
-  '900 tilt/shelterWait rain night',
-  '901 pant/- rain night',
-  '902 run/shelterWait rain night',
-  '903 tilt/shelterWait rain night',
-  '904 pant/- rain night',
-  '905 run/shelterWait rain night',
-  '906 tilt/shelterWait rain night',
-  '907 pant/- rain night',
-  '908 run/shelterWait rain night',
-  '909 tilt/shelterWait rain night',
-  '910 pant/- rain night',
-  '911 run/shelterWait rain night',
-  '912 tilt/shelterWait rain night',
-  '913 pant/- rain night',
-  '914 run/shelterWait rain night',
-  '915 sit/shelterWait rain night',
-  '960 tilt/shelterWait rain night',
-  '961 pant/- rain night',
-  '962 run/shelterWait rain night',
-  '963 tilt/shelterWait rain night',
-  '964 pant/- rain night',
-  '965 run/shelterWait rain night',
-  '966 tilt/shelterWait rain night',
-  '967 pant/- rain night',
-  '968 run/shelterWait rain night',
-  '969 tilt/shelterWait rain night',
-  '970 pant/- rain night',
-  '971 run/shelterWait rain night',
-  '972 tilt/shelterWait rain night',
-  '973 pant/- rain night',
-  '974 run/shelterWait rain night',
-  '975 sit/shelterWait rain night',
-  '1020 tilt/shelterWait rain night',
-  '1021 pant/- rain night',
-  '1022 run/shelterWait rain night',
-  '1023 tilt/shelterWait rain night',
-  '1024 pant/- rain night',
-  '1025 run/shelterWait rain night',
-  '1026 tilt/shelterWait rain night',
-  '1027 pant/- rain night',
-  '1028 run/shelterWait rain night',
-  '1029 tilt/shelterWait rain night',
-  '1030 pant/- rain night',
-  '1031 run/shelterWait rain night',
-  '1032 tilt/shelterWait rain night',
-  '1033 pant/- rain night',
-  '1034 run/shelterWait rain night',
-  '1035 sit/- sun night',
-  '1036 run/bed sun night',
-  '1064 sleep/asleep sun night',
+  '1074 run/- sun night',
+  '1075 run/bed sun night',
+  '1095 sleep/asleep sun night',
+  '1101 pant/asleep sun night',
+  '1127 sit/asleep sun night',
   '1333 stretch/- sun dawn',
   '1361 sit/- sun dawn',
-  '1412 stick/- sun dawn',
-  '1461 sit/- sun dawn',
+  '1396 stick/- sun dawn',
+  '1437 sit/- sun dawn',
   '1477 sit/- sun day',
-  '1532 run/-/C sun day',
-  '1627 sit/- sun day',
-  '1698 stick/- sun day',
-  '1775 run/shelterWait rain day',
+  '1508 stick/- sun day',
+  '1539 sit/- sun day',
+  '1610 run/-/C sun day',
+  '1705 sit/- sun day',
+  '1776 run/- sun day',
+  '1783 nibble/- sun day',
 ];
 
 function describeLuna(s: SimState): string {
@@ -161,7 +87,7 @@ describe('scripted day', () => {
     const b = scriptedDay(5);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('873f4917ab27dc72');
+    expect(hashState(a.state)).toBe('7d746c370e52a9a7');
   });
 
   it('the shape of the day holds for other seeds: bed at dusk, asleep by night, up by day', () => {

@@ -74,7 +74,7 @@ export {
   type Butterfly,
   type Fly,
 } from './state';
-export { applyIntent, applyDueIntents, type Intent, type IntentType, type LunaAction, LUNA_ACTIONS } from './intents';
+export { applyIntent, applyDueIntents, type Intent, type IntentType, type LunaAction, LUNA_ACTIONS, type FarmAction, FARM_ACTIONS } from './intents';
 export { createRegistry, DEFAULT_CHAIN, type Behaviour, type Registry } from './behaviours/registry';
 export {
   LUNA_BEHAVIOURS,
@@ -88,6 +88,19 @@ export {
   type LunaContext,
   type LunaBehaviour,
 } from './behaviours/luna';
+export {
+  SHEEP_BEHAVIOURS,
+  NEEDS,
+  tickSheep,
+  sheepContext,
+  setPath,
+  nextLeg,
+  flockCount,
+  newLamb,
+  type SheepContext,
+  type SheepBehaviour,
+} from './behaviours/sheep';
+export { NPC_FOOT, makeNpc, summonFarmer, summonMerchant, npcStep, tickNpcs, buyUpgrades, type JobHook, type JobResult } from './npcs';
 export { stepToward, clampField, clampTarget, segHitsBarn, waypointAround, type Mover } from './movement';
 export { LUNA_ID, findSheep, bubble, nearestTuft } from './actors';
 export { tickRabbit } from './life';

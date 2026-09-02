@@ -1,17 +1,25 @@
-# Deploy to The Garage (issue #12).
+# Deploy to The Garage (issues #12, #29).
 #
-# Publishes the built web app to The Garage tile `sheep-city`, served at
-# https://sheep-city.sheepcliff.com, on every push to the trunk branch once
-# the other checks on that commit are green, and on manual trigger.
+# Builds the web app once, checks the build under the tile's own static server,
+# then deploys to two Garage tiles in parallel:
+#   sheep-city       https://sheep-city.sheepcliff.com       the Luna Farm v31 prototype
+#   sheep-city-next  https://sheep-city-next.sheepcliff.com  apps/web/dist, the ported app
+# on every push to the trunk branch (except docs-only pushes) once the other
+# checks on that commit are green, and on manual trigger.
+#
+# The swap, once the owner pins the port: change `source` on the sheep-city
+# matrix entry below to apps/web/dist. See docs/DEPLOY.md.
 #
 # Secrets: GARAGE_TOKEN (repository secret). Never printed; masked twice.
-# See docs/DEPLOY.md for the observed API and how to run a manual deploy.
 name: deploy
 
 on:
   push:
     branches:
       - claude/sheepcliff-civilization-framework-bkgla5   # trunk until main exists
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
   workflow_dispatch:
     inputs:
       wait_for_ci:
@@ -30,17 +38,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  LIVE_URL: https://sheep-city.sheepcliff.com/
   GARAGE_URL: https://lab.sheepcliff.com
-  GARAGE_TILE: sheep-city
-  # Phase 0 guardrail (owner's rule): the live tile shows the Luna Farm v31
-  # prototype until the ported app reaches parity and the owner has pinned it.
-  # Remove this line to deploy apps/web/dist instead.
-  DEPLOY_SOURCE: prototype/luna-farm/build/farm_sim.html
 
 jobs:
-  deploy:
-    name: Deploy sheep-city to The Garage
+  build:
+    name: Build and check the web app
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -102,15 +104,62 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
-      - name: Build the web app (when it exists)
-        run: |
-          # The web app lands in a later ticket; until then deploy.sh falls back
-          # to the Luna Farm prototype build that is committed to the repo.
-          if [ -f package.json ]; then
-            npm ci && npm run build
-          else
-            echo "No package.json at the repo root yet; skipping the build."
-          fi
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build the web app
+        run: npm ci && npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Check the build under the tile's static server
+        # Serves apps/web/dist with tools/deploy/tile/server.js, exactly as the
+        # tile does, and loads it headless: every request must answer 2xx and
+        # the app must report ready. Catches a broken Vite base before it ships.
+        run: node tools/deploy/check-dist.mjs apps/web/dist
+
+      - name: Upload the build for the deploy jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    name: Deploy ${{ matrix.tile }} to The Garage
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Phase 0 guardrail (owner's rule): the sheep-city tile shows the Luna
+          # Farm v31 prototype until the ported app reaches parity and the owner
+          # has pinned it. The swap is one line: set this source to apps/web/dist.
+          - tile: sheep-city
+            source: prototype/luna-farm/build/farm_sim.html
+          # The ported app, rebuilt on every trunk push.
+          - tile: sheep-city-next
+            source: apps/web/dist
+    env:
+      GARAGE_TILE: ${{ matrix.tile }}
+      DEPLOY_SOURCE: ${{ matrix.source }}
+      LIVE_URL: https://${{ matrix.tile }}.sheepcliff.com/
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Download the build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
 
       - name: Deploy to The Garage
         env:
@@ -148,7 +197,7 @@ jobs:
             code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 20 "${LIVE_URL}" || echo "000")
             echo "attempt ${attempt}: ${LIVE_URL} -> ${code}"
             if [ "$code" = "200" ]; then
-              echo "Live: ${LIVE_URL}" >> "$GITHUB_STEP_SUMMARY"
+              echo "Live (${GARAGE_TILE}, source ${DEPLOY_SOURCE}): ${LIVE_URL}" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 5
@@ -181,10 +230,8 @@ jobs:
           api GET "/api/status"
           api GET "/api/tiles/${GARAGE_TILE}"
           api GET "/api/tiles/${GARAGE_TILE}/logs?lines=120"
-          api GET "/api/tiles/${GARAGE_TILE}/files?path=."
           api GET "/api/tiles/${GARAGE_TILE}/files?path=index.html" | head -c 400
           api GET "/tile/${GARAGE_TILE}"
-          api GET "/"
           rm -f "${RUNNER_TEMP}/auth-header" "${RUNNER_TEMP}/body"
 
       - name: Screenshot the live site through The Garage (best effort)
@@ -198,12 +245,12 @@ jobs:
           echo "::add-mask::${GARAGE_TOKEN}"
           umask 077
           printf 'Authorization: Bearer %s\n' "${GARAGE_TOKEN}" > "${RUNNER_TEMP}/auth-header"
-          code=$(curl -sS -o live-sheep-city.png -w '%{http_code}' -H @"${RUNNER_TEMP}/auth-header" --max-time 180 \
+          code=$(curl -sS -o "live-${GARAGE_TILE}.png" -w '%{http_code}' -H @"${RUNNER_TEMP}/auth-header" --max-time 180 \
             "${GARAGE_URL}/api/tiles/${GARAGE_TILE}/screenshot?full=true" || echo "000")
           rm -f "${RUNNER_TEMP}/auth-header"
           echo "screenshot endpoint -> ${code}"
-          if [ "$code" != "200" ] || ! file live-sheep-city.png | grep -q "PNG image"; then
-            rm -f live-sheep-city.png
+          if [ "$code" != "200" ] || ! file "live-${GARAGE_TILE}.png" | grep -q "PNG image"; then
+            rm -f "live-${GARAGE_TILE}.png"
             exit 1
           fi
 
@@ -214,12 +261,12 @@ jobs:
           npx --yes playwright@1 install --with-deps chromium
           npx --yes playwright@1 screenshot \
             --browser chromium --viewport-size=1280,800 --wait-for-timeout=4000 --full-page \
-            "${LIVE_URL}" live-sheep-city.png
+            "${LIVE_URL}" "live-${GARAGE_TILE}.png"
 
       - name: Upload the screenshot
-        if: hashFiles('live-sheep-city.png') != ''
+        if: hashFiles('live-*.png') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: live-sheep-city-${{ github.sha }}
-          path: live-sheep-city.png
+          name: live-${{ matrix.tile }}-${{ github.sha }}
+          path: live-${{ matrix.tile }}.png
           retention-days: 14

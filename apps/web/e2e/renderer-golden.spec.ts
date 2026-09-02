@@ -1,20 +1,23 @@
 import { expect, test, type Page } from '@playwright/test';
+import { JUMP_T } from '../src/jump';
 
 // Golden screenshots of the native 640x400 world canvas at the four clock
 // phases, on grass and on snow, plus one rainy day for the weather layers.
 // The fixture (`?fixture=1`, the still life the renderer was ported against) and
 // render clock are fixed by the query string, so the picture is a pure function
-// of the renderer. Tags and HUD live on the UI canvas and
+// of the renderer. The clock values are the tray's "jump to" values (src/jump.ts),
+// phase midpoints outside the crossfade band, so each golden is the picture a jump
+// lands on (#20). Tags and HUD live on the UI canvas and
 // are not part of the golden, which keeps font rendering out of the diff.
 //
 // Update goldens deliberately: `npx playwright test golden --update-snapshots`
 // and include the before/after in the PR.
 
 const PHASES: ReadonlyArray<readonly [name: string, t: number]> = [
-  ['day', 0.18],
-  ['dusk', 0.47],
-  ['night', 0.7],
-  ['dawn', 0.95],
+  ['day', JUMP_T.noon],
+  ['dusk', JUMP_T.dusk],
+  ['night', JUMP_T.night],
+  ['dawn', JUMP_T.dawn],
 ];
 
 const NOW = 100000;
@@ -42,6 +45,6 @@ for (const [name, t] of PHASES) {
 }
 
 test('golden rain day', async ({ page }) => {
-  const png = await worldPng(page, 't=0.18&weather=rain&season=spring');
+  const png = await worldPng(page, `t=${JUMP_T.noon}&weather=rain&season=spring`);
   expect(png).toMatchSnapshot('rain_day.png', { maxDiffPixelRatio: 0.01 });
 });

@@ -2,9 +2,10 @@
 // one thing. Every prototype id is here (actions.test.ts checks), as an intent rather than a
 // function: the sim runs it, the client only asks.
 import { DL_ACTIONS, sheepId, type ClientIntent, type SheepId } from './intents';
+import { JUMP_T } from './jump';
 
-/** Phase midpoints, outside the crossfade bands (#20), and the same values the goldens use. */
-export const JUMP_T = { dawn: 0.96, noon: 0.21, dusk: 0.47, night: 0.72 } as const;
+/** The "jump to" clock values (see jump.ts): phase midpoints, the same values the goldens use (#20). */
+export { JUMP_T };
 
 export type WhoId = 'luna' | SheepId | 'flock' | 'farm' | 'sky' | 'clock';
 

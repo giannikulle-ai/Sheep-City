@@ -9,8 +9,13 @@ import { createRng, nextFloat, type Rng } from './rng';
 import { RULES } from './rules';
 import { createWeather, type Weather } from './weather';
 
-/** Bumped by the sim lane whenever the save schema changes. */
-export const SAVE_VERSION = 0;
+/**
+ * Bumped by the sim lane whenever the save schema changes. Every bump ships a migration in
+ * `save/migrations` and a fixture in `test/fixtures/save-v<n>.json`. v0 was the bare state from
+ * the clock ticket (#4); v1 (#8) wraps it in a `{ format, version, world }` envelope; v2 (#5a) adds
+ * Digital Luna's stick, bedtime circling, door re-face, name tag, and trundle timers.
+ */
+export const SAVE_VERSION = 2;
 
 /** Stable actor ids. Sheep are `sheep-<n>`; Digital Luna is `luna`. */
 export type ActorId = string;
@@ -66,6 +71,13 @@ export interface Sheep extends Point {
   snow: number;
 }
 
+/** A thrown stick: where it landed, where DL was when it was thrown, and which leg she is on. */
+export interface StickThrow extends Point {
+  fromX: number;
+  fromY: number;
+  phase: 'out' | 'back';
+}
+
 export interface Luna extends Point {
   dir: Dir;
   anim: string;
@@ -88,6 +100,16 @@ export interface Luna extends Point {
   chasing: boolean;
   wet: number;
   snow: number;
+  /** The prototype's global `stickThrow`; DL's fetch behaviour owns it. */
+  stick: StickThrow | null;
+  /** Sim time the bedtime circling ends, or null when not circling. */
+  circleUntilMs: number | null;
+  /** Sim time DL last re-faced a sheep while waiting at the barn door. */
+  dirAtMs: number;
+  /** Sim time until which her name tag shows after a pet. */
+  tagUntilMs: number;
+  /** The trundle button: sim time until which a run is drawn as a bound. */
+  forceBoundUntilMs: number;
 }
 
 export type NpcJob = { job: string; at?: Point };
@@ -269,6 +291,11 @@ export function makeLuna(): Luna {
     chasing: false,
     wet: 0,
     snow: 0,
+    stick: null,
+    circleUntilMs: null,
+    dirAtMs: 0,
+    tagUntilMs: 0,
+    forceBoundUntilMs: 0,
   };
 }
 
@@ -321,7 +348,12 @@ export function cloneState(state: SimState): SimState {
     weather: { ...state.weather },
     tufts: state.tufts.map((t) => ({ ...t })),
     sheep: state.sheep.map(cloneSheep),
-    luna: { ...state.luna, target: state.luna.target ? { ...state.luna.target } : null, wp: state.luna.wp ? { ...state.luna.wp } : null },
+    luna: {
+      ...state.luna,
+      target: state.luna.target ? { ...state.luna.target } : null,
+      wp: state.luna.wp ? { ...state.luna.wp } : null,
+      stick: state.luna.stick ? { ...state.luna.stick } : null,
+    },
     npcs: {
       ...state.npcs,
       farmer: state.npcs.farmer ? cloneNpc(state.npcs.farmer) : null,

@@ -63,6 +63,7 @@ export {
   type Lamb,
   type Sheep,
   type Luna,
+  type StickThrow,
   type Npc,
   type NpcJob,
   type Npcs,
@@ -73,7 +74,26 @@ export {
   type Butterfly,
   type Fly,
 } from './state';
-export { applyIntent, applyDueIntents, type Intent, type IntentType } from './intents';
+export { applyIntent, applyDueIntents, INTENT_TYPES, LUNA_ACTIONS, type Intent, type IntentType, type LunaAction } from './intents';
+export { createRegistry, DEFAULT_CHAIN, type Behaviour, type Registry } from './behaviours/registry';
+export {
+  LUNA_BEHAVIOURS,
+  IDLE_PLAYS,
+  tickLuna,
+  lunaContext,
+  walkLuna,
+  dismount,
+  leaveBarn,
+  petLuna,
+  type LunaContext,
+  type LunaBehaviour,
+} from './behaviours/luna';
+export { stepToward, clampField, clampTarget, segHitsBarn, waypointAround, type Mover } from './movement';
+export { LUNA_ID, findSheep, bubble, nearestTuft } from './actors';
+export { tickRabbit } from './life';
 export { tick, tickInPlace, advance } from './tick';
 export { step, type StepOptions } from './step';
 export { hashState, hashValue, canonicalJson, fnv1a, mix32 } from './hash';
+export { SAVE_FORMAT, SaveError, type SaveDoc, type SaveWorld, type SaveErrorCode, type UnknownSaveDoc } from './save/doc';
+export { toSave, fromSave, toSaveText, fromSaveText, validateWorld, findUnserializable } from './save/serialize';
+export { MIGRATIONS, migrateSave, assertMigrationChain, readVersion, type Migration } from './save/migrations/index';

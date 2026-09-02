@@ -54,3 +54,56 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report
           retention-days: 7
+
+  # Guard: every opaque colour on the committed sprite sheet is a declared palette colour.
+  # Runs only when something under tools/art/** changed (on trunk pushes it always runs).
+  palette:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Did tools/art change?
+        id: art
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(git diff --name-only "$BASE_REF...HEAD" -- tools/art)
+          if [ -n "$files" ]; then
+            echo "$files"; echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "nothing under tools/art changed; palette check skipped"; echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.art.outputs.changed == 'true'
+        with:
+          python-version: "3.12"
+      - name: Install the art pipeline's Python deps (no browser download; the check reads the committed sheet)
+        if: steps.art.outputs.changed == 'true'
+        run: python3 -m pip install --quiet -r tools/art/requirements.txt
+      - name: Palette check
+        if: steps.art.outputs.changed == 'true'
+        run: python3 tools/art/palette_check.py
+
+  # Guard: the PR's changed paths sit inside the "Owns (paths)" globs of the lane named before the
+  # colon in the PR title, unless the body has an "ownership-exception: <reason>" line.
+  ownership:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Lane ownership check
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_REF: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.sha }}
+        run: node tools/ci/ownership.mjs

@@ -3,6 +3,8 @@
 //
 // v0 (clock ticket, #4): the bare `SimState` with `version: 0` on it, no envelope.
 // v1 (#8):               `{ format, version: 1, world }`, where `world` is the state minus `version`.
+// v2 (#5a):              same envelope; `world.luna` gains `stick`, `circleUntilMs`, `dirAtMs`,
+//                        `tagUntilMs`, `forceBoundUntilMs` for the behaviour chain.
 
 import type { SimState } from '../state';
 

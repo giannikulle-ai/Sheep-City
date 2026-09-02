@@ -104,6 +104,12 @@ describe('save fixtures', () => {
     expect(loaded.pendingIntents).toHaveLength(1);
     expect(loaded.sheep[1]!.lambs).toHaveLength(1);
     expect(loaded.npcs.farmer?.kind).toBe('farmer');
+    // The v2 migration filled the behaviour-chain fields a v1 save never had.
+    expect(loaded.luna.stick).toBeNull();
+    expect(loaded.luna.circleUntilMs).toBeNull();
+    expect(loaded.luna.dirAtMs).toBe(0);
+    expect(loaded.luna.tagUntilMs).toBe(0);
+    expect(loaded.luna.forceBoundUntilMs).toBe(0);
 
     const after = advance(loaded, 100);
     expect(after.clock.tick).toBe(1300);
@@ -118,11 +124,23 @@ describe('save fixtures', () => {
     expect(hashState(after)).not.toBe(hashState(loaded));
   });
 
-  it('the v1 fixture round-trips: toSave(fromSave(doc)) equals doc', () => {
-    const doc = readFixture('save-v1.json');
+  it(`the current fixture round-trips: toSave(fromSave(save-v${SAVE_VERSION}.json)) equals it byte for byte`, () => {
+    const name = `save-v${SAVE_VERSION}.json`;
+    const doc = readFixture(name);
     const again = toSave(fromSave(doc));
     expect(again).toEqual(doc);
-    expect(JSON.stringify(again, null, 2) + '\n').toBe(readFileSync(join(fixturesDir, 'save-v1.json'), 'utf8'));
+    expect(JSON.stringify(again, null, 2) + '\n').toBe(readFileSync(join(fixturesDir, name), 'utf8'));
+  });
+
+  it('an older fixture comes back as a current-version document with the same world plus the migrated fields', () => {
+    const v1 = readFixture('save-v1.json') as { version: number; world: { luna: Record<string, unknown> } };
+    const again = toSave(fromSave(v1));
+    expect(v1.version).toBe(1);
+    expect(again.version).toBe(SAVE_VERSION);
+    const { luna, ...restOfV1 } = v1.world;
+    const { luna: lunaAgain, ...restAgain } = again.world;
+    expect(restAgain).toEqual(restOfV1);
+    expect(lunaAgain).toEqual({ ...luna, stick: null, circleUntilMs: null, dirAtMs: 0, tagUntilMs: 0, forceBoundUntilMs: 0 });
   });
 
   for (const name of names) {

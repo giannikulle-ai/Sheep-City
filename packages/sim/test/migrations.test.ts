@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { hashValue } from '../src/hash';
 import { SAVE_FORMAT, SaveError, type UnknownSaveDoc } from '../src/save/doc';
 import { assertMigrationChain, MIGRATIONS, migrateSave, readVersion, type Migration } from '../src/save/migrations/index';
+import { V2_LUNA_DEFAULTS, v2LunaFetchFields } from '../src/save/migrations/v2-luna-fetch-fields';
 import { fromSave, toSave } from '../src/save/serialize';
 import { createInitialState, SAVE_VERSION } from '../src/state';
 
@@ -84,7 +85,7 @@ describe('v0 to v1', () => {
     expect(v0.version).toBe(0);
     expect(v0).not.toHaveProperty('world');
     const before = hashValue(v0);
-    const migrated = migrateSave(v0);
+    const migrated = migrateSave(v0, MIGRATIONS.slice(0, 1), 1);
     expect(migrated).toEqual(v1);
     expect(hashValue(migrated)).toBe(hashValue(v1));
     expect(hashValue(v0)).toBe(before);
@@ -96,5 +97,50 @@ describe('v0 to v1', () => {
     const loaded = fromSave(v0);
     expect(loaded.version).toBe(SAVE_VERSION);
     expect(hashValue({ ...loaded, version: 0 })).toBe(hashValue(v0));
+  });
+});
+
+describe('v1 to v2', () => {
+  type Doc = { version: number; world: { luna: Record<string, unknown> } & Record<string, unknown> };
+
+  it('fills the five behaviour-chain fields on luna with fresh-state defaults and touches nothing else', () => {
+    const v1 = fixture('save-v1.json') as Doc;
+    expect(v1.version).toBe(1);
+    for (const key of Object.keys(V2_LUNA_DEFAULTS)) expect(v1.world.luna).not.toHaveProperty(key);
+    const before = hashValue(v1);
+    const migrated = migrateSave(v1) as unknown as Doc;
+    expect(migrated.version).toBe(2);
+    expect(hashValue(v1)).toBe(before);
+    const { luna, ...rest } = v1.world;
+    const { luna: lunaAfter, ...restAfter } = migrated.world;
+    expect(restAfter).toEqual(rest);
+    expect(lunaAfter).toEqual({ ...luna, ...V2_LUNA_DEFAULTS });
+    // The defaults are the ones a fresh state holds.
+    const fresh = createInitialState(1).luna;
+    for (const [key, value] of Object.entries(V2_LUNA_DEFAULTS)) expect(fresh[key as keyof typeof fresh]).toBe(value);
+  });
+
+  it('keeps a field that is already present', () => {
+    const v1 = fixture('save-v1.json') as Doc;
+    const withTag = { ...v1, world: { ...v1.world, luna: { ...v1.world.luna, tagUntilMs: 1234 } } };
+    const migrated = v2LunaFetchFields.up(withTag) as unknown as Doc;
+    expect(migrated.world.luna['tagUntilMs']).toBe(1234);
+    expect(migrated.world.luna['stick']).toBeNull();
+  });
+
+  it('bumps the version and leaves a malformed world for validation to refuse', () => {
+    expect(v2LunaFetchFields.up({ version: 1, world: 'nope' })).toEqual({ version: 1 + 1, world: 'nope' });
+    expect(v2LunaFetchFields.up({ version: 1, world: { luna: null } })).toEqual({ version: 2, world: { luna: null } });
+    expect(code(() => fromSave({ format: SAVE_FORMAT, version: 1, world: { luna: null } }))).toBe('invalid-world');
+  });
+
+  it('a v0 save walks the whole chain to v2', () => {
+    const v0 = fixture('save-v0.json') as UnknownSaveDoc;
+    const v2 = migrateSave(v0) as unknown as Doc;
+    expect(v2.version).toBe(SAVE_VERSION);
+    expect(v2.world.luna).toMatchObject(V2_LUNA_DEFAULTS);
+    const loaded = fromSave(v0);
+    expect(loaded.luna.stick).toBeNull();
+    expect(loaded.luna.forceBoundUntilMs).toBe(0);
   });
 });

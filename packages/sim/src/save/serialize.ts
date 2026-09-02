@@ -241,6 +241,16 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
   nullOr(luna['mounting'], 'world.luna.mounting', str);
   bool(luna['inBarn'], 'world.luna.inBarn');
   bool(luna['chasing'], 'world.luna.chasing');
+  nullOr(luna['stick'], 'world.luna.stick', (v, p) => {
+    const st = point(v, p);
+    num(st['fromX'], `${p}.fromX`);
+    num(st['fromY'], `${p}.fromY`);
+    oneOf(st['phase'], `${p}.phase`, ['out', 'back']);
+  });
+  nullOr(luna['circleUntilMs'], 'world.luna.circleUntilMs', num);
+  num(luna['dirAtMs'], 'world.luna.dirAtMs');
+  num(luna['tagUntilMs'], 'world.luna.tagUntilMs');
+  num(luna['forceBoundUntilMs'], 'world.luna.forceBoundUntilMs');
 
   const npcs = obj(w['npcs'], 'world.npcs');
   nullOr(npcs['farmer'], 'world.npcs.farmer', npc);

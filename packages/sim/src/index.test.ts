@@ -3,7 +3,7 @@ import { MIGRATIONS, SAVE_FORMAT, SAVE_VERSION, SIM_PACKAGE, TICK_MS, createInit
 
 describe('@sheepcliff/sim public surface', () => {
   it('exports a save version, package name, and the fixed tick', () => {
-    expect(SAVE_VERSION).toBe(1);
+    expect(SAVE_VERSION).toBe(2);
     expect(SIM_PACKAGE).toBe('@sheepcliff/sim');
     expect(TICK_MS).toBe(100);
   });

@@ -1,10 +1,11 @@
-// One fixed step of the world. This ticket ports the parts of the prototype's `tick` that are
-// pure bookkeeping: clock, seasons, weather, grass regrowth, fleece growth, shearing timers, lamb
-// growth. Movement, needs, DL's priority chain, and the NPC job plans are the behaviour registry's
-// job (issue #5) and plug in where the comment marks the seam.
+// One fixed step of the world, in the prototype's order: clock, weather, grass and fleece
+// bookkeeping, sheep, Digital Luna, small life. Sheep needs and the NPC job plans are issue #5
+// part (b) and plug in where the comment marks the seam.
 
+import { tickLuna } from './behaviours/luna';
 import { advanceClock, advanceSeason } from './clock';
 import { applyDueIntents } from './intents';
+import { tickRabbit } from './life';
 import { RULES, TICK_MS, TICK_SEC } from './rules';
 import { cloneState, type SimState } from './state';
 import { tickWeather } from './weather';
@@ -38,7 +39,10 @@ export function tickInPlace(s: SimState): SimState {
     for (const lamb of sheep.lambs) if (!lamb.grown && now - lamb.bornMs > RULES.lambGrowMs) lamb.grown = true;
   }
 
-  // Behaviour registry seam (issue #5): actors choose and run a behaviour here.
+  // Seam for issue #5 part (b): sheep needs, lambs, and NPC job plans run here, before DL.
+
+  tickLuna(s);
+  tickRabbit(s);
 
   return s;
 }

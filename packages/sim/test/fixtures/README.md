@@ -4,6 +4,7 @@ One frozen save per schema version. `save-v<n>.json` is what `toSave` wrote at v
 
 - `save-v0.json`: the bare state from the clock ticket (#4), `version: 0`, no envelope. Derived from `save-v1.json` by hand: the same world, unwrapped.
 - `save-v1.json`: `{ format, version: 1, world }` (#8). Seed 8, 1,200 ticks, plus hand-filled lambs, a shear timer, a farmer with a plan, small life, and a queued intent.
+- `save-v2.json`: same envelope, `version: 2` (#5 part a). Same seed and build recipe as v1, so the world also has DL's five behaviour-chain fields (`stick`, `circleUntilMs`, `dirAtMs`, `tagUntilMs`, `forceBoundUntilMs`); v1 saves get them filled with fresh-state defaults by the v2 migration.
 
 Rules:
 

@@ -40,6 +40,13 @@ export const RULES = {
   tempBlendPerTick: 1 - Math.pow(0.98, TICK_MS / (1000 / 60)),
   /** The prototype's first merchant visit: 45 s after reset. */
   merchantFirstAtMs: 45000,
+  /**
+   * The prototype moved actors once per rendered frame (about 60 Hz), and its arrival test
+   * (`d < 1.2` px) assumed steps of that size: at 80 px/s a frame moves 0.47 px, a 100 ms tick
+   * moves 2.8 px and would hop back and forth over the target forever. Movement therefore runs in
+   * this many substeps per tick, each one a prototype frame.
+   */
+  moveSubsteps: 6,
 } as const;
 
 export type Rules = typeof RULES;

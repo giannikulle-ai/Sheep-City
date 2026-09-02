@@ -11,11 +11,15 @@ const port = 4173;
 
 export default defineConfig({
   testDir: 'e2e',
+  // Golden PNGs live beside the specs, named by the argument to toMatchSnapshot.
+  snapshotPathTemplate: '{testDir}/golden/{arg}{ext}',
   fullyParallel: true,
   forbidOnly: !!process.env['CI'],
   retries: 0,
   reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
+    viewport: { width: 640, height: 520 },
+    deviceScaleFactor: 1,
     baseURL: `http://127.0.0.1:${port}`,
     browserName: 'chromium',
     headless: true,

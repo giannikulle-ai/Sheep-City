@@ -8,6 +8,7 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | infra | active | session_01BSCXiAt9Md5S9ZZ7XVPzrS | #2 repo scaffold | 2026-09-02 |
 | art | active | session_01UaKpw34TT6nFFfXec6EGCK | #3 pipeline move | 2026-09-02 |
 | world | active | session_016yv8aPqYXfRfWNuFCyBiQS | #10 farm content | 2026-09-02 |
+| infra | active | session_01TucUaDccCZcfrg6nP5CFwi | #12 Garage deploy from GitHub Actions | 2026-09-02 |
 | sim | queued | — | #4 clock and RNG, after #2 lands | — |
 | client | queued | — | #6 renderer port, after #2 lands | — |
 | qa | queued | — | #9 watch test, after #6 | — |
@@ -21,4 +22,4 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 #3 art pipeline (independent) → #11 palette and ownership checks (after #2 and #3)
 #10 farm content (independent)
 
-Blocked: real deploy to The Garage until lab.sheepcliff.com is on the environment allowlist (#2 ships the deploy script only).
+Deploy route: The Garage is reached from GitHub Actions with the GARAGE_TOKEN repository secret (#12), not from agent sessions. Needs the owner to add the secret at github.com/giannikulle-ai/Sheep-City/settings/secrets/actions.

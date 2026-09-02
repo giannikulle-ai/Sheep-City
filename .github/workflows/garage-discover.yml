@@ -42,12 +42,15 @@ jobs:
       EXTRA_PATHS: ${{ inputs.extra_paths || '' }}
     steps:
       - name: Check that GARAGE_TOKEN is set
+        id: token
         run: |
           if [ -z "${GARAGE_TOKEN}" ]; then
-            echo "::error::The GARAGE_TOKEN repository secret is not set. Add it at https://github.com/${GITHUB_REPOSITORY}/settings/secrets/actions and re-run this workflow. Nothing was probed."
-            exit 1
+            echo "::warning::The GARAGE_TOKEN repository secret is not set. Add it at https://github.com/${GITHUB_REPOSITORY}/settings/secrets/actions and re-run this workflow. Probing without authentication only; the job fails at the end."
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           echo "::add-mask::${GARAGE_TOKEN}"
+          echo "has_token=true" >> "$GITHUB_OUTPUT"
           echo "GARAGE_TOKEN is set (length ${#GARAGE_TOKEN}). Probing ${BASE_URL}."
 
       - name: Probe likely API paths
@@ -120,13 +123,17 @@ jobs:
                   print()
                   return None
 
+          has_token = bool(token)
+          if not has_token:
+              print("GARAGE_TOKEN is not set: every call below is unauthenticated.\n")
           summary = []
           # First: does the root even need auth? One unauthenticated call for comparison.
           summary.append(("no-auth", "GET", "/", probe("/", auth=False)))
           for p in paths:
-              summary.append(("auth", "GET", p, probe(p)))
+              summary.append(("auth" if has_token else "no-auth", "GET", p, probe(p, auth=has_token)))
           # OPTIONS on the tile path often lists allowed methods on small APIs.
-          summary.append(("auth", "OPTIONS", "/tiles/sheep-city", probe("/tiles/sheep-city", method="OPTIONS")))
+          summary.append(("auth" if has_token else "no-auth", "OPTIONS", "/tiles/sheep-city",
+                          probe("/tiles/sheep-city", method="OPTIONS", auth=has_token)))
 
           print("=" * 78)
           print("SUMMARY (label method path -> status)")
@@ -136,6 +143,15 @@ jobs:
           step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
           if step_summary:
               with open(step_summary, "a") as fh:
-                  fh.write(f"## Garage discovery against `{base}`\n\n| auth | method | path | status |\n|---|---|---|---|\n")
+                  fh.write(f"## Garage discovery against `{base}`\n\n")
+                  if not has_token:
+                      fh.write("**GARAGE_TOKEN is not set; all probes were unauthenticated.**\n\n")
+                  fh.write("| auth | method | path | status |\n|---|---|---|---|\n")
                   for label, method, path, status in summary:
                       fh.write(f"| {label} | {method} | `{path}` | {status} |\n")
+
+      - name: Fail if the token was missing
+        if: steps.token.outputs.has_token != 'true'
+        run: |
+          echo "::error::GARAGE_TOKEN is not set, so the authenticated API could not be observed. Add the secret and re-run."
+          exit 1

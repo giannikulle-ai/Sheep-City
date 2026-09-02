@@ -62,6 +62,7 @@ export function react(r: Reactions, intent: ClientIntent, view: FarmView, now: n
       if (intent.action === 'farmer' && view.farmer) cues.push(cue('farmer', 'bang', now, BANG_MS));
       if (intent.action === 'merchant' && view.merchant) cues.push(cue('merchant', 'bang', now, BANG_MS));
       break;
+    case 'tap':
     case 'setWeather':
     case 'setSeason':
     case 'setClock':

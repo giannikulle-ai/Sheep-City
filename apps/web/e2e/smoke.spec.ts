@@ -45,14 +45,14 @@ test('farm renders at 640x400 and animates', async ({ page }) => {
   expect(uiSize.w).toBeGreaterThan(0);
   expect(uiSize.h).toBeGreaterThan(0);
 
-  // sheep graze at 3 fps and butterflies flap at 8, so a moment later differs
+  // the sim ticks every 100 ms and sheep graze at 3 fps, so a moment later differs
   await page.waitForTimeout(700);
   const b = await stats();
   expect(b.hash).not.toBe(a.hash);
 });
 
-test('a fixed clock renders one deterministic frame', async ({ page }) => {
-  await page.goto('/?t=0.7&weather=snow&now=5000');
+test('the fixture still, behind ?fixture=1, renders one deterministic frame', async ({ page }) => {
+  await page.goto('/?fixture=1&t=0.7&weather=snow&now=5000');
   await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
   const once = await page.locator('canvas#world').evaluate((el) => (el as HTMLCanvasElement).toDataURL());
   await page.waitForTimeout(300);

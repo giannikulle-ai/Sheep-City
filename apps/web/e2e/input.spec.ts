@@ -64,38 +64,49 @@ test.describe('portrait phone', () => {
 
   test('three taps: pet a sheep, pet Digital Luna, throw a stick', async ({ page }) => {
     const errors = await open(page);
-    await tapWorld(page, 150, 238); // Clover, at the fixture's foot (150, 250)
-    await tapWorld(page, 142, 300); // Digital Luna, sitting at (120, 280)
+    // the flock is wherever seed 1 put it, and DL's first tick pulls her onto the field: let the
+    // sim settle, then read Clover's and DL's sprite centres from the view
+    await page.waitForTimeout(400);
+    const at = await page.evaluate(() => {
+      const v = (window as unknown as WithApp).sheepcliff.view();
+      const s = v.sheep[0];
+      if (!s) throw new Error('no sheep');
+      return { clover: { x: s.x + 16, y: s.y + 13 }, luna: { x: v.luna.x + 22, y: v.luna.y + 20 } };
+    });
+    await tapWorld(page, at.clover.x, at.clover.y);
+    await tapWorld(page, at.luna.x, at.luna.y);
     await tapWorld(page, 320, 250); // open grass
 
+    // every tap became the sim's click at the tapped world point; the sim did the hit-testing
     const intents = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.intents.map((r) => ({ ...r.intent, sim: r.sim })));
     expect(intents).toHaveLength(3);
-    expect(intents[0]).toEqual({ type: 'pet', target: 'sheep-0', sim: false });
-    expect(intents[1]).toEqual({ type: 'pet', target: 'luna', sim: false });
-    expect(intents[2]).toMatchObject({ type: 'throwStick', sim: false });
-    const stick = intents[2] as { x: number; y: number };
-    expect(Math.abs(stick.x - 320)).toBeLessThan(2);
-    expect(Math.abs(stick.y - 250)).toBeLessThan(2);
-
-    // the cue is on screen: heart bubbles, DL's tag, the stick on the grass
-    const view = await page.evaluate(() => {
-      const v = (window as unknown as WithApp).sheepcliff.view();
-      return { clover: v.sheep[0]?.icon, luna: v.luna.icon, lunaTag: v.luna.tagUntil > 0, stick: v.stick };
-    });
-    expect(view.clover).toBe('heart');
-    expect(view.luna).toBe('heart');
-    expect(view.lunaTag).toBe(true);
-    expect(view.stick).not.toBeNull();
+    for (const [i, want] of [at.clover, at.luna, { x: 320, y: 250 }].entries()) {
+      expect(intents[i]).toMatchObject({ type: 'tap', sim: true });
+      const tap = intents[i] as { x: number; y: number };
+      expect(Math.abs(tap.x - want.x)).toBeLessThan(2);
+      expect(Math.abs(tap.y - want.y)).toBeLessThan(2);
+    }
+    // and the sim's own hit test read them as a pet, a pet, and a stick: heart bubbles, DL's tag,
+    // the stick on the grass and DL running for it
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const v = (window as unknown as WithApp).sheepcliff.view();
+          const sim = (window as unknown as WithApp).sheepcliff.sim();
+          return { clover: v.sheep[0]?.icon, luna: sim.luna.icon, lunaTag: sim.luna.tagUntilMs > 0, stick: !!sim.luna.stick, anim: v.luna.anim };
+        }),
+      )
+      .toEqual({ clover: 'heart', luna: 'heart', lunaTag: true, stick: true, anim: 'run' });
 
     // the tray follows the tap: DL's chip is selected and her verbs are listed
     await expect(page.locator('#who .chip.on')).toHaveAttribute('data-who', 'luna');
     await expect(page.locator('#verbs button[data-verb="flop"]')).toBeVisible();
-    await expect(page.locator('#say')).toContainText('stick thrown');
+    await expect(page.locator('#say')).toContainText(/tap at \(320, 2(49|50)\)/);
 
     // moments reached window listeners, per the QA contract
     await expect
       .poll(() => page.evaluate(() => (window as unknown as WithMoments).__moments.map((m) => `${m.kind}:${m.actor}:${m.detail}`)))
-      .toEqual(expect.arrayContaining(['bubble:Clover:heart', 'bubble:Digital Luna:heart']));
+      .toEqual(expect.arrayContaining(['bubble:Clover:heart', 'bubble:Digital Luna:heart', 'dl-trick:Digital Luna:fetch']));
     expect(errors).toEqual([]);
   });
 
@@ -103,13 +114,24 @@ test.describe('portrait phone', () => {
     await open(page);
     await page.locator('#who button[data-who="sheep-2"]').click();
     await page.locator('#verbs button[data-verb="rest"]').click();
+    await expect(page.locator('#say')).not.toHaveClass(/waiting/);
+    // Biscuit lay down in the sim (by day a resting sheep gets up again on a roll, so look at once)
+    await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().sheep[2]?.resting)).toBe(true);
+    await page.locator('#who button[data-who="luna"]').click();
+    await page.locator('#verbs button[data-verb="flop"]').click();
+    await page.locator('#who button[data-who="farm"]').click();
+    await page.locator('#verbs button[data-verb="bird"]').click();
+    await expect(page.locator('#say')).toHaveClass(/waiting/);
     await page.locator('#who button[data-who="sky"]').click();
     await page.locator('#verbs button[data-verb="rain"]').click();
     const intents = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.intents.map((r) => ({ ...r.intent, sim: r.sim })));
     expect(intents).toEqual([
-      { type: 'sheepAction', action: 'rest', target: 'sheep-2', sim: false },
+      { type: 'sheepAction', action: 'rest', target: 'sheep-2', sim: true },
+      { type: 'dlAction', action: 'flop', sim: true },
+      { type: 'farmAction', action: 'bird', sim: false },
       { type: 'setWeather', weather: 'rain', sim: true },
     ]);
+    await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().luna.anim)).toBe('flop');
     await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.view().weather)).toBe('rain');
     await expect
       .poll(() => page.evaluate(() => (window as unknown as WithMoments).__moments.some((m) => m.kind === 'weather' && m.detail === 'rain')))
@@ -185,8 +207,13 @@ test.describe('landscape phone', () => {
     if (!open_) throw new Error('no tray');
     expect(open_.x).toBeGreaterThan(LANDSCAPE.width / 3);
     expect(open_.width).toBeLessThanOrEqual(400);
-    // taps still land on the scene beside the tray
-    await tapWorld(page, 142, 300);
-    expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.intents[0]?.intent)).toEqual({ type: 'pet', target: 'luna' });
+    // taps still land on the scene beside the tray: pet DL wherever she sits
+    const luna = await page.evaluate(() => {
+      const l = (window as unknown as WithApp).sheepcliff.view().luna;
+      return { x: l.x + 22, y: l.y + 20 };
+    });
+    await tapWorld(page, luna.x, luna.y);
+    expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.intents[0]?.intent)).toMatchObject({ type: 'tap' });
+    await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().luna.icon)).toBe('heart');
   });
 });

@@ -13,7 +13,17 @@ describe('parseSceneParams', () => {
       freeze: false,
       liveWeather: false,
       seed: 1,
+      fixture: false,
+      scratch: false,
+      fresh: false,
     });
+  });
+
+  it('marks any pinned scene as scratch, the fixture as the fixture, and fresh as fresh', () => {
+    expect(parseSceneParams('?seed=9')).toMatchObject({ scratch: true, fixture: false });
+    expect(parseSceneParams('?weather=rain')).toMatchObject({ scratch: true });
+    expect(parseSceneParams('?fixture=1&now=5')).toMatchObject({ scratch: true, fixture: true, freeze: true });
+    expect(parseSceneParams('?fresh=1')).toMatchObject({ scratch: false, fresh: true });
   });
 
   it('reads the sim seed as a non-negative integer, defaulting to 1', () => {

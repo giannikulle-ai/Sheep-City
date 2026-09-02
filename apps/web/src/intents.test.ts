@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { cloneState, createInitialState } from '@sheepcliff/sim';
 import { describeIntent, sheepId, sheepIndex, simUnderstands, targetName, toSimIntents, type ClientIntent } from './intents';
 
 const NAMES = ['Clover', 'Daisy'];
@@ -12,17 +13,43 @@ describe('toSimIntents', () => {
     expect(toSimIntents({ type: 'setPeriod', periodSec: 60 })).toEqual([{ type: 'setPeriod', periodSec: 60 }]);
   });
 
+  it("sends a stage tap as the sim's click at the world point", () => {
+    expect(toSimIntents({ type: 'tap', x: 150, y: 238 })).toEqual([{ type: 'click', x: 150, y: 238 }]);
+    expect(toSimIntents({ type: 'tap', x: 150, y: 238 }, createInitialState(1))).toEqual([{ type: 'click', x: 150, y: 238 }]);
+  });
+
+  it("passes the tray verbs through under the sim's own names", () => {
+    expect(toSimIntents({ type: 'pet', target: 'luna' })).toEqual([{ type: 'pet', target: 'luna' }]);
+    expect(toSimIntents({ type: 'pet', target: 'flock' })).toEqual([{ type: 'pet', target: 'flock' }]);
+    expect(toSimIntents({ type: 'shear', target: 'flock' })).toEqual([{ type: 'shear', target: 'flock' }]);
+    expect(toSimIntents({ type: 'throwStick', x: 300, y: 250 })).toEqual([{ type: 'throwStick', x: 300, y: 250 }]);
+    expect(toSimIntents({ type: 'dlAction', action: 'flop' })).toEqual([{ type: 'dlAction', action: 'flop' }]);
+    expect(toSimIntents({ type: 'dlAction', action: 'bed' })).toEqual([{ type: 'dlAction', action: 'bed' }]);
+    expect(toSimIntents({ type: 'sheepAction', action: 'lamb', target: 'flock' })).toEqual([{ type: 'sheepAction', action: 'lamb', target: 'flock' }]);
+    expect(toSimIntents({ type: 'farmAction', action: 'merchant' })).toEqual([{ type: 'farmAction', action: 'merchant' }]);
+    expect(toSimIntents({ type: 'farmAction', action: 'rabbit' })).toEqual([{ type: 'farmAction', action: 'rabbit' }]);
+    expect(toSimIntents({ type: 'farmAction', action: 'coins' })).toEqual([{ type: 'farmAction', action: 'coins' }]);
+  });
+
+  it("resolves a chip's sheep-<index> to the sim's actor id, and keeps it when there is no state", () => {
+    const sim = cloneState(createInitialState(1));
+    const s = sim.sheep[2];
+    if (!s) throw new Error('no sheep');
+    s.id = 'sheep-7'; // the sim numbers by birth, chips by position; the sim's id wins
+    expect(toSimIntents({ type: 'pet', target: 'sheep-2' }, sim)).toEqual([{ type: 'pet', target: 'sheep-7' }]);
+    expect(toSimIntents({ type: 'shear', target: 'sheep-2' }, sim)).toEqual([{ type: 'shear', target: 'sheep-7' }]);
+    expect(toSimIntents({ type: 'sheepAction', action: 'rest', target: 'sheep-2' }, sim)).toEqual([{ type: 'sheepAction', action: 'rest', target: 'sheep-7' }]);
+    expect(toSimIntents({ type: 'pet', target: 'sheep-2' })).toEqual([{ type: 'pet', target: 'sheep-2' }]);
+    expect(toSimIntents({ type: 'pet', target: 'sheep-9' }, sim)).toEqual([{ type: 'pet', target: 'sheep-9' }]);
+  });
+
   it('holds the verbs the sim has no rule for yet', () => {
     const held: ClientIntent[] = [
-      { type: 'pet', target: 'luna' },
-      { type: 'shear', target: 'sheep-0' },
-      { type: 'throwStick', x: 1, y: 2 },
-      { type: 'dlAction', action: 'flop' },
-      { type: 'sheepAction', action: 'graze', target: 'flock' },
-      { type: 'farmAction', action: 'farmer' },
+      { type: 'farmAction', action: 'bird' },
+      { type: 'farmAction', action: 'reset' },
     ];
     for (const i of held) {
-      expect(toSimIntents(i)).toEqual([]);
+      expect(toSimIntents(i, createInitialState(1))).toEqual([]);
       expect(simUnderstands(i)).toBe(false);
     }
   });
@@ -44,6 +71,7 @@ describe('ids and names', () => {
   });
 
   it('describes every intent in one line', () => {
+    expect(describeIntent({ type: 'tap', x: 150.4, y: 238 }, NAMES)).toBe('tap at (150, 238)');
     expect(describeIntent({ type: 'pet', target: 'sheep-0' }, NAMES)).toBe('pet Clover');
     expect(describeIntent({ type: 'shear', target: 'flock' }, NAMES)).toBe('shear the flock');
     expect(describeIntent({ type: 'throwStick', x: 320.4, y: 250 }, NAMES)).toBe('stick thrown to (320, 250)');

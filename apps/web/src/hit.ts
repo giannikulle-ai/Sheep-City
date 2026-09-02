@@ -1,11 +1,9 @@
-// Tap hit testing, in the prototype's order: Digital Luna first, then sheep, then grass. The
-// client only decides *what was tapped*; whether DL fetches or a sheep gets shorn is the sim's.
-// The one presentation fact used here: a fleece drawn with the overgrown frame is tapped to
-// shear, otherwise to pet (the prototype's `wool >= shearReadyAt` is the same threshold as the
-// renderer's third wool frame).
+// Which chip a tap should highlight in the tray, in the prototype's order: Digital Luna first,
+// then sheep. The tap itself goes to the sim as a `click` at the world point, and the sim decides
+// what was hit and whether a sheep is petted or shorn (its `shearReadyAt` rule); this hit test
+// only follows the tap in the tray and never decides the verb.
 import { insideField } from '@sheepcliff/sim';
-import { woolLevel, type FarmView } from '@sheepcliff/render';
-import { sheepId, type ClientIntent } from './intents';
+import type { FarmView } from '@sheepcliff/render';
 
 export interface Size {
   w: number;
@@ -36,21 +34,4 @@ export function hitTest(view: FarmView, wx: number, wy: number, sizes: SpriteSiz
   }
   if (insideField(wx, wy, 0.95)) return { kind: 'grass', x: wx, y: wy };
   return { kind: 'none' };
-}
-
-/** The verb a tap means, or null when it landed on nothing. */
-export function tapIntent(view: FarmView, hit: Hit): ClientIntent | null {
-  switch (hit.kind) {
-    case 'luna':
-      return { type: 'pet', target: 'luna' };
-    case 'sheep': {
-      const s = view.sheep[hit.index];
-      const overgrown = s !== undefined && woolLevel(s.wool) === 2;
-      return overgrown ? { type: 'shear', target: sheepId(hit.index) } : { type: 'pet', target: sheepId(hit.index) };
-    }
-    case 'grass':
-      return { type: 'throwStick', x: hit.x, y: hit.y };
-    case 'none':
-      return null;
-  }
 }

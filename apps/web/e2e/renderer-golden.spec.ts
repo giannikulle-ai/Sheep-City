@@ -2,8 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 
 // Golden screenshots of the native 640x400 world canvas at the four clock
 // phases, on grass and on snow, plus one rainy day for the weather layers.
-// The fixture and render clock are fixed by the query string, so the picture
-// is a pure function of the renderer. Tags and HUD live on the UI canvas and
+// The fixture (`?fixture=1`, the still life the renderer was ported against) and
+// render clock are fixed by the query string, so the picture is a pure function
+// of the renderer. Tags and HUD live on the UI canvas and
 // are not part of the golden, which keeps font rendering out of the diff.
 //
 // Update goldens deliberately: `npx playwright test golden --update-snapshots`
@@ -21,7 +22,7 @@ const NOW = 100000;
 async function worldPng(page: Page, query: string): Promise<Buffer> {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(`/?${query}&now=${NOW}`);
+  await page.goto(`/?fixture=1&${query}&now=${NOW}`);
   await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
   expect(errors).toEqual([]);
   const dataUrl = await page.locator('canvas#world').evaluate((el) => (el as HTMLCanvasElement).toDataURL('image/png'));

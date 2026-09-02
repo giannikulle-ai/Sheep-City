@@ -12,7 +12,11 @@
     "e2e": "playwright test",
     "golden": "playwright test e2e/golden.spec.ts",
     "golden:update": "SHEEPCLIFF_GOLDEN_UPDATE=1 playwright test e2e/golden.spec.ts && npm run golden:sheet",
-    "golden:sheet": "node ../../tools/qa/contact-sheet.mjs e2e/golden/prototype",
+    "golden:sheet": "node ../../tools/qa/contact-sheet.mjs e2e/golden/prototype && node ../../tools/qa/contact-sheet.mjs e2e/golden/app",
+    "golden:app": "SHEEPCLIFF_GOLDEN_TARGET=app playwright test e2e/golden.spec.ts",
+    "golden:app:update": "SHEEPCLIFF_GOLDEN_TARGET=app SHEEPCLIFF_GOLDEN_UPDATE=1 playwright test e2e/golden.spec.ts && node ../../tools/qa/contact-sheet.mjs e2e/golden/app",
+    "golden:compare": "node scripts/compare-goldens.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
     "watch-test": "node ../../tools/qa/watch-test.mjs",
     "watch-test:app": "node ../../tools/qa/watch-test.mjs --serve dist --adapter app"
   },

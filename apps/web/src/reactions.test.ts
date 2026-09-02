@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { createInitialState } from '@sheepcliff/sim';
 import { buildFixture } from './fixture';
 import { parseSceneParams } from './query';
 import { applyReactions, emptyReactions, prune, react } from './reactions';
-import { liveView } from './view';
-import { createInitialState } from '@sheepcliff/sim';
+import { simView } from './view';
 
-const clean = (now = 1000) => liveView(createInitialState(1), now, false);
+const clean = () => simView(null, createInitialState(1), 0, false);
 
 describe('react', () => {
   it('a pet shows a heart and the name tag at once', () => {
     const now = 1000;
-    const r = react(emptyReactions(), { type: 'pet', target: 'sheep-0' }, clean(now), now);
-    const v = applyReactions(clean(now), r, now);
+    const r = react(emptyReactions(), { type: 'pet', target: 'sheep-0' }, clean(), now);
+    const v = applyReactions(clean(), r, now);
     expect(v.sheep[0]?.icon).toBe('heart');
     expect(v.sheep[0]?.iconUntil).toBe(now + 1600);
     expect(v.sheep[0]?.tagUntil).toBe(now + 1800);
@@ -20,13 +20,13 @@ describe('react', () => {
 
   it('petting the flock hearts everyone; shearing it only the woolly', () => {
     const now = 0;
-    const base = clean(now);
+    const base = clean();
     base.sheep.forEach((s, i) => (s.wool = i === 2 ? 0.9 : 0.4));
     let r = react(emptyReactions(), { type: 'pet', target: 'flock' }, base, now);
-    let v = applyReactions(clean(now), r, now);
+    let v = applyReactions(clean(), r, now);
     expect(v.sheep.every((s) => s.icon === 'heart')).toBe(true);
     r = react(emptyReactions(), { type: 'shear', target: 'flock' }, base, now);
-    v = applyReactions(clean(now), r, now);
+    v = applyReactions(clean(), r, now);
     expect(v.sheep.map((s) => s.icon)).toEqual([null, null, 'shears', null, null]);
   });
 
@@ -64,6 +64,6 @@ describe('react', () => {
     const live = clean();
     expect(live.sheep.every((s) => s.icon === null && s.tagUntil === 0)).toBe(true);
     expect(live.luna.icon).toBeNull();
-    expect(live.merchant?.icon).toBeNull();
+    expect(live.merchant).toBeNull();
   });
 });

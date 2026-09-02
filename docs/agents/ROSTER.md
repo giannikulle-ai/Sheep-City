@@ -13,4 +13,4 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | infra | not started | — | — | — |
 | qa | not started | — | — | — |
 
-Budget tier: Lean (two lanes at a time), set 2026-09-02.
+Budget tier: Standard (about four lanes), set 2026-09-02.

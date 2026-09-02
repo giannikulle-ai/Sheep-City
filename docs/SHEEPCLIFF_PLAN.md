@@ -40,7 +40,7 @@ The owner said go before answering the open questions, so the plan proceeds on t
 | A4 | The code moves to a modular TypeScript project with a bundler. The Python art pipeline stays exactly as it is. | If you want to stay framework-free, the same structure works with plain ES modules and no types; testing gets weaker. |
 | A5 | Agents may draw new grids in the established style, and every new sprite waits for your pin review. | If you draw everything yourself, art becomes the schedule's critical path and the cast grows slower. |
 | A6 | Dozens of inhabitants per district at v1, hundreds later through the ledger layer. | If hundreds are required at v1, the Actor layer needs pooling and culling in Phase 1 instead of Phase 3. |
-| A7 | Agent team runs as Claude Code remote sessions coordinated through GitHub, at the Lean budget tier (two lanes at a time). Confirmed 2026-09-02. | Standard tier doubles the parallel lanes and shortens each phase by about a third. |
+| A7 | Agent team runs as Claude Code remote sessions coordinated through GitHub, at the Standard budget tier (about four lanes at a time). Set to Standard 2026-09-02 after first choosing Lean. | Lean halves the parallel lanes and stretches each phase by about half. |
 | A8 | Product name is Sheepcliff; the repo stays Sheep-City. | Rename is a one-line change in the plan and the app title. |
 
 ---
@@ -154,9 +154,9 @@ sheep-city/
 
 ## 6. Phases
 
-Weeks assume the Lean tier (two lanes active at a time). Each phase has exit criteria you can check at the dev URL.
+Weeks assume the Standard tier (about four lanes active). Each phase has exit criteria you can check at the live URL.
 
-### Phase 0 — Foundation (weeks 1 to 3)
+### Phase 0 — Foundation (weeks 1 to 2)
 Goal: the farm plays identically at a URL on your phone, from a codebase agents can work in.
 - Repo scaffold, CI, deploy to the dev URL on merge (infra).
 - Port the sim to `packages/sim` with the behaviour registry, fixed timestep, seeded RNG; parity tests against the prototype's `RULES` and observed behaviour (sim).
@@ -165,9 +165,9 @@ Goal: the farm plays identically at a URL on your phone, from a codebase agents 
 - Save and load v1 with migration harness (sim, infra).
 - Watch test and first golden screenshots (qa).
 
-Exit: v31 parity at the dev URL, saves survive reload, CI green, watch test passes, you have pinned it once.
+Exit: v31 parity at the live URL, saves survive reload, CI green, watch test passes, you have pinned it once. Owner's rule (2026-09-02): nothing new merges to the live build before this pin, but Phase 1 content work runs in parallel and queues behind it.
 
-### Phase 1 — Alive (weeks 4 to 6)
+### Phase 1 — Alive (weeks 3 to 4)
 Goal: the farm surprises you.
 - Ledger for the farm district; offline catch-up; "while you were gone" storybook (sim, client).
 - Director with a pacing curve and a 15-event farm deck: fog morning, crows, lost lamb, merchant caravan, shearing day, DL's birthday (sim, world).
@@ -177,7 +177,7 @@ Goal: the farm surprises you.
 
 Exit: five unattended minutes show three moments; a day away produces a storybook; three powers react within one second; crows pinned and approved.
 
-### Phase 2 — Village (weeks 7 to 12)
+### Phase 2 — Village (weeks 5 to 8)
 Goal: Sheepcliff is a place, not a field.
 - World map and district switching; Ledger summarise and re-spawn (sim, client).
 - Village Green: background, five villagers, cats and chickens, cottages, well, market (art, world).
@@ -188,7 +188,7 @@ Goal: Sheepcliff is a place, not a field.
 
 Exit: two districts linked by visible carts; a build appears from surplus without your help; every villager has a habit you can predict.
 
-### Phase 3 — Civilization (weeks 13 to 20)
+### Phase 3 — Civilization (weeks 9 to 14)
 Goal: growth you can come back to.
 - Cliff Harbour and Wildwood (art, world).
 - Full event deck to 50 with seasonal and cross-district events; festival; wolf incident (world, sim).
@@ -216,7 +216,7 @@ Polish passes driven by pins, performance, sharing a read-only view of your worl
 | infra | scaffold, CI, deploy, migrations | palette and ownership checks | preview builds | server deploy |
 | qa | watch test, goldens | event coverage | district switch tests | phone performance suite |
 
-Suggested lane activation under Lean: Phase 0 runs infra then sim, then client with art. Phase 1 runs sim with world, then client with qa. Phase 2 runs world with art, then economy with client. Two lanes at a time, switched at ticket boundaries.
+Suggested lane activation under Standard: Phase 0 runs infra, sim, client, and art on the port. In parallel, and from day one, world and art may start Phase 1 content that does not touch the port: the farm event deck as data, the crow brief and crow frames, the style guide. That work waits in reviewed pull requests and merges only after the port is pinned. Phase 1 adds qa; Phase 2 adds economy.
 
 ---
 
@@ -267,7 +267,8 @@ These seed the backlog so the team can start the morning after you say which ass
 Answer in one comment whenever convenient; the defaults are the assumptions in section 1.
 
 1. Confirm A1 to A8 or correct them.
-2. Budget tier: Lean, confirmed 2026-09-02.
+2. Budget tier: Standard, set 2026-09-02 after first choosing Lean.
 3. The live dev environment: answered 2026-09-02. Builds deploy to the owner's private lab, The Garage, at lab.sheepcliff.com, tile `sheep-city`, live at sheep-city.sheepcliff.com. The Garage token lives only in the environment configuration, never in the repo. Agent sessions need lab.sheepcliff.com and sheep-city.sheepcliff.com on the environment's network allowlist.
 4. Whether you want the two missing Sheepcliff artifacts folded in (attach them like the zip).
 5. Deity powers: weather first, then direct per-inhabitant actions. No pick-up-and-move. Confirmed 2026-09-02.
+6. Daily status note: an artifact page, updated daily, chosen 2026-09-02. A pinned GitHub issue keeps the record.

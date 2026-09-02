@@ -92,7 +92,7 @@ Labels carry the gate: `gate:low`, `gate:medium`, `gate:high`, plus `needs-owner
 
 You should be able to know the state of the whole project in two minutes a day without opening a terminal.
 
-**The daily digest** is one comment on a pinned issue titled `Digest` (and, when you want it, a published artifact page). Format:
+**The daily digest** is a published artifact page the owner reads on their phone, updated once a day, with the same text also posted as a comment on a pinned issue titled `Digest` for the record (owner's choice, 2026-09-02). Format:
 
 ```
 Sheepcliff digest — 2026-09-02

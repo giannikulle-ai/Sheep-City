@@ -7,7 +7,7 @@
 // save taken mid-frame resumes exactly where it stopped.
 
 import { SEASONS } from '../clock';
-import { INTENT_TYPES } from '../intents';
+import { FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type IntentType } from '../intents';
 import { cloneState, SAVE_VERSION, type SimState } from '../state';
 import { isPlainObject, SAVE_FORMAT, SaveError, type SaveDoc, type SaveWorld } from './doc';
 import { migrateSave } from './migrations/index';
@@ -282,13 +282,68 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
 
   nonNegative(w['accumulatorMs'], 'world.accumulatorMs');
 
-  arr(w['pendingIntents'], 'world.pendingIntents').forEach((intent, i) => {
-    const p = `world.pendingIntents[${i}]`;
-    const it = obj(intent, p);
-    oneOf(it['type'], `${p}.type`, INTENT_TYPES);
-    if (it['at'] !== undefined) {
-      const at = nonNegative(it['at'], `${p}.at`);
-      if (!Number.isInteger(at)) fail(`${p}.at`, 'a tick number', at);
+  arr(w['pendingIntents'], 'world.pendingIntents').forEach((intent, i) => intentShape(intent, `world.pendingIntents[${i}]`));
+}
+
+/** A pet target: `luna`, `flock`, or a sheep id. Ids are not checked against the flock: a stale one is a no-op when applied. */
+function target(value: unknown, path: string, options: readonly string[]): void {
+  const t = str(value, path);
+  if (options.includes(t) || /^sheep-\d+$/.test(t)) return;
+  fail(path, `${options.join(', ')}, or a sheep id`, value);
+}
+
+/** One queued intent: its type, its `at` tick, and the fields `applyIntent` reads for that type. */
+function intentShape(value: unknown, path: string): void {
+  const it = obj(value, path);
+  const type = oneOf(it['type'], `${path}.type`, INTENT_TYPES);
+  if (it['at'] !== undefined) {
+    const at = nonNegative(it['at'], `${path}.at`);
+    if (!Number.isInteger(at)) fail(`${path}.at`, 'a tick number', at);
+  }
+  switch (type) {
+    case 'setWeather':
+      oneOf(it['weather'], `${path}.weather`, WEATHER_KINDS);
+      return;
+    case 'setWeatherMode':
+      oneOf(it['mode'], `${path}.mode`, WEATHER_MODES);
+      return;
+    case 'setClock':
+      num(it['t'], `${path}.t`);
+      return;
+    case 'setPeriod':
+      if (!(num(it['periodSec'], `${path}.periodSec`) > 0)) fail(`${path}.periodSec`, 'a positive number', it['periodSec']);
+      return;
+    case 'pauseClock':
+      bool(it['paused'], `${path}.paused`);
+      return;
+    case 'setSeason':
+      nullOr(it['season'], `${path}.season`, (v, p) => oneOf(v, p, SEASONS));
+      return;
+    case 'click':
+    case 'throwStick':
+      num(it['x'], `${path}.x`);
+      num(it['y'], `${path}.y`);
+      return;
+    case 'pet':
+      target(it['target'], `${path}.target`, ['luna', 'flock']);
+      return;
+    case 'shear':
+      target(it['target'], `${path}.target`, ['flock']);
+      return;
+    case 'lunaAction':
+    case 'dlAction':
+      oneOf(it['action'], `${path}.action`, LUNA_ACTIONS);
+      return;
+    case 'sheepAction':
+      oneOf(it['action'], `${path}.action`, SHEEP_ACTIONS);
+      target(it['target'], `${path}.target`, ['flock']);
+      return;
+    case 'farmAction':
+      oneOf(it['action'], `${path}.action`, FARM_ACTIONS);
+      return;
+    default: {
+      const never: never = type;
+      throw new Error(`unknown intent type ${String(never satisfies IntentType)}`);
     }
-  });
+  }
 }

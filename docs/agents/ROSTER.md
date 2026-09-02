@@ -22,4 +22,4 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 #2 scaffold (landed) → #6 renderer → #7 input and pin overlay → #9 watch test
 #3 art pipeline (landed) → #11 palette and ownership checks (active)
 #10 farm content (landed)
-#12 Garage deploy from GitHub Actions (landed; the live tile serves the v31 prototype until the owner pins the port)
+#12 Garage deploy from GitHub Actions (landed; LIVE at https://sheep-city.sheepcliff.com serving the v31 prototype until the owner pins the port)

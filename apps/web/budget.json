@@ -1,6 +1,6 @@
 {
-  "comment": "Size budget for the built apps/web bundle, checked after vite build. Kilobytes on disk, uncompressed.",
-  "maxJsKb": 48,
+  "comment": "Size budget for the built apps/web bundle, checked after vite build. Kilobytes on disk, uncompressed. JS budget raised from 48 to 128 on 2026-09-02 when the sim (behaviour registry, Luna chain, sheep, NPCs) started shipping in the bundle; the sim is expected to reach roughly 90 kB by the end of Phase 0.",
+  "maxJsKb": 128,
   "maxCssKb": 8,
   "maxTotalKb": 400
 }

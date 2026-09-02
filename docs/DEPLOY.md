@@ -140,9 +140,10 @@ cases can be told apart.
 
 ### Claiming the tile
 
-If `deploy.sh` reports HTTP 404 from `GET /api/tiles/sheep-city`, the tile does
-not exist yet. The spec's claim call, run by the owner from a shell with the
-token exported:
+`deploy.sh` claims the tile itself when `GET /api/tiles/sheep-city` answers 404
+(`POST /api/tiles` with `{"name","note"}`, expecting 201), then re-reads it.
+Set `GARAGE_CLAIM=no` to disable that. The same call by hand, with the token
+exported:
 
 ```
 curl -sS -X POST -H "Authorization: Bearer $GARAGE_TOKEN" -H 'Content-Type: application/json' \

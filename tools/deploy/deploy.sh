@@ -122,7 +122,23 @@ if [ "${GARAGE_SKIP_PREFLIGHT:-0}" != 1 ]; then
   case "$API_STATUS" in
     200) log "tile '${GARAGE_TILE}' found: $(printf '%s' "$API_BODY" | head -c 2000)" ;;
     401|403) die "The Garage rejected the token (HTTP $API_STATUS): $API_BODY" ;;
-    404) die "tile '${GARAGE_TILE}' does not exist on The Garage (HTTP 404). Claim it first; see docs/DEPLOY.md." ;;
+    404)
+      # The tile does not exist yet. The spec's claim call is POST /api/tiles
+      # with ClaimBody {name, note}; it answers 201. GARAGE_CLAIM=no disables this.
+      if [ "${GARAGE_CLAIM:-auto}" = no ]; then
+        die "tile '${GARAGE_TILE}' does not exist on The Garage (HTTP 404) and GARAGE_CLAIM=no. See docs/DEPLOY.md."
+      fi
+      log "tile '${GARAGE_TILE}' does not exist (HTTP 404); claiming it via POST /api/tiles"
+      api POST /api/tiles -H 'Content-Type: application/json' \
+        --data "{\"name\":\"${GARAGE_TILE}\",\"note\":\"Sheepcliff dev build, deployed from GitHub Actions\"}"
+      case "$API_STATUS" in
+        200|201) log "claimed tile '${GARAGE_TILE}': $(printf '%s' "$API_BODY" | head -c 2000)" ;;
+        *) die "claim of tile '${GARAGE_TILE}' failed (HTTP $API_STATUS): $API_BODY" ;;
+      esac
+      api GET "/api/tiles/${GARAGE_TILE}"
+      [ "$API_STATUS" = 200 ] || die "tile '${GARAGE_TILE}' still not readable after claim (HTTP $API_STATUS): $API_BODY"
+      log "tile '${GARAGE_TILE}' ready: $(printf '%s' "$API_BODY" | head -c 2000)"
+      ;;
     000) die "could not reach ${GARAGE_URL} (curl failed)" ;;
     *)   die "unexpected HTTP $API_STATUS from GET /api/tiles/${GARAGE_TILE}: $API_BODY" ;;
   esac

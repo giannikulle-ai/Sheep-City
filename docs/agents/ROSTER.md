@@ -10,7 +10,9 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | infra | done | session_01U1wsPcoZiaZFC5SNtUPTEH | #11 CI guards, merged as PR #17 | 2026-09-02 |
 | art | done | session_01UaKpw34TT6nFFfXec6EGCK | #3 pipeline move, merged as PR #13 (Verifier session_01QqVLgxYDm8TMg51Nh5kiTU approved) | 2026-09-02 |
 | world | done | session_016yv8aPqYXfRfWNuFCyBiQS | #10 farm content, merged as PR #15 | 2026-09-02 |
-| sim | in review | session_01RNhjEJp3aB7MZj9NRYpDeh | #4 clock, RNG, step, PR #18, Verifier session_01ChUNxEUTH453EE89FtFTGn | 2026-09-02 |
+| sim | done | session_01RNhjEJp3aB7MZj9NRYpDeh | #4 clock, RNG, step, merged as PR #18 (Verifier session_01ChUNxEUTH453EE89FtFTGn approved) | 2026-09-02 |
+| sim | active | session_01Y8mRE88YxpXSCaE4dv8foL | #5 part a: behaviour registry and DL chain (gate high, owner pin) | 2026-09-02 |
+| sim | active | session_01QRszNSGVx7TZV97ud6uZwn | #8 save v1 | 2026-09-02 |
 | client | in review | session_01BzngZosAW3AvFAP4XMhC1A | #6 renderer port, PR #19, Verifier session_013uNxpKjNWXAVSXaAJs7zDr | 2026-09-02 |
 | qa | done | session_01XwNiAQpm1ectYv8dsxiMWX | #9 watch test and goldens, merged as PR #21 | 2026-09-02 |
 | economy | not started | — | Phase 2 | — |
@@ -18,7 +20,7 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 Budget tier: Standard (about four lanes), set 2026-09-02.
 
 ## Phase 0 ticket order
-#2 scaffold (landed) → #4 clock/RNG (PR #18 in review) → #5 behaviour registry (two PRs) → #8 save v1
+#2 scaffold (landed) → #4 clock/RNG (landed) → #5 behaviour registry (part a active, part b next) and #8 save v1 (active)
 #2 scaffold (landed) → #6 renderer (PR #19 in review) → #7 input and pin overlay; #9 watch test (landed)
 #3 art pipeline (landed) → #11 palette and ownership checks (landed; CI now enforces lane paths)
 #10 farm content (landed)

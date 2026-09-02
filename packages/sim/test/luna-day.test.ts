@@ -12,6 +12,8 @@
 //
 // If DL's priority order or any of her timers change on purpose, regenerate this list and say so
 // in the PR: the owner pins the behaviour order.
+// The hash below covers the whole end-of-day state, `SAVE_VERSION` included, so it also moves on a
+// save-schema bump even when this list does not; say which of the two moved in the PR.
 import { describe, expect, it } from 'vitest';
 import { phaseOf } from '../src/clock';
 import { hashState } from '../src/hash';
@@ -87,7 +89,7 @@ describe('scripted day', () => {
     const b = scriptedDay(5);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('7d746c370e52a9a7');
+    expect(hashState(a.state)).toBe('9b1d5735b81b677e');
   });
 
   it('the shape of the day holds for other seeds: bed at dusk, asleep by night, up by day', () => {

@@ -3,42 +3,96 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sheepcliff — hello canvas</title>
+    <title>Sheepcliff — Luna Farm</title>
     <style>
       html,
       body {
         margin: 0;
-        height: 100%;
+        min-height: 100%;
         background: #2b1d17;
         color: #f6f2e8;
-        font: 14px/1.4 system-ui, sans-serif;
+        font: 13px/1.4 ui-monospace, Menlo, monospace;
       }
       main {
-        min-height: 100%;
-        display: grid;
-        place-items: center;
-        gap: 12px;
-        grid-auto-rows: max-content;
-        align-content: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 0 0 12px;
       }
-      /* Native-pixel canvas, upscaled by CSS only. Never draw scaled. */
-      canvas#scene {
-        width: 384px;
-        height: 256px;
+      /* Portrait phone first: the scene fills the width, the tray sits below. */
+      #stage {
+        position: relative;
+        width: 100%;
+        max-width: 960px;
+        aspect-ratio: 640 / 400;
+        overflow: hidden;
+        background: #5e9a4d;
+      }
+      #stage canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      /* Native-pixel world canvas, upscaled by CSS only. Never draw scaled. */
+      #world {
         image-rendering: pixelated;
         image-rendering: crisp-edges;
-        border: 2px solid #4e3428;
+      }
+      /* Full-resolution layer for tags and HUD so text stays sharp. */
+      #ui {
+        pointer-events: none;
+      }
+      #tray {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 6px;
+        padding: 0 8px;
+      }
+      button,
+      select {
+        font: inherit;
+        background: #4e3428;
+        color: #f6f2e8;
+        border: 0;
+        padding: 6px 10px;
+        border-radius: 3px;
+      }
+      button.on {
+        outline: 2px solid #ffd75e;
+      }
+      input[type='range'] {
+        width: 160px;
       }
       p {
         margin: 0;
-        opacity: 0.8;
+        opacity: 0.75;
       }
     </style>
   </head>
   <body>
     <main>
-      <canvas id="scene" width="96" height="64"></canvas>
-      <p id="status">loading sheet…</p>
+      <div id="stage">
+        <canvas id="world" width="640" height="400"></canvas>
+        <canvas id="ui"></canvas>
+      </div>
+      <div id="tray">
+        <label>time <input id="time" type="range" min="0" max="999" value="180" /></label>
+        <button id="freeze">pause</button>
+        <button data-w="sun">☀ sun</button>
+        <button data-w="rain">☂ rain</button>
+        <button data-w="snow">❄ snow</button>
+        <select id="season">
+          <option>spring</option>
+          <option>summer</option>
+          <option>autumn</option>
+          <option>winter</option>
+        </select>
+      </div>
+      <p id="status">loading art…</p>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

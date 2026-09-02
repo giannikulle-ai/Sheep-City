@@ -1,0 +1,627 @@
+{
+  "format": "sheepcliff-save",
+  "version": 2,
+  "world": {
+    "seed": 8,
+    "rng": {
+      "s": 2369155094
+    },
+    "clock": {
+      "t": 0.9999999999999782,
+      "periodSec": 180,
+      "paused": false,
+      "tick": 1200,
+      "nowMs": 120000,
+      "dayCount": 0
+    },
+    "season": {
+      "elapsedMs": 120000,
+      "override": null
+    },
+    "weather": {
+      "kind": "rain",
+      "rain": true,
+      "temp": 5.348293879980385,
+      "mode": "season",
+      "rollAtMs": 0,
+      "untilMs": 0
+    },
+    "tufts": [
+      {
+        "x": 342.9096183651003,
+        "y": 95.04448689974224,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 374.65287620525186,
+        "y": 109.01672127314532,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 402.22759552901607,
+        "y": 121.15288734462112,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 420.9880473133611,
+        "y": 137.01843681766962,
+        "level": 1,
+        "claimed": "sheep-0"
+      },
+      {
+        "x": 452.42787988384566,
+        "y": 149.46882535162072,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 482.62732639947905,
+        "y": 166.5205819654651,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 500.7047386801864,
+        "y": 176.8096360732739,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 530.2142915561733,
+        "y": 195.30297844255963,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 526.1700475415153,
+        "y": 221.93702710415548,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 427.71780897113183,
+        "y": 281.46469195118794,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 400.8894193768129,
+        "y": 294.8065311026014,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 370.77118626187865,
+        "y": 306.1533789962282,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 344.4481365829582,
+        "y": 324.7058699192728,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 292.68759160955744,
+        "y": 318.994104615065,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 270.19873108857,
+        "y": 310.48028794878473,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 244.56496344510467,
+        "y": 290.71953926302496,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 214.97300004638112,
+        "y": 277.13683603076885,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 184.41834183648848,
+        "y": 262.4962718876203,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 165.3033768265322,
+        "y": 248.78495682669805,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 140.16293020136033,
+        "y": 237.0657297683942,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 108.22758093346533,
+        "y": 221.88391612326106,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 108.39808379635835,
+        "y": 192.58682087300966,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 130.58444700817887,
+        "y": 181.08677788506571,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 159.4834062057361,
+        "y": 168.25888087520377,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 191.67705809238055,
+        "y": 151.67685013840597,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 219.159829298084,
+        "y": 135.79438657149052,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 241.80567776415495,
+        "y": 122.10059597881511,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 271.2306286921042,
+        "y": 107.44977403183157,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 291.49842152093845,
+        "y": 95.63553256203731,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 265.773258600384,
+        "y": 274.55399599159136,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 243.58169542625546,
+        "y": 137.14005349436775,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 422.9139083623886,
+        "y": 151.9546829466708,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 241.14591730758548,
+        "y": 258.1505546346307,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 101.6592250391841,
+        "y": 214.8547866404988,
+        "level": 1,
+        "claimed": null
+      },
+      {
+        "x": 384.3297698535025,
+        "y": 137.30793013470247,
+        "level": 1,
+        "claimed": null
+      }
+    ],
+    "sheep": [
+      {
+        "id": "sheep-0",
+        "name": "Clover",
+        "color": "#3a7bd5",
+        "x": 323.68818712979555,
+        "y": 110.8291035424918,
+        "dir": 1,
+        "t0Ms": -1888.7104047462344,
+        "tx": 320,
+        "ty": 236,
+        "wp": {
+          "x": 300,
+          "y": 220
+        },
+        "path": [
+          {
+            "x": 300,
+            "y": 220
+          },
+          {
+            "x": 320,
+            "y": 236
+          }
+        ],
+        "lambs": [],
+        "wool": 0.9266553041525376,
+        "wander": 1,
+        "outside": false,
+        "entering": false,
+        "resting": false,
+        "eating": true,
+        "tuft": 3,
+        "hayTrip": false,
+        "drinkTrip": false,
+        "shelter": false,
+        "inBarn": false,
+        "toBarn": false,
+        "shearAtMs": null,
+        "ridden": false,
+        "icon": null,
+        "iconUntilMs": 0,
+        "tagUntilMs": 0,
+        "wet": 0,
+        "snow": 0
+      },
+      {
+        "id": "sheep-1",
+        "name": "Daisy",
+        "color": "#e0a52c",
+        "x": 314.1701030135155,
+        "y": 64.21480861259624,
+        "dir": 1,
+        "t0Ms": -2952.755435369909,
+        "tx": null,
+        "ty": null,
+        "wp": null,
+        "path": [],
+        "lambs": [
+          {
+            "x": 250,
+            "y": 260,
+            "dir": -1,
+            "bornMs": 115000,
+            "grown": false
+          }
+        ],
+        "wool": 0.8424565829802446,
+        "wander": 0,
+        "outside": false,
+        "entering": false,
+        "resting": false,
+        "eating": false,
+        "tuft": null,
+        "hayTrip": false,
+        "drinkTrip": false,
+        "shelter": false,
+        "inBarn": false,
+        "toBarn": false,
+        "shearAtMs": null,
+        "ridden": false,
+        "icon": null,
+        "iconUntilMs": 0,
+        "tagUntilMs": 0,
+        "wet": 0,
+        "snow": 0
+      },
+      {
+        "id": "sheep-2",
+        "name": "Biscuit",
+        "color": "#2fa07a",
+        "x": 298.17840206995606,
+        "y": 288.28545960830525,
+        "dir": -1,
+        "t0Ms": -1706.0352358967066,
+        "tx": null,
+        "ty": null,
+        "wp": null,
+        "path": [],
+        "lambs": [],
+        "wool": 1,
+        "wander": 0,
+        "outside": false,
+        "entering": false,
+        "resting": false,
+        "eating": false,
+        "tuft": null,
+        "hayTrip": false,
+        "drinkTrip": false,
+        "shelter": false,
+        "inBarn": false,
+        "toBarn": false,
+        "shearAtMs": 122500,
+        "ridden": false,
+        "icon": null,
+        "iconUntilMs": 0,
+        "tagUntilMs": 0,
+        "wet": 0,
+        "snow": 0
+      },
+      {
+        "id": "sheep-3",
+        "name": "Pepper",
+        "color": "#7c4dbf",
+        "x": 413.94383942335844,
+        "y": 190.7714745728299,
+        "dir": -1,
+        "t0Ms": -690.7118689268827,
+        "tx": null,
+        "ty": null,
+        "wp": null,
+        "path": [],
+        "lambs": [],
+        "wool": 0.9804921647068328,
+        "wander": 0,
+        "outside": false,
+        "entering": false,
+        "resting": true,
+        "eating": false,
+        "tuft": null,
+        "hayTrip": false,
+        "drinkTrip": false,
+        "shelter": false,
+        "inBarn": false,
+        "toBarn": false,
+        "shearAtMs": null,
+        "ridden": false,
+        "icon": "zz",
+        "iconUntilMs": 121500,
+        "tagUntilMs": 0,
+        "wet": 0,
+        "snow": 0
+      },
+      {
+        "id": "sheep-4",
+        "name": "Maple",
+        "color": "#e0602c",
+        "x": 339.1531120762229,
+        "y": 225.99120246479288,
+        "dir": 1,
+        "t0Ms": -824.6759828180075,
+        "tx": null,
+        "ty": null,
+        "wp": null,
+        "path": [],
+        "lambs": [],
+        "wool": 1,
+        "wander": 0,
+        "outside": false,
+        "entering": false,
+        "resting": false,
+        "eating": false,
+        "tuft": null,
+        "hayTrip": false,
+        "drinkTrip": false,
+        "shelter": false,
+        "inBarn": false,
+        "toBarn": false,
+        "shearAtMs": null,
+        "ridden": false,
+        "icon": null,
+        "iconUntilMs": 0,
+        "tagUntilMs": 0,
+        "wet": 0,
+        "snow": 0
+      }
+    ],
+    "luna": {
+      "x": 262.6928910019822,
+      "y": 56.58575504633584,
+      "dir": -1,
+      "anim": "run",
+      "t0Ms": 119600,
+      "target": {
+        "x": 200,
+        "y": 240
+      },
+      "tx": 200,
+      "ty": 240,
+      "wp": null,
+      "idle": 0,
+      "manual": null,
+      "manualUntilMs": 0,
+      "routine": "patrol",
+      "icon": null,
+      "iconUntilMs": 0,
+      "riding": null,
+      "mounting": null,
+      "rideUntilMs": 0,
+      "inBarn": false,
+      "tuft": null,
+      "chasing": false,
+      "wet": 0.3,
+      "snow": 0,
+      "stick": null,
+      "circleUntilMs": null,
+      "dirAtMs": 120000,
+      "tagUntilMs": 0,
+      "forceBoundUntilMs": 0
+    },
+    "npcs": {
+      "farmer": {
+        "kind": "farmer",
+        "x": 506,
+        "y": 262,
+        "dir": -1,
+        "anim": "walk",
+        "t0Ms": 120000,
+        "tx": 240,
+        "ty": 146,
+        "plan": [
+          {
+            "job": "shear",
+            "at": {
+              "x": 240,
+              "y": 146
+            }
+          },
+          {
+            "job": "leave"
+          }
+        ],
+        "jobUntilMs": 124000,
+        "sold": 0
+      },
+      "merchant": null,
+      "merchantAtMs": 45000,
+      "lastVisitKey": -1
+    },
+    "banks": {
+      "wool": 2,
+      "coins": 6,
+      "owned": [
+        "flowerbed"
+      ]
+    },
+    "life": {
+      "rabbit": {
+        "x": 90,
+        "y": 300,
+        "t0Ms": 119000
+      },
+      "bird": {
+        "x": 168,
+        "y": 108,
+        "tx": 168,
+        "ty": 108,
+        "state": "sit",
+        "t0Ms": 118000
+      },
+      "bflies": [
+        {
+          "x": 120,
+          "y": 240,
+          "p": 3.0572286061942577,
+          "home": [
+            120,
+            240
+          ]
+        },
+        {
+          "x": 400,
+          "y": 312,
+          "p": 4.713495219592005,
+          "home": [
+            400,
+            312
+          ]
+        }
+      ],
+      "flies": [
+        {
+          "x": 297.1929656714201,
+          "y": 128.4030995075591,
+          "p": 1.733000475447625,
+          "s": 1.353415203280747
+        },
+        {
+          "x": 369.12484008818865,
+          "y": 217.5794509705156,
+          "p": 4.272328393533826,
+          "s": 1.3890753472223878
+        },
+        {
+          "x": 205.79659342765808,
+          "y": 143.72273711720482,
+          "p": 3.8808007347397506,
+          "s": 1.3995577557943761
+        },
+        {
+          "x": 176.95324040949345,
+          "y": 158.19848882732913,
+          "p": 5.424250640440732,
+          "s": 1.2839026087895036
+        },
+        {
+          "x": 233.4394535049796,
+          "y": 225.4074293957092,
+          "p": 3.9098871764726937,
+          "s": 1.140527063049376
+        },
+        {
+          "x": 362.64993948861957,
+          "y": 308.0353087862022,
+          "p": 4.073290765285492,
+          "s": 0.8347737714648247
+        },
+        {
+          "x": 248.60546356067061,
+          "y": 243.45756034599617,
+          "p": 1.1268522455357015,
+          "s": 1.2978463827166706
+        },
+        {
+          "x": 455.73752956464887,
+          "y": 254.9544928292744,
+          "p": 0.31316138058900833,
+          "s": 1.0398968369700015
+        },
+        {
+          "x": 353.14900793135166,
+          "y": 175.00824792310596,
+          "p": 4.91982631618157,
+          "s": 1.2236331920139492
+        },
+        {
+          "x": 263.4161770530045,
+          "y": 229.5286028366536,
+          "p": 5.406078221742064,
+          "s": 0.560522104613483
+        },
+        {
+          "x": 283.9239364862442,
+          "y": 259.280753468629,
+          "p": 4.8414032575674355,
+          "s": 0.9448327438440174
+        },
+        {
+          "x": 486.48025393486023,
+          "y": 232.26347882300615,
+          "p": 1.5756119387224317,
+          "s": 0.6452272227033973
+        },
+        {
+          "x": 419.96176132932305,
+          "y": 280.8881584578194,
+          "p": 3.1026987112127244,
+          "s": 1.2796995001845062
+        },
+        {
+          "x": 278.1244809553027,
+          "y": 188.7344386568293,
+          "p": 4.283575396053493,
+          "s": 1.0738456095568836
+        }
+      ]
+    },
+    "accumulatorMs": 50,
+    "pendingIntents": [
+      {
+        "type": "setSeason",
+        "season": "winter",
+        "at": 1700
+      }
+    ]
+  }
+}

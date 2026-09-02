@@ -14,7 +14,7 @@
 import { nearestTuft } from '../actors';
 import { phaseOf } from '../clock';
 import { SFOOT, SPOT, randomFoot, type Point } from '../geometry';
-import { clampField, clampTarget, stepToward } from '../movement';
+import { clampField, clampMoverTarget, stepToward } from '../movement';
 import { chance, nextFloat, type Rng } from '../rng';
 import { RULES, TICK_SEC } from '../rules';
 import { makeSheep, type Sheep, type SimState, type Tuft } from '../state';
@@ -77,6 +77,7 @@ function tuftOf(state: SimState, s: Sheep): Tuft | null {
 /** Rain: a sheep that is standing still and not yet sheltering walks to the barn door once. */
 export const rainShelter: SheepBehaviour = {
   id: 'rainShelter',
+  contextOnly: true,
   chain: 'shelter',
   priority: 100,
   condition: ({ rain }) => rain,
@@ -93,6 +94,7 @@ export const rainShelter: SheepBehaviour = {
 /** No rain: a sheep in the barn steps out of the doorway and wanders off; `shelter` clears. */
 export const leaveShelter: SheepBehaviour = {
   id: 'leaveShelter',
+  contextOnly: true,
   chain: 'shelter',
   priority: 0,
   condition: ({ rain }) => !rain,
@@ -242,7 +244,7 @@ export const pickNeed: SheepBehaviour = {
   priority: 0,
   condition: ({ rain, night, rng, dt }, s) => !rain && !night && !s.resting && s.tx === null && !s.eating && !s.ridden && chance(rng, dt * S.needRollPerSec),
   tick: (ctx, s) => {
-    NEEDS.run(ctx, s);
+    NEEDS.step(ctx, s);
   },
 };
 
@@ -280,6 +282,7 @@ export function newLamb(s: Sheep, now: number): Sheep['lambs'][number] {
 
 export const lambs: SheepBehaviour = {
   id: 'lambs',
+  contextOnly: true,
   chain: 'lambs',
   priority: 0,
   condition: ({ rain }) => !rain,
@@ -311,11 +314,7 @@ export const walk: SheepBehaviour = {
   priority: 0,
   condition: (_, s) => s.tx !== null,
   tick: ({ state, dt, fx }, s) => {
-    if (!s.entering) {
-      const ct = clampTarget({ x: s.tx as number, y: s.ty as number });
-      s.tx = ct.x;
-      s.ty = ct.y;
-    }
+    if (!s.entering) clampMoverTarget(s);
     const arrived = stepToward(s, SFOOT, s.wander ? RULES.speed.sheepWander : RULES.speed.sheepWalk, dt);
     if (!arrived) return;
     s.tx = s.ty = null;
@@ -378,7 +377,7 @@ export function tickSheep(s: SimState): void {
     }
     ctx.fx = sheep.x + SFOOT[0];
     ctx.fy = sheep.y + SFOOT[1];
-    SHEEP_BEHAVIOURS.run(ctx, sheep);
+    SHEEP_BEHAVIOURS.step(ctx, sheep);
     clampField(sheep, SFOOT);
     // Weather looks: wet in rain, snow settling on the back while standing still.
     const outside = !sheep.inBarn;

@@ -138,6 +138,135 @@ describe('behaviour registry', () => {
     expect(reg.get('missing')).toBeUndefined();
   });
 
+  it('step runs what run runs, in the same order with the same draws, and returns the exclusive cut-off', () => {
+    const build = () => {
+      const reg = createRegistry<Ctx, Actor>();
+      reg.register(make('walk', 0, () => true, { chain: 'move' }));
+      reg.register(make('fetch', 100, (a) => a.hungry, { chain: 'fetch', exclusive: true }));
+      reg.register(make('flop', 1, () => true, { chain: 'routine', weight: 0.5 }));
+      reg.register(make('stick', 1, (a) => !a.tired, { chain: 'routine', weight: 0.5 }));
+      reg.register(make('command', 1, (a) => a.tired, { chain: 'command' }));
+      return reg;
+    };
+    for (const actor of [
+      { name: 'a', hungry: false, tired: false },
+      { name: 'b', hungry: false, tired: true },
+      { name: 'c', hungry: true, tired: false },
+    ]) {
+      const traced = ctx(9);
+      const ran = build().run(traced, actor);
+      const lean = ctx(9);
+      const cut = build().step(lean, actor);
+      expect(lean.log, actor.name).toEqual(traced.log);
+      expect(lean.rng.s, actor.name).toBe(traced.rng.s);
+      expect(cut?.id ?? null, actor.name).toBe(actor.hungry ? 'fetch' : null);
+      expect(ran, actor.name).toEqual(actor.hungry ? ['walk', 'fetch'] : actor.tired ? ['walk', 'flop', 'command'] : ['walk', 'flop']);
+    }
+    // The untied actor drew once (flop and stick both held); the tired one did not (only flop held).
+    expect(ctx(9).rng.s).toBe(createRng(9).s);
+    const a = ctx(9);
+    build().step(a, { name: 'a', hungry: false, tired: false });
+    expect(a.rng.s).toBe(nextState(createRng(9).s));
+    const b = ctx(9);
+    build().step(b, { name: 'b', hungry: false, tired: true });
+    expect(b.rng.s).toBe(createRng(9).s);
+  });
+
+  it('evaluates every condition of a tied run exactly once, whichever member wins the draw', () => {
+    const reg = createRegistry<Ctx, Actor>();
+    reg.register(make('top', 5, () => false));
+    reg.register(make('a', 0, () => true, { weight: 1 }));
+    reg.register(make('b', 0, () => true, { weight: 1 }));
+    reg.register(make('c', 0, () => false, { weight: 1 }));
+    reg.register(make('d', 0, () => true, { weight: 1 }));
+    for (const [lo, hi, want] of [
+      [0, 0.33, 'a'],
+      [0.34, 0.66, 'b'],
+      [0.67, 1, 'd'],
+    ] as const) {
+      const c = { rng: rngWhereNextFloatIn(lo, hi), log: [] as string[] };
+      expect(reg.step(c, { name: 'x', hungry: false, tired: false })?.id ?? null).toBeNull();
+      expect(c.log).toEqual(['?top', '?a', '?b', '?c', '?d', `!${want}`]);
+    }
+  });
+
+  it('keeps a longer tied run intact when a later registration lengthens it', () => {
+    const reg = createRegistry<Ctx, Actor>();
+    reg.register(make('a', 0, () => true, { weight: 1 }));
+    reg.register(make('hi', 9, () => false));
+    for (let i = 0; i < 40; i++) reg.register(make(`b${i}`, 0, () => true, { weight: 1 }));
+    // Registered last; belongs at the front of the run, so the run is now 42 long.
+    reg.register(make('z', 0, () => true, { weight: 1 }));
+    const c = { rng: rngWhereNextFloatIn(0.99, 1), log: [] as string[] };
+    expect(reg.select(c, { name: 'x', hungry: false, tired: false })?.id).toBe('z');
+    expect(c.log.length).toBe(43);
+  });
+
+  describe('contextOnly chains', () => {
+    const build = () => {
+      const reg = createRegistry<Ctx, Actor>();
+      reg.register(make('rain', 10, () => false, { chain: 'shelter', contextOnly: true }));
+      reg.register(make('dry', 0, () => true, { chain: 'shelter', contextOnly: true }));
+      // A mixed chain: one member reads the actor, so nothing here may be reused.
+      reg.register(make('night', 10, () => false, { chain: 'rest', contextOnly: true }));
+      reg.register(make('wake', 0, (a) => a.tired, { chain: 'rest' }));
+      return reg;
+    };
+    const a = { name: 'a', hungry: false, tired: true };
+    const b = { name: 'b', hungry: false, tired: true };
+
+    it('selects a context-only chain once per context and reuses the winner for later actors', () => {
+      const reg = build();
+      const c = ctx();
+      expect(reg.run(c, a)).toEqual(['dry', 'wake']);
+      expect(reg.run(c, b)).toEqual(['dry', 'wake']);
+      // The shelter conditions ran once; the rest chain's ran for both actors.
+      expect(c.log).toEqual(['?rain', '?dry', '!dry', '?night', '?wake', '!wake', '!dry', '?night', '?wake', '!wake']);
+    });
+
+    it('selects again under a new context object', () => {
+      const reg = build();
+      const c1 = ctx();
+      reg.step(c1, a);
+      const c2 = ctx();
+      reg.step(c2, a);
+      expect(c2.log).toEqual(['?rain', '?dry', '!dry', '?night', '?wake', '!wake']);
+    });
+
+    it('memoises a null winner too', () => {
+      const reg = createRegistry<Ctx, Actor>();
+      reg.register(make('never', 0, () => false, { chain: 'x', contextOnly: true }));
+      reg.register(make('always', 0, () => true, { chain: 'y' }));
+      const c = ctx();
+      expect(reg.run(c, a)).toEqual(['always']);
+      expect(reg.run(c, b)).toEqual(['always']);
+      expect(c.log.filter((l) => l === '?never')).toHaveLength(1);
+    });
+
+    it('does not memoise a chain once a member without the flag joins it', () => {
+      const reg = build();
+      const c = ctx();
+      reg.step(c, a);
+      reg.register(make('lateActor', 5, (x) => x.hungry, { chain: 'shelter' }));
+      reg.step(c, b);
+      reg.step(c, a);
+      expect(c.log.filter((l) => l === '?dry')).toHaveLength(3);
+    });
+
+    it('a registration invalidates the memo even when the chain stays context-only', () => {
+      const reg = build();
+      const c = ctx();
+      expect(reg.select(c, a, 'shelter')?.id).toBe('dry');
+      reg.register(make('storm', 20, () => true, { chain: 'shelter', contextOnly: true }));
+      expect(reg.select(c, a, 'shelter')?.id).toBe('storm');
+    });
+
+    it('refuses a weighted context-only behaviour: a draw reads the generator', () => {
+      const reg = createRegistry<Ctx, Actor>();
+      expect(() => reg.register(make('w', 0, () => true, { weight: 1, contextOnly: true }))).toThrow(/contextOnly/);
+    });
+  });
+
   it('rejects duplicate ids and bad weights or priorities', () => {
     const reg = createRegistry<Ctx, Actor>();
     reg.register(make('a', 0, () => true));

@@ -12,7 +12,15 @@ describe('parseSceneParams', () => {
       now: null,
       freeze: false,
       liveWeather: false,
+      seed: 1,
     });
+  });
+
+  it('reads the sim seed as a non-negative integer, defaulting to 1', () => {
+    expect(parseSceneParams('?seed=9').seed).toBe(9);
+    expect(parseSceneParams('?seed=2.7').seed).toBe(2);
+    expect(parseSceneParams('?seed=-4').seed).toBe(0);
+    expect(parseSceneParams('?seed=abc').seed).toBe(1);
   });
 
   it('reads phase, weather, season and a fixed clock', () => {

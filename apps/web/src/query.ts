@@ -1,5 +1,5 @@
 // URL parameters that pick a fixture scene. Pure, so it is unit tested.
-// ?t=0.7&weather=snow&season=winter&temp=-3&now=100000&freeze=1&live=1
+// ?t=0.7&weather=snow&season=winter&temp=-3&now=100000&freeze=1&live=1&seed=9
 import type { Season, Weather } from '@sheepcliff/render';
 
 export interface SceneParams {
@@ -13,6 +13,8 @@ export interface SceneParams {
   /** stop the clock (and, with `now`, animation) for screenshots */
   freeze: boolean;
   liveWeather: boolean;
+  /** sim seed; the same seed always gives the same world */
+  seed: number;
 }
 
 const WEATHERS: readonly Weather[] = ['sun', 'rain', 'snow'];
@@ -45,5 +47,6 @@ export function parseSceneParams(search: string): SceneParams {
     now,
     freeze: q.get('freeze') === '1' || now !== null,
     liveWeather: q.get('live') === '1',
+    seed: Math.max(0, Math.floor(num(q.get('seed'), 1))) >>> 0,
   };
 }

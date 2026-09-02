@@ -2,13 +2,13 @@
 #
 # Builds the web app once, checks the build under the tile's own static server,
 # then deploys to two Garage tiles in parallel:
-#   sheep-city       https://sheep-city.sheepcliff.com       the Luna Farm v31 prototype
-#   sheep-city-next  https://sheep-city-next.sheepcliff.com  apps/web/dist, the ported app
+#   sheep-city       https://sheep-city.sheepcliff.com       apps/web/dist, the ported app (since #38)
+#   sheep-city-next  https://sheep-city-next.sheepcliff.com  apps/web/dist, the same build, trunk preview
 # on every push to the trunk branch (except docs-only pushes) once the other
 # checks on that commit are green, and on manual trigger.
 #
-# The swap, once the owner pins the port: change `source` on the sheep-city
-# matrix entry below to apps/web/dist. See docs/DEPLOY.md.
+# Rollback to the Luna Farm v31 prototype: set `source` on the sheep-city
+# matrix entry below back to prototype/luna-farm/build/farm_sim.html. See docs/DEPLOY.md.
 #
 # Secrets: GARAGE_TOKEN (repository secret). Never printed; masked twice.
 name: deploy
@@ -139,12 +139,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Phase 0 guardrail (owner's rule): the sheep-city tile shows the Luna
-          # Farm v31 prototype until the ported app reaches parity and the owner
-          # has pinned it. The swap is one line: set this source to apps/web/dist.
+          # The Phase 0 guardrail (owner's rule) held this tile on the Luna Farm
+          # v31 prototype until the ported app reached parity and the owner pinned
+          # it. That happened on 2026-09-02 (PR #34 merged 21:22 UTC); the swap
+          # to apps/web/dist landed with issue #38. The prototype build still
+          # lives at prototype/luna-farm/build/farm_sim.html for the goldens;
+          # to roll back, set this source to that path again.
           - tile: sheep-city
-            source: prototype/luna-farm/build/farm_sim.html
-          # The ported app, rebuilt on every trunk push.
+            source: apps/web/dist
+          # The same build, rebuilt on every trunk push; kept as the trunk preview.
           - tile: sheep-city-next
             source: apps/web/dist
     env:

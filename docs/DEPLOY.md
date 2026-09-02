@@ -6,19 +6,28 @@ Agent sessions never talk to the lab; the environment's network policy blocks it
 
 | Tile | Live URL | Serves | Why |
 |---|---|---|---|
-| `sheep-city` | **https://sheep-city.sheepcliff.com** | `prototype/luna-farm/build/farm_sim.html` (Luna Farm v31) | Phase 0 guardrail: the owner's pinned look stays up until the port is pinned |
-| `sheep-city-next` | **https://sheep-city-next.sheepcliff.com** | `apps/web/dist` (the ported app, rebuilt every trunk push) | Where the port is watched and reviewed |
+| `sheep-city` | **https://sheep-city.sheepcliff.com** | `apps/web/dist` (the ported app, rebuilt every trunk push) | The public dev URL. Served the Luna Farm v31 prototype as the Phase 0 guardrail until the owner pinned the port (PR #34, 2026-09-02); swapped in issue #38 |
+| `sheep-city-next` | **https://sheep-city-next.sheepcliff.com** | `apps/web/dist` (the same build) | Trunk preview; can be released (`DELETE /api/tiles/sheep-city-next`) or kept |
 
 Both tiles get the same push, the same `server.js` and `lab.yml`, and the same
-kick, verify, and screenshot steps; only the source differs.
+kick, verify, and screenshot steps. Since #38 they also get the same source, so
+the two live URLs show the same build after every trunk deploy.
 
-### The swap, after the owner pins the port
+### Rolling back to the prototype
 
-One line in `.github/workflows/deploy.yml`: in the `deploy` job's matrix, change
-the `sheep-city` entry's `source` from `prototype/luna-farm/build/farm_sim.html`
-to `apps/web/dist`. The next trunk push then serves the ported app on both
-tiles; `sheep-city-next` can be released afterwards (`DELETE /api/tiles/sheep-city-next`)
-or kept as a preview tile.
+One line in `.github/workflows/deploy.yml`: in the `deploy` job's matrix, set
+the `sheep-city` entry's `source` back from `apps/web/dist` to
+`prototype/luna-farm/build/farm_sim.html`. The prototype build stays in the
+repo at that path for the goldens, so nothing else needs restoring. The next
+trunk push (or a manual run of the `deploy` workflow) then serves the v31
+prototype on `sheep-city` again while `sheep-city-next` keeps the app. Undo the
+same line to swap forward again.
+
+A farm saved in the app lives in the visitor's browser storage for the
+`sheep-city.sheepcliff.com` origin; the prototype neither reads nor writes it,
+so rolling back hides the save and swapping forward brings it back untouched.
+The prototype itself had no save, so the swap in #38 carried nothing over: the
+app starts a fresh farm on first load and saves from then on.
 
 ## The secret
 
@@ -52,10 +61,10 @@ saying so, and `garage-discover.yml` runs an unauthenticated pass and then fails
    fetched from another origin, and the app must set `body[data-ready]`. This
    is the guard for Vite's `base: './'` and relative asset URLs. The build is
    uploaded as the `web-dist` artifact.
-4. The `deploy` job runs once per tile from a matrix (`sheep-city` with the
-   prototype source, `sheep-city-next` with `apps/web/dist`), in parallel, each
-   with `GARAGE_TILE`, `DEPLOY_SOURCE`, and `LIVE_URL` set for its tile. Each
-   downloads the build and runs `tools/deploy/deploy.sh`.
+4. The `deploy` job runs once per tile from a matrix (`sheep-city` and
+   `sheep-city-next`, both with `source: apps/web/dist` since #38), in parallel,
+   each with `GARAGE_TILE`, `DEPLOY_SOURCE`, and `LIVE_URL` set for its tile.
+   Each downloads the build and runs `tools/deploy/deploy.sh`.
 5. `deploy.sh` stages the site (`DEPLOY_SOURCE`, else `apps/web/dist/` when it
    exists, else `prototype/luna-farm/build/farm_sim.html` as `index.html`), adds
    `server.js` and `lab.yml` from `tools/deploy/tile/`, checks the tile with

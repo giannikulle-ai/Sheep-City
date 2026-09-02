@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Deploy a site to one Garage tile (issues #12, #29). deploy.yml runs this once per
-# tile: `sheep-city` (the prototype) and `sheep-city-next` (apps/web/dist).
+# Deploy a site to one Garage tile (issues #12, #29, #38). deploy.yml runs this once
+# per tile: `sheep-city` and `sheep-city-next`, both with DEPLOY_SOURCE=apps/web/dist.
 #
 # Usage:  GARAGE_TOKEN=... tools/deploy/deploy.sh [--dry-run]
 #
-# Source, in order of preference:
-#   1. apps/web/dist/                              the real web app build (once it exists)
-#   2. prototype/luna-farm/build/farm_sim.html     uploaded as index.html until then
+# Source when DEPLOY_SOURCE is unset, in order of preference:
+#   1. apps/web/dist/                              the real web app build
+#   2. prototype/luna-farm/build/farm_sim.html     the Luna Farm v31 prototype, as index.html
 #
 # Environment:
 #   GARAGE_TOKEN          required. Bearer token for The Garage. Never printed.

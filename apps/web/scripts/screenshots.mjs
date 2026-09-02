@@ -14,14 +14,16 @@ const out = join(root, 'screenshots');
 const preinstalled = process.env['SHEEPCLIFF_CHROMIUM'] ?? '/opt/pw-browsers/chromium';
 
 // Six stills of the live sim: seed 9 like the goldens, the clock pinned and paused, the world
-// left to settle for a second so DL and the flock have taken their first steps.
+// left to settle for a second so DL and the flock have taken their first steps. The clock
+// values are the tray's "jump to" values (src/jump.ts: noon .21, dusk .47, night .72, dawn
+// .96), so each still is what a jump lands on (#20). Plain JS, so they are repeated here.
 const SHOTS = [
-  ['day', 't=0.18&weather=sun&season=spring'],
+  ['day', 't=0.21&weather=sun&season=spring'],
   ['dusk', 't=0.47&weather=sun&season=spring'],
-  ['night', 't=0.7&weather=sun&season=spring'],
-  ['dawn', 't=0.95&weather=sun&season=spring'],
-  ['rain-day', 't=0.18&weather=rain&season=spring'],
-  ['snow-night', 't=0.7&weather=snow&season=winter'],
+  ['night', 't=0.72&weather=sun&season=spring'],
+  ['dawn', 't=0.96&weather=sun&season=spring'],
+  ['rain-day', 't=0.21&weather=rain&season=spring'],
+  ['snow-night', 't=0.72&weather=snow&season=winter'],
 ];
 
 const server = await preview({ root, preview: { port: 4174, host: '127.0.0.1', strictPort: true } });

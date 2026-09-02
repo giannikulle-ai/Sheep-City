@@ -3,9 +3,11 @@
 // those exist this driver fails with a message naming the missing hook, so a
 // wrong SHEEPCLIFF_GOLDEN_TARGET is loud rather than silently green.
 import type { Page } from '@playwright/test';
+import { JUMP_T } from '../../src/jump';
 import type { Driver, Phase, Weather } from './golden';
 
-export const PHASE_T: Record<Phase, number> = { dawn: 0.96, noon: 0.21, dusk: 0.47, night: 0.72 };
+/** The clock value per golden phase: the tray's own "jump to" values, so the goldens show what a jump shows (#20). */
+export const PHASE_T: Record<Phase, number> = JUMP_T;
 
 const HOOKS = ['seed', 'setWeather', 'setClock', 'pause', 'step', 'canvas'] as const;
 

@@ -1,4 +1,6 @@
+import { phaseMix, phaseOf } from '@sheepcliff/render';
 import { describe, expect, it } from 'vitest';
+import { PHASE_T } from '../e2e/lib/app';
 import { JUMP_T, verbsFor, whoList, type WhoId } from './actions';
 
 /** Every id in the prototype's ACTIONS table (build/farm_sim.html), by group. */
@@ -45,7 +47,22 @@ describe('the action catalogue', () => {
   it('jumps to phase midpoints, outside the crossfade bands (#20)', () => {
     const byId = new Map(verbsFor('clock').map((v) => [v.id, v.intent]));
     expect(byId.get('dawn')).toEqual({ type: 'setClock', t: JUMP_T.dawn });
+    expect(byId.get('noon')).toEqual({ type: 'setClock', t: JUMP_T.noon });
+    expect(byId.get('dusk')).toEqual({ type: 'setClock', t: JUMP_T.dusk });
+    expect(byId.get('night')).toEqual({ type: 'setClock', t: JUMP_T.night });
     for (const t of Object.values(JUMP_T)) for (const edge of [0, 0.42, 0.52, 0.92]) expect(Math.abs(t - edge)).toBeGreaterThan(0.025);
+    // the renderer agrees: no blend towards a neighbouring phase at any jump, and each lands in its own phase
+    for (const [name, t] of Object.entries(JUMP_T)) {
+      expect(phaseMix(t), name).toEqual({ phase: phaseOf(t), mixTo: null, mix: 0 });
+      expect(phaseOf(t), name).toBe(name === 'noon' ? 'day' : name);
+    }
+    // the prototype's own jumps (dawn .94, dusk .44) are the bug: inside the band, blended with the phase before
+    expect(phaseMix(0.94).mixTo).toBe('night');
+    expect(phaseMix(0.44).mixTo).toBe('day');
+  });
+
+  it('jumps to the same clock values the app goldens capture (#20)', () => {
+    expect(PHASE_T).toEqual(JUMP_T);
   });
 
   it('lists DL, each sheep by name, then the collective chips', () => {

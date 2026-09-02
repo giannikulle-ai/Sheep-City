@@ -2,15 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState } from '@sheepcliff/sim';
 import type { SpriteSizes } from './hit';
 import { describeAt, parsePins, pinLine, pinsMarkdown, pinWorld, type Pin } from './pins';
-import { liveView } from './view';
+import { simView } from './view';
 
 const SIZES: SpriteSizes = { sheep: { w: 32, h: 27 }, luna: { w: 44, h: 40 } };
-const view = () => liveView(createInitialState(1), 0, false);
+const sim = createInitialState(1);
+const view = () => simView(null, sim, 0, false);
+// Clover is wherever seed 1 put her; the tap lands on her sprite centre
+const clover = { x: (sim.sheep[0]?.x ?? 0) + 16, y: (sim.sheep[0]?.y ?? 0) + 13 };
 
 describe('describeAt', () => {
   it('names the nearest creature or landmark within 40 px', () => {
     expect(describeAt(view(), 142, 300, SIZES)).toBe('Digital Luna');
-    expect(describeAt(view(), 150, 238, SIZES)).toBe('Clover');
+    expect(describeAt(view(), clover.x, clover.y, SIZES)).toBe('Clover');
     expect(describeAt(view(), 499, 276, SIZES)).toBe('lantern');
     expect(describeAt(view(), 350, 80, SIZES)).toBe('barn');
     expect(describeAt(view(), 600, 40, SIZES)).toBeNull();

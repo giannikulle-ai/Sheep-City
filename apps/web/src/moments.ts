@@ -1,6 +1,7 @@
-// Noticeable moments, found by comparing two frames' views. The QA watch test counts these
-// (contract: tools/qa/README.md); the client emits them on transitions only.
-import { phaseOf, type FarmView } from '@sheepcliff/render';
+// Noticeable moments, found by comparing two sim states (the state before and after a tick). The
+// QA watch test counts these (contract: tools/qa/README.md); the client emits them on transitions
+// only, and detects the same things the QA lane's prototype probe does, from the same fields.
+import { phaseOf, type SimState } from '@sheepcliff/sim';
 
 export type MomentKind = 'bubble' | 'npc-arrival' | 'weather' | 'dl-trick' | 'lamb' | 'phase' | 'bird' | 'rabbit';
 
@@ -11,48 +12,68 @@ export interface Moment {
   t?: number;
 }
 
-/** DL animations that read as a trick when they start. */
-const TRICKS = new Set(['flop', 'stick', 'nibble', 'stretch', 'sleep', 'pant', 'tilt', 'bound', 'trundle', 'fetch']);
+/** DL animations that read as a trick when they start (the probe's DL_TRICKS). */
+const TRICKS: Record<string, string> = { flop: 'flop', stick: 'stick', nibble: 'nibble', stretch: 'stretch' };
 
-const iconAt = (icon: string | null, until: number, now: number): string | null => (icon && now < until ? icon : null);
+interface Carrier {
+  icon: string | null;
+  iconUntilMs: number;
+}
 
-export function diffMoments(prev: FarmView | null, next: FarmView, now: number): Moment[] {
+/** A bubble is showing when it has an icon with a live timer (DL's untimed fetch heart counts too). */
+const bubbleOf = (c: Carrier | null | undefined, now: number): string | null =>
+  c && c.icon && (c.iconUntilMs === 0 || now < c.iconUntilMs) ? c.icon : null;
+
+/** The same icon with the same deadline is the same bubble; a fresh timer is a new one. */
+const bubbleKey = (c: Carrier | null | undefined, now: number): string | null => {
+  const icon = bubbleOf(c, now);
+  return icon ? `${icon}@${c?.iconUntilMs ?? 0}` : null;
+};
+
+const lambCount = (s: SimState): number => s.sheep.reduce((n, q) => n + q.lambs.length, 0);
+
+export function diffMoments(prev: SimState | null, next: SimState): Moment[] {
   const out: Moment[] = [];
-  const t = next.clockT;
   if (!prev) return out;
-  if (prev.weather !== next.weather) out.push({ kind: 'weather', actor: 'sky', detail: next.weather, t });
-  const phase = phaseOf(next.clockT);
-  if (phaseOf(prev.clockT) !== phase) out.push({ kind: 'phase', actor: 'sky', detail: phase, t });
+  const t = next.clock.t;
+  const now = next.clock.nowMs;
+  if (prev.weather.kind !== next.weather.kind) out.push({ kind: 'weather', actor: 'sky', detail: next.weather.kind, t });
+  const phase = phaseOf(next.clock.t);
+  if (phaseOf(prev.clock.t) !== phase) out.push({ kind: 'phase', actor: 'sky', detail: phase, t });
 
-  const prevSheep = new Map(prev.sheep.map((s) => [s.name, s]));
-  let lambsBefore = 0;
-  for (const s of prev.sheep) lambsBefore += s.lambs.length;
-  let lambsNow = 0;
-  for (const s of next.sheep) {
-    lambsNow += s.lambs.length;
-    const was = prevSheep.get(s.name);
-    const icon = iconAt(s.icon, s.iconUntil, now);
-    if (icon && icon !== (was ? iconAt(was.icon, was.iconUntil, now) : null)) out.push({ kind: 'bubble', actor: s.name, detail: icon, t });
-  }
-  if (lambsNow > lambsBefore) out.push({ kind: 'lamb', actor: 'flock', detail: 'born', t });
+  // NPC arrivals
+  if (next.npcs.farmer && !prev.npcs.farmer) out.push({ kind: 'npc-arrival', actor: 'farmer', detail: 'farmer', t });
+  if (next.npcs.merchant && !prev.npcs.merchant) out.push({ kind: 'npc-arrival', actor: 'merchant', detail: 'merchant', t });
+
+  // lambs: born, and grown into a named sheep
+  if (lambCount(next) > lambCount(prev)) out.push({ kind: 'lamb', actor: 'flock', detail: 'born', t });
   if (next.sheep.length > prev.sheep.length) out.push({ kind: 'lamb', actor: 'flock', detail: 'grown', t });
 
-  if (next.luna.icon && next.luna.icon !== prev.luna.icon) out.push({ kind: 'bubble', actor: 'Digital Luna', detail: next.luna.icon, t });
-  if (next.luna.anim !== prev.luna.anim && TRICKS.has(next.luna.anim)) out.push({ kind: 'dl-trick', actor: 'Digital Luna', detail: next.luna.anim, t });
-  if (next.luna.riding && !prev.luna.riding) out.push({ kind: 'dl-trick', actor: 'Digital Luna', detail: 'ride', t });
-  if (next.rabbit && !prev.rabbit && next.luna.anim === 'run') out.push({ kind: 'dl-trick', actor: 'Digital Luna', detail: 'rabbit-chase', t });
+  // Digital Luna tricks: idle play, riding, rabbit chase, fetch
+  const l = next.luna;
+  const pl = prev.luna;
+  if (l.anim !== pl.anim && TRICKS[l.anim] && !l.inBarn) out.push({ kind: 'dl-trick', actor: 'Digital Luna', detail: TRICKS[l.anim] as string, t });
+  if (l.riding && !pl.riding) out.push({ kind: 'dl-trick', actor: 'Digital Luna', detail: 'ride', t });
+  if (l.chasing && !pl.chasing) out.push({ kind: 'dl-trick', actor: 'Digital Luna', detail: 'rabbit-chase', t });
+  if (l.stick && !pl.stick) out.push({ kind: 'dl-trick', actor: 'Digital Luna', detail: 'fetch', t });
 
-  for (const who of ['farmer', 'merchant'] as const) {
-    const n = next[who];
-    const p = prev[who];
-    if (n && !p) out.push({ kind: 'npc-arrival', actor: who, detail: who, t });
-    if (n) {
-      const icon = iconAt(n.icon, n.iconUntil, now);
-      if (icon && icon !== (p ? iconAt(p.icon, p.iconUntil, now) : null)) out.push({ kind: 'bubble', actor: who, detail: icon, t });
-    }
+  // bubbles: an icon with a live timer on a sheep, DL, or an NPC, once per timer
+  const prevSheep = new Map(prev.sheep.map((s) => [s.id, s]));
+  const carriers: [string, Carrier | null, Carrier | null | undefined][] = [
+    ['Digital Luna', l, pl],
+    ...next.sheep.map((s): [string, Carrier, Carrier | undefined] => [s.name, s, prevSheep.get(s.id)]),
+    ['farmer', next.npcs.farmer, prev.npcs.farmer],
+    ['merchant', next.npcs.merchant, prev.npcs.merchant],
+  ];
+  for (const [name, c, p] of carriers) {
+    const key = bubbleKey(c, now);
+    if (key && key !== bubbleKey(p, prev.clock.nowMs)) out.push({ kind: 'bubble', actor: name, detail: bubbleOf(c, now) as string, t });
   }
-  if (next.bird && !prev.bird) out.push({ kind: 'bird', actor: 'bird', detail: 'land', t });
-  if (next.rabbit && !prev.rabbit) out.push({ kind: 'rabbit', actor: 'rabbit', detail: 'cross', t });
+
+  // small life (logged, not counted): a bird landing, a rabbit crossing without a chase
+  const birdSit = next.life.bird?.state === 'sit';
+  if (birdSit && prev.life.bird?.state !== 'sit') out.push({ kind: 'bird', actor: 'bird', detail: 'land', t });
+  if (next.life.rabbit && !prev.life.rabbit && !l.chasing) out.push({ kind: 'rabbit', actor: 'rabbit', detail: 'cross', t });
   return out;
 }
 

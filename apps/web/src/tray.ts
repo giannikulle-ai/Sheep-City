@@ -13,12 +13,24 @@ export interface Tray {
   selected(): WhoId;
   /** the status line under the verbs */
   say(text: string, waiting?: boolean): void;
+  /** rebuild the chips for a changed flock (a lamb grew up); keeps the selection when it still exists */
+  setWhos(names: readonly string[], colors: readonly string[]): void;
   whos: Who[];
 }
 
 export function buildTray(els: TrayEls, names: readonly string[], colors: readonly string[], onVerb: (verb: Verb) => void): Tray {
-  const whos = whoList(names, colors);
   let current: WhoId = 'luna';
+  let chips: HTMLButtonElement[] = [];
+  const tray: Tray = {
+    select,
+    selected: () => current,
+    say(text, waiting = false) {
+      els.say.textContent = text;
+      els.say.classList.toggle('waiting', waiting);
+    },
+    setWhos,
+    whos: [],
+  };
 
   const renderVerbs = (): void => {
     els.verbs.replaceChildren(
@@ -33,21 +45,25 @@ export function buildTray(els: TrayEls, names: readonly string[], colors: readon
     );
   };
 
-  const chips = whos.map((w) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'chip';
-    b.dataset['who'] = w.id;
-    if (w.color) {
-      const swatch = document.createElement('i');
-      swatch.style.background = w.color;
-      b.append(swatch);
-    }
-    b.append(w.label);
-    b.addEventListener('click', () => select(w.id));
-    return b;
-  });
-  els.who.replaceChildren(...chips);
+  function setWhos(n: readonly string[], c: readonly string[]): void {
+    tray.whos = whoList(n, c);
+    chips = tray.whos.map((w) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.dataset['who'] = w.id;
+      if (w.color) {
+        const swatch = document.createElement('i');
+        swatch.style.background = w.color;
+        b.append(swatch);
+      }
+      b.append(w.label);
+      b.addEventListener('click', () => select(w.id));
+      return b;
+    });
+    els.who.replaceChildren(...chips);
+    select(tray.whos.some((w) => w.id === current) ? current : 'luna');
+  }
 
   function select(id: WhoId): void {
     current = id;
@@ -55,14 +71,6 @@ export function buildTray(els: TrayEls, names: readonly string[], colors: readon
     renderVerbs();
   }
 
-  select(current);
-  return {
-    select,
-    selected: () => current,
-    say(text, waiting = false) {
-      els.say.textContent = text;
-      els.say.classList.toggle('waiting', waiting);
-    },
-    whos,
-  };
+  setWhos(names, colors);
+  return tray;
 }

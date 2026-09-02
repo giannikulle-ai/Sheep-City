@@ -174,7 +174,8 @@ export class PinOverlay {
     }
   }
 
-  private openModal(children: HTMLElement[]): void {
+  /** Show content in the in-page modal with a close button. Shared with the save export. */
+  openModal(children: HTMLElement[]): void {
     const { modalBox, modal } = this.els;
     modalBox.replaceChildren(...children);
     const close = document.createElement('button');

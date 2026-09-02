@@ -17,7 +17,7 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | sim | active | session_01Y9Qsy4i5yNo4fZUJZCJALL | #27 registry hot path and bench bar | 2026-09-02 |
 | sim | done | session_01QRszNSGVx7TZV97ud6uZwn | #8 save v1, merged as PR #22 (Verifier session_01MKos2vVS14sLaH3N4dWKoD approved) | 2026-09-02 |
 | client | done | session_01BzngZosAW3AvFAP4XMhC1A | #6 renderer port, merged as PR #19 (Verifier session_013uNxpKjNWXAVSXaAJs7zDr; Foreman resolved a spec-name collision with #21) | 2026-09-02 |
-| client | in review | session_01M7oHrnRiqrvqwGM7aWZ1JP | #7 input and pin overlay, PR #24; Verifier approved, owner pinned okay; fix worker session_01Q7HsUjbWsdCM89DZwhrbqN applying three nits, then merge | 2026-09-02 |
+| client | done | session_01M7oHrnRiqrvqwGM7aWZ1JP | #7 input and pin overlay, merged as PR #24 after the owner's pin (Verifier session_01BAsYfT1x8aae9UpDr3NYvn; nits worker session_01Q7HsUjbWsdCM89DZwhrbqN; Foreman raised the JS budget) | 2026-09-02 |
 | qa | done | session_01XwNiAQpm1ectYv8dsxiMWX | #9 watch test and goldens, merged as PR #21 | 2026-09-02 |
 | economy | not started | — | Phase 2 | — |
 
@@ -25,8 +25,11 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 
 ## Phase 0 ticket order
 #2 scaffold (landed) → #4 clock/RNG (landed) → #5 behaviour registry (both parts landed) and #8 save v1 (landed)
-#2 scaffold (landed) → #6 renderer (landed) → #7 input and pin overlay (active); #9 watch test (landed)
+#2 scaffold (landed) → #6 renderer (landed) → #7 input and pin overlay (landed); #9 watch test (landed)
 #3 art pipeline (landed) → #11 palette and ownership checks (landed; CI now enforces lane paths)
 #10 farm content (landed)
 #12 Garage deploy from GitHub Actions (landed; LIVE at https://sheep-city.sheepcliff.com serving the v31 prototype until the owner pins the port)
 #25 sim player intents (active) and #27 sim perf (active), both after #5
+
+## Phase 0 exit
+All ten tickets landed 2026-09-02. Exit gate: #28 client runs the real sim at parity (owner pin) on the second tile from #29; then the sheep-city tile swaps from the prototype to the app.

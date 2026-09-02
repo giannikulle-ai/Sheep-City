@@ -14,12 +14,12 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | sim | done | session_01Y8mRE88YxpXSCaE4dv8foL | #5 part a: registry and DL chain, merged as PR #23 after the owner's pin (fix workers session_01NV8mL9L7nchRpJ1N8ySjBZ and session_01Ki5ZREZCkJ6eqBHBqsaaSt) | 2026-09-02 |
 | sim | done | session_01UHyCUx8NRHHoBXzGVTHEiq | #5 part b: sheep, lambs, NPCs, merged as PR #26 after the owner's pin (Verifier session_012nbMWpRbm7RxGEB1oM1EQU; merge worker session_01HdMizhyRarxe8Wxa6jWBQS) | 2026-09-02 |
 | sim | done | session_018purx56Sqfu5RbqPFvLyoQ | #25 player intents, merged as PR #30 (Verifier session_01DpqVxoc27k1sfuVPyCaLov never started, usage cap; the Foreman ran the Verifier pass and recorded it on the PR) | 2026-09-02 |
-| sim | in review | session_01Y9Qsy4i5yNo4fZUJZCJALL | #27 registry hot path and bench bar, PR #32 open (Verifier session_01YCs3c9ayaBGBWP1hBDnQfA; ownership exception for the charter line granted by the Foreman) | 2026-09-02 |
+| sim | done | session_01Y9Qsy4i5yNo4fZUJZCJALL | #27 registry hot path and bench bar, merged as PR #32 (Verifier session_01YCs3c9ayaBGBWP1hBDnQfA) | 2026-09-02 |
 | sim | done | session_01QRszNSGVx7TZV97ud6uZwn | #8 save v1, merged as PR #22 (Verifier session_01MKos2vVS14sLaH3N4dWKoD approved) | 2026-09-02 |
 | client | done | session_01BzngZosAW3AvFAP4XMhC1A | #6 renderer port, merged as PR #19 (Verifier session_013uNxpKjNWXAVSXaAJs7zDr; Foreman resolved a spec-name collision with #21) | 2026-09-02 |
 | client | done | session_01M7oHrnRiqrvqwGM7aWZ1JP | #7 input and pin overlay, merged as PR #24 after the owner's pin (Verifier session_01BAsYfT1x8aae9UpDr3NYvn; nits worker session_01Q7HsUjbWsdCM89DZwhrbqN; Foreman raised the JS budget) | 2026-09-02 |
 | qa | done | session_01XwNiAQpm1ectYv8dsxiMWX | #9 watch test and goldens, merged as PR #21 | 2026-09-02 |
-| client | in review | session_01NFdtsZpVraCTq3LGBUmLoQ | #28 real sim in the app at parity, PR #34 open, needs-owner-pin (Verifier session_019H7jjiz5rus2A3GboAqHpb for the technical pass; owner pins on sheep-city-next) | 2026-09-02 |
+| client | done | session_01NFdtsZpVraCTq3LGBUmLoQ | #28 real sim in the app at parity, PR #34 merged by the owner 21:22 UTC (the pin; Verifier session_019H7jjiz5rus2A3GboAqHpb) | 2026-09-02 |
 | infra | done | session_0139MAKFzvgv1t7v38D7yX5H | #29 second tile sheep-city-next, merged as PR #31; live at https://sheep-city-next.sheepcliff.com | 2026-09-02 |
 | infra | done | session_011rFrY7DKvF7JPLiZUzgoRm | #35 CI re-runs on PR body edits, merged as PR #36 | 2026-09-02 |
 | sim | done | session_019434DtXF9qU91ChVnK8V8J | #33 small life, merged as PR #54 (Verifier session_01LSxRvbp2g3mkKLnSKZxpri; one-file exception for the client spec the new draws changed) | 2026-09-02 |
@@ -44,14 +44,14 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 #3 art pipeline (landed) → #11 palette and ownership checks (landed; CI now enforces lane paths)
 #10 farm content (landed)
 #12 Garage deploy from GitHub Actions (landed; LIVE at https://sheep-city.sheepcliff.com serving the v31 prototype until the owner pins the port)
-#25 sim player intents (landed as PR #30) and #27 sim perf (PR #32 in review), both after #5
+#25 sim player intents (landed as PR #30) and #27 sim perf (landed as PR #32), both after #5
 
 ## Phase 0 exit
-Passed 2026-09-02 21:22 UTC: the owner merged PR #34 (real sim in the app at v31 parity) after the Verifier's approval; that merge is the pin. PR #32 followed; the owner merged the tile swap (PR #50) at 21:37 and https://sheep-city.sheepcliff.com serves the app. Remaining tail: #33 small life (in review), #20 jump-to values (active).
+Passed 2026-09-02 21:22 UTC: the owner merged PR #34 (real sim in the app at v31 parity) after the Verifier's approval; that merge is the pin. PR #32 followed; the owner merged the tile swap (PR #50) at 21:37 and https://sheep-city.sheepcliff.com serves the app. Remaining tail: #33 small life (landed as PR #54), #20 jump-to values (active).
 
 ## Phase 1 ticket order
 Landed: #41 world event deck (PR #52), #47 art crows (PR #53, pinned). Running: #39 sim Ledger. Queued client: #55 (wall-clock poll in the tray-verbs e2e) after #20.
-After #33 lands: #39 sim Ledger, #40 sim Director, #45 sim social behaviours, #43 sim deity intents (one or two sim workers at a time; the save version bump is shared, so the second merges trunk before its PR).
+Sim order: #39 sim Ledger (running), #40 sim Director, #45 sim social behaviours, #43 sim deity intents (one or two sim workers at a time; the save version bump is shared, so the second merges trunk before its PR).
 After #39 and #40: #42 client storybook (owner pin), #48 sim crows.
 After #43: #44 client deity powers UX (owner pin).
 After #45: #46 art social frames (owner pin).

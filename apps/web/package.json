@@ -1,0 +1,19 @@
+{
+  "name": "@sheepcliff/web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@sheepcliff/content": "*",
+    "@sheepcliff/render": "*",
+    "@sheepcliff/sim": "*"
+  }
+}

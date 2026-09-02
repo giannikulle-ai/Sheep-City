@@ -5,8 +5,10 @@ import { hashValue } from '../src/hash';
 import { SAVE_FORMAT, SaveError, type UnknownSaveDoc } from '../src/save/doc';
 import { assertMigrationChain, MIGRATIONS, migrateSave, readVersion, type Migration } from '../src/save/migrations/index';
 import { V2_LUNA_DEFAULTS, v2LunaFetchFields } from '../src/save/migrations/v2-luna-fetch-fields';
+import { v3FlockAndNpcFields, v3NameIdxDefault, v3NpcDefaults } from '../src/save/migrations/v3-flock-and-npc-fields';
+import { makeNpc } from '../src/npcs';
 import { fromSave, toSave } from '../src/save/serialize';
-import { createInitialState, SAVE_VERSION } from '../src/state';
+import { createInitialState, SAVE_VERSION, type Npc } from '../src/state';
 
 const fixture = (name: string): unknown => JSON.parse(readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url)), 'utf8'));
 
@@ -108,7 +110,7 @@ describe('v1 to v2', () => {
     expect(v1.version).toBe(1);
     for (const key of Object.keys(V2_LUNA_DEFAULTS)) expect(v1.world.luna).not.toHaveProperty(key);
     const before = hashValue(v1);
-    const migrated = migrateSave(v1) as unknown as Doc;
+    const migrated = migrateSave(v1, MIGRATIONS.slice(0, 2), 2) as unknown as Doc;
     expect(migrated.version).toBe(2);
     expect(hashValue(v1)).toBe(before);
     const { luna, ...rest } = v1.world;
@@ -134,13 +136,88 @@ describe('v1 to v2', () => {
     expect(code(() => fromSave({ format: SAVE_FORMAT, version: 1, world: { luna: null } }))).toBe('invalid-world');
   });
 
-  it('a v0 save walks the whole chain to v2', () => {
+  it('a v0 save walks the whole chain to the current version', () => {
     const v0 = fixture('save-v0.json') as UnknownSaveDoc;
-    const v2 = migrateSave(v0) as unknown as Doc;
-    expect(v2.version).toBe(SAVE_VERSION);
-    expect(v2.world.luna).toMatchObject(V2_LUNA_DEFAULTS);
+    const current = migrateSave(v0) as unknown as Doc;
+    expect(current.version).toBe(SAVE_VERSION);
+    expect(current.world.luna).toMatchObject(V2_LUNA_DEFAULTS);
+    expect(current.world['nameIdx']).toBe(5);
     const loaded = fromSave(v0);
     expect(loaded.luna.stick).toBeNull();
     expect(loaded.luna.forceBoundUntilMs).toBe(0);
+    expect(loaded.nameIdx).toBe(5);
+    expect(loaded.npcs.farmer).toMatchObject(v3NpcDefaults('farmer'));
+  });
+});
+
+describe('v2 to v3', () => {
+  type Doc = { version: number; world: { npcs: { farmer: Record<string, unknown> | null; merchant: Record<string, unknown> | null } } & Record<string, unknown> };
+  const NPC_KEYS = Object.keys(v3NpcDefaults('farmer'));
+
+  it('the defaults are what a fresh state and a fresh NPC hold', () => {
+    const fresh = createInitialState(1);
+    expect(v3NameIdxDefault(fresh as unknown as Record<string, unknown>)).toBe(fresh.nameIdx);
+    expect(v3NameIdxDefault(createInitialState(1, { sheep: 9 }) as unknown as Record<string, unknown>)).toBe(9);
+    for (const kind of ['farmer', 'merchant'] as const) {
+      const npc = makeNpc(kind, []) as unknown as Record<string, unknown>;
+      for (const [key, value] of Object.entries(v3NpcDefaults(kind))) expect(npc[key], `${kind}.${key}`).toEqual(value);
+    }
+  });
+
+  it('fills nameIdx and the eight NPC fields with fresh-state defaults and touches nothing else', () => {
+    const v2 = fixture('save-v2.json') as Doc;
+    expect(v2.version).toBe(2);
+    expect(v2.world).not.toHaveProperty('nameIdx');
+    const farmer = v2.world.npcs.farmer!;
+    for (const key of NPC_KEYS) expect(farmer).not.toHaveProperty(key);
+    expect(v2.world.npcs.merchant).toBeNull();
+    const before = hashValue(v2);
+    const migrated = migrateSave(v2) as unknown as Doc;
+    expect(migrated.version).toBe(3);
+    expect(hashValue(v2)).toBe(before);
+    const { npcs, ...rest } = v2.world;
+    const { npcs: npcsAfter, nameIdx, ...restAfter } = migrated.world;
+    expect(restAfter).toEqual(rest);
+    expect(nameIdx).toBe((v2.world['sheep'] as unknown[]).length);
+    expect(npcsAfter).toEqual({ ...npcs, farmer: { ...farmer, ...v3NpcDefaults('farmer') }, merchant: null });
+  });
+
+  it('gives a merchant the cart and a farmer the entering flag', () => {
+    const v2 = fixture('save-v2.json') as Doc;
+    const merchant = { ...v2.world.npcs.farmer!, kind: 'merchant' };
+    const doc = { ...v2, world: { ...v2.world, npcs: { ...v2.world.npcs, merchant } } };
+    const migrated = v3FlockAndNpcFields.up(doc) as unknown as Doc;
+    expect(migrated.world.npcs.merchant).toMatchObject({ cart: true, entering: false, outside: true, job: null, shearing: null, wp: null, icon: null, iconUntilMs: 0 });
+    expect(migrated.world.npcs.farmer).toMatchObject({ cart: false, entering: true });
+    const loaded = fromSave(doc);
+    expect(loaded.npcs.merchant?.cart).toBe(true);
+    expect(loaded.npcs.farmer?.cart).toBe(false);
+  });
+
+  it('keeps a field that is already present', () => {
+    const v2 = fixture('save-v2.json') as Doc;
+    const farmer = { ...v2.world.npcs.farmer!, job: 'shear', icon: 'heart' };
+    const doc = { ...v2, world: { ...v2.world, nameIdx: 7, npcs: { ...v2.world.npcs, farmer } } };
+    const migrated = v3FlockAndNpcFields.up(doc) as unknown as Doc;
+    expect(migrated.world['nameIdx']).toBe(7);
+    expect(migrated.world.npcs.farmer).toMatchObject({ job: 'shear', icon: 'heart', shearing: null, cart: false });
+  });
+
+  it('bumps the version and leaves a malformed world for validation to refuse', () => {
+    expect(v3FlockAndNpcFields.up({ version: 2, world: 'nope' })).toEqual({ version: 3, world: 'nope' });
+    expect(v3FlockAndNpcFields.up({ version: 2, world: { npcs: null } })).toEqual({ version: 3, world: { npcs: null, nameIdx: 0 } });
+    expect(v3FlockAndNpcFields.up({ version: 2, world: { npcs: { farmer: 'x', merchant: null } } })).toEqual({
+      version: 3,
+      world: { npcs: { farmer: 'x', merchant: null }, nameIdx: 0 },
+    });
+    expect(code(() => fromSave({ format: SAVE_FORMAT, version: 2, world: { npcs: null } }))).toBe('invalid-world');
+  });
+
+  it('a loaded v2 NPC is a complete Npc the sim can step', () => {
+    const loaded = fromSave(fixture('save-v2.json'));
+    const farmer = loaded.npcs.farmer as Npc;
+    for (const key of NPC_KEYS) expect(farmer).toHaveProperty(key);
+    expect(farmer.plan.map((j) => j.job)).toEqual(['shear', 'leave']);
+    expect(loaded.nameIdx).toBe(loaded.sheep.length);
   });
 });

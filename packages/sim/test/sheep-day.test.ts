@@ -176,7 +176,7 @@ describe('scripted sheep day', () => {
     const b = scriptedDay(6);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('e5b39612b8ea0929');
+    expect(hashState(a.state)).toBe('52504841b26d3ee9');
   });
 
   it('the shape of the day holds for other seeds: needs by day, rest by night, in the barn in rain', () => {

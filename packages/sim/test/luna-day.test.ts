@@ -89,7 +89,7 @@ describe('scripted day', () => {
     const b = scriptedDay(5);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('9b1d5735b81b677e');
+    expect(hashState(a.state)).toBe('8e677c647a5d371f');
   });
 
   it('the shape of the day holds for other seeds: bed at dusk, asleep by night, up by day', () => {

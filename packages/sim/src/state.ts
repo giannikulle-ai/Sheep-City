@@ -13,9 +13,11 @@ import { createWeather, type Weather } from './weather';
  * Bumped by the sim lane whenever the save schema changes. Every bump ships a migration in
  * `save/migrations` and a fixture in `test/fixtures/save-v<n>.json`. v0 was the bare state from
  * the clock ticket (#4); v1 (#8) wraps it in a `{ format, version, world }` envelope; v2 (#5a) adds
- * Digital Luna's stick, bedtime circling, door re-face, name tag, and trundle timers.
+ * Digital Luna's stick, bedtime circling, door re-face, name tag, and trundle timers; v3 (#5b) adds
+ * `nameIdx` and the NPC job-plan fields (`wp`, `outside`, `entering`, `job`, `shearing`, `cart`,
+ * `icon`, `iconUntilMs`).
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Stable actor ids. Sheep are `sheep-<n>`; Digital Luna is `luna`. */
 export type ActorId = string;

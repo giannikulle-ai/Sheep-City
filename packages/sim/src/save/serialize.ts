@@ -160,8 +160,16 @@ function npc(value: unknown, path: string): void {
   dir(n['dir'], `${path}.dir`);
   str(n['anim'], `${path}.anim`);
   num(n['t0Ms'], `${path}.t0Ms`);
+  nullOr(n['wp'], `${path}.wp`, point);
+  bool(n['outside'], `${path}.outside`);
+  bool(n['entering'], `${path}.entering`);
   arr(n['plan'], `${path}.plan`).forEach((job, i) => str(obj(job, `${path}.plan[${i}]`)['job'], `${path}.plan[${i}].job`));
+  nullOr(n['job'], `${path}.job`, str);
   num(n['jobUntilMs'], `${path}.jobUntilMs`);
+  nullOr(n['shearing'], `${path}.shearing`, str);
+  bool(n['cart'], `${path}.cart`);
+  nullOr(n['icon'], `${path}.icon`, str);
+  num(n['iconUntilMs'], `${path}.iconUntilMs`);
   num(n['sold'], `${path}.sold`);
 }
 
@@ -268,6 +276,9 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
   nullOr(life['bird'], 'world.life.bird', (v, p) => oneOf(point(v, p)['state'], `${p}.state`, ['in', 'sit', 'out']));
   arr(life['bflies'], 'world.life.bflies').forEach((b, i) => point(b, `world.life.bflies[${i}]`));
   arr(life['flies'], 'world.life.flies').forEach((f, i) => point(f, `world.life.flies[${i}]`));
+
+  const nameIdx = nonNegative(w['nameIdx'], 'world.nameIdx');
+  if (!Number.isInteger(nameIdx)) fail('world.nameIdx', 'an integer', nameIdx);
 
   nonNegative(w['accumulatorMs'], 'world.accumulatorMs');
 

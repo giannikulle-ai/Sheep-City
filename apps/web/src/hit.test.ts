@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildFixture } from './fixture';
-import { hitTest, tapIntent, type SpriteSizes } from './hit';
+import { hitTest, type SpriteSizes } from './hit';
 import { parseSceneParams } from './query';
 
 const SIZES: SpriteSizes = { sheep: { w: 32, h: 27 }, luna: { w: 44, h: 40 } };
@@ -28,24 +28,5 @@ describe('hitTest', () => {
     if (!s) throw new Error('no sheep');
     s.inBarn = true;
     expect(hitTest(v, 150, 238, SIZES).kind).not.toBe('sheep');
-  });
-});
-
-describe('tapIntent', () => {
-  it('pets a sheep, or shears one drawn with the overgrown fleece', () => {
-    const v = view();
-    const s = v.sheep[1];
-    if (!s) throw new Error('no sheep');
-    s.wool = 0.5;
-    expect(tapIntent(v, { kind: 'sheep', index: 1 })).toEqual({ type: 'pet', target: 'sheep-1' });
-    s.wool = 0.85;
-    expect(tapIntent(v, { kind: 'sheep', index: 1 })).toEqual({ type: 'shear', target: 'sheep-1' });
-  });
-
-  it('pets DL, throws a stick on grass, does nothing off the field', () => {
-    const v = view();
-    expect(tapIntent(v, { kind: 'luna' })).toEqual({ type: 'pet', target: 'luna' });
-    expect(tapIntent(v, { kind: 'grass', x: 300, y: 200 })).toEqual({ type: 'throwStick', x: 300, y: 200 });
-    expect(tapIntent(v, { kind: 'none' })).toBeNull();
   });
 });

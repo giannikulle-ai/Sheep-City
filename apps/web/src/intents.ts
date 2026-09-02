@@ -1,11 +1,15 @@
 // Client intents: everything a tap or a tray button can ask of the world. The client never
 // changes the world itself; it sends one of these, and the sim decides what happens.
 //
-// Since #25 the sim's `Intent` union carries these under the client's own names (`pet`, `shear`,
-// `throwStick`, `dlAction`, `sheepAction`, `farmAction`), so `toSimIntents` passes them straight
-// through; the client only resolves its `sheep-<index>` chip ids to the sim's actor ids. Two verbs
-// still have no sim rule: the bird (not ported yet, #33) and reset (a new world, which the client
-// makes itself). Those return no sim intent and the status line says "waiting for the sim".
+// A tap on the stage is sent as the sim's `click` with the world point: the sim does the DL-first,
+// sheep, grass hit-testing on its own tick positions with its own shear rule, as the prototype's
+// click handler did. The client's hit test (hit.ts) only picks the tray chip to highlight.
+//
+// Since #25 the sim's `Intent` union carries the tray verbs under the client's own names (`pet`,
+// `shear`, `throwStick`, `dlAction`, `sheepAction`, `farmAction`), so `toSimIntents` passes them
+// straight through; the client only resolves its `sheep-<index>` chip ids to the sim's actor ids.
+// Two verbs still have no sim rule: the bird (not ported yet, #33) and reset (a new world, which
+// the client makes itself). Those return no sim intent and the status line says "waiting for the sim".
 import type { Intent, SeasonName, SimState, WeatherKind } from '@sheepcliff/sim';
 
 export type SheepId = `sheep-${number}`;
@@ -25,6 +29,8 @@ export const FARM_ACTIONS = ['farmer', 'merchant', 'bird', 'rabbit', 'coins', 'r
 export type FarmAction = (typeof FARM_ACTIONS)[number];
 
 export type ClientIntent =
+  /** a tap on the stage at a world point; the sim decides what was hit */
+  | { type: 'tap'; x: number; y: number }
   | { type: 'pet'; target: Target }
   | { type: 'shear'; target: SheepId | 'flock' }
   | { type: 'throwStick'; x: number; y: number }
@@ -77,6 +83,8 @@ export function toSimIntents(intent: ClientIntent, sim: SimState | null = null):
       return [{ type: 'pauseClock', paused: intent.paused }];
     case 'setPeriod':
       return [{ type: 'setPeriod', periodSec: intent.periodSec }];
+    case 'tap':
+      return [{ type: 'click', x: intent.x, y: intent.y }];
     case 'pet':
       return [{ type: 'pet', target: simTarget(sim, intent.target) }];
     case 'shear':
@@ -111,6 +119,8 @@ export function targetName(target: string, names: readonly string[]): string {
 /** One line for the status strip: who, and what was asked. */
 export function describeIntent(intent: ClientIntent, names: readonly string[]): string {
   switch (intent.type) {
+    case 'tap':
+      return `tap at (${Math.round(intent.x)}, ${Math.round(intent.y)})`;
     case 'pet':
       return `pet ${targetName(intent.target, names)}`;
     case 'shear':

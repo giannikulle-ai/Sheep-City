@@ -21,7 +21,7 @@ import type { SheepcliffApi } from './api';
 import { BACKGROUND_URLS, SHEET_META_URL, SHEET_URL } from './assets';
 import { buildFixture } from './fixture';
 import { Game, MAX_FRAME_MS } from './game';
-import { hitTest, tapIntent, type SpriteSizes } from './hit';
+import { hitTest, type SpriteSizes } from './hit';
 import { describeIntent, type ClientIntent } from './intents';
 import { emitMoment } from './moments';
 import { PinOverlay } from './pin-overlay';
@@ -258,11 +258,11 @@ async function main(): Promise<void> {
     const r = stage.getBoundingClientRect();
     const wx = ((e.clientX - r.left) * WORLD_W) / r.width;
     const wy = ((e.clientY - r.top) * WORLD_H) / r.height;
-    const view = currentView();
-    const hit = hitTest(view, wx, wy, sizes);
-    const intent = tapIntent(view, hit);
-    if (!intent) return;
-    send(intent);
+    // the sim hit-tests the tap itself (DL first, then sheep, then grass for a stick); the client's
+    // hit test only follows it in the tray
+    const hit = hitTest(currentView(), wx, wy, sizes);
+    if (hit.kind === 'none') return;
+    send({ type: 'tap', x: wx, y: wy });
     if (hit.kind === 'luna') tray.select('luna');
     if (hit.kind === 'sheep') tray.select(`sheep-${hit.index}`);
   });

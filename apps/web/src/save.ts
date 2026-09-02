@@ -49,7 +49,11 @@ export function restore(text: string): Restored {
   return { sim: fromSave(doc), savedAt: 0 };
 }
 
-/** One sim-day of sim time in ms: the cap on catch-up. */
+/**
+ * One sim-day of sim time in ms: the cap on catch-up. It follows the world's current `periodSec`
+ * (180 s by default, 60 s or 600 s after the tray's day-length buttons), so a farm left on a
+ * one-minute day catches up 60 s, and on a ten-minute day 600 s.
+ */
 export function dayMs(sim: SimState): number {
   return sim.clock.periodSec * 1000;
 }

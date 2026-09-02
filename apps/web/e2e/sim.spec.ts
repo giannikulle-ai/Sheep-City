@@ -153,7 +153,8 @@ test('the save exports as text in the page and loads back from it', async ({ pag
   await page.locator('#saveTextArea').fill(text);
   await page.locator('#modalBox button', { hasText: 'load this text' }).click();
   await expect(page.locator('#modal')).not.toHaveClass(/show/);
-  await expect(page.locator('#say')).toContainText('loaded: the farm continues where it was');
+  // the text was taken a moment ago: a load under a second continues, over a second is a short absence
+  await expect(page.locator('#say')).toContainText(/loaded: the farm continues where it was|while you were gone \(\d s\)/);
   // an unreadable stored save is set aside, and a new farm starts
   await page.evaluate(() => {
     (window as unknown as WithApp).sheepcliff.qa.seed(1); // stop the page saving over the planted text on unload

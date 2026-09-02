@@ -13,7 +13,12 @@ describe('toSimIntents', () => {
     expect(toSimIntents({ type: 'setPeriod', periodSec: 60 })).toEqual([{ type: 'setPeriod', periodSec: 60 }]);
   });
 
-  it("passes the tap and tray verbs through under the sim's own names", () => {
+  it("sends a stage tap as the sim's click at the world point", () => {
+    expect(toSimIntents({ type: 'tap', x: 150, y: 238 })).toEqual([{ type: 'click', x: 150, y: 238 }]);
+    expect(toSimIntents({ type: 'tap', x: 150, y: 238 }, createInitialState(1))).toEqual([{ type: 'click', x: 150, y: 238 }]);
+  });
+
+  it("passes the tray verbs through under the sim's own names", () => {
     expect(toSimIntents({ type: 'pet', target: 'luna' })).toEqual([{ type: 'pet', target: 'luna' }]);
     expect(toSimIntents({ type: 'pet', target: 'flock' })).toEqual([{ type: 'pet', target: 'flock' }]);
     expect(toSimIntents({ type: 'shear', target: 'flock' })).toEqual([{ type: 'shear', target: 'flock' }]);
@@ -66,6 +71,7 @@ describe('ids and names', () => {
   });
 
   it('describes every intent in one line', () => {
+    expect(describeIntent({ type: 'tap', x: 150.4, y: 238 }, NAMES)).toBe('tap at (150, 238)');
     expect(describeIntent({ type: 'pet', target: 'sheep-0' }, NAMES)).toBe('pet Clover');
     expect(describeIntent({ type: 'shear', target: 'flock' }, NAMES)).toBe('shear the flock');
     expect(describeIntent({ type: 'throwStick', x: 320.4, y: 250 }, NAMES)).toBe('stick thrown to (320, 250)');

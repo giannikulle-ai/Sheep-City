@@ -77,16 +77,17 @@ test.describe('portrait phone', () => {
     await tapWorld(page, at.luna.x, at.luna.y);
     await tapWorld(page, 320, 250); // open grass
 
+    // every tap became the sim's click at the tapped world point; the sim did the hit-testing
     const intents = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.intents.map((r) => ({ ...r.intent, sim: r.sim })));
     expect(intents).toHaveLength(3);
-    expect(intents[0]).toEqual({ type: 'pet', target: 'sheep-0', sim: true });
-    expect(intents[1]).toEqual({ type: 'pet', target: 'luna', sim: true });
-    expect(intents[2]).toMatchObject({ type: 'throwStick', sim: true });
-    const stick = intents[2] as { x: number; y: number };
-    expect(Math.abs(stick.x - 320)).toBeLessThan(2);
-    expect(Math.abs(stick.y - 250)).toBeLessThan(2);
-
-    // the sim answers at its next tick: heart bubbles, DL's tag, the stick on the grass and DL running for it
+    for (const [i, want] of [at.clover, at.luna, { x: 320, y: 250 }].entries()) {
+      expect(intents[i]).toMatchObject({ type: 'tap', sim: true });
+      const tap = intents[i] as { x: number; y: number };
+      expect(Math.abs(tap.x - want.x)).toBeLessThan(2);
+      expect(Math.abs(tap.y - want.y)).toBeLessThan(2);
+    }
+    // and the sim's own hit test read them as a pet, a pet, and a stick: heart bubbles, DL's tag,
+    // the stick on the grass and DL running for it
     await expect
       .poll(() =>
         page.evaluate(() => {
@@ -100,7 +101,7 @@ test.describe('portrait phone', () => {
     // the tray follows the tap: DL's chip is selected and her verbs are listed
     await expect(page.locator('#who .chip.on')).toHaveAttribute('data-who', 'luna');
     await expect(page.locator('#verbs button[data-verb="flop"]')).toBeVisible();
-    await expect(page.locator('#say')).toContainText('stick thrown');
+    await expect(page.locator('#say')).toContainText(/tap at \(320, 2(49|50)\)/);
 
     // moments reached window listeners, per the QA contract
     await expect
@@ -212,6 +213,7 @@ test.describe('landscape phone', () => {
       return { x: l.x + 22, y: l.y + 20 };
     });
     await tapWorld(page, luna.x, luna.y);
-    expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.intents[0]?.intent)).toMatchObject({ type: 'pet', target: 'luna' });
+    expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.intents[0]?.intent)).toMatchObject({ type: 'tap' });
+    await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().luna.icon)).toBe('heart');
   });
 });

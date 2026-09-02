@@ -15,9 +15,10 @@ import { createWeather, type Weather } from './weather';
  * the clock ticket (#4); v1 (#8) wraps it in a `{ format, version, world }` envelope; v2 (#5a) adds
  * Digital Luna's stick, bedtime circling, door re-face, name tag, and trundle timers; v3 (#5b) adds
  * `nameIdx` and the NPC job-plan fields (`wp`, `outside`, `entering`, `job`, `shearing`, `cart`,
- * `icon`, `iconUntilMs`).
+ * `icon`, `iconUntilMs`); v4 (#33) adds `ground` (snow footprints, mud patches, `wasSnowy`) and the
+ * per-walker stamp fields `lastStamp` and `stampSide` on each sheep and on Digital Luna.
  */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** Stable actor ids. Sheep are `sheep-<n>`; Digital Luna is `luna`. */
 export type ActorId = string;
@@ -37,8 +38,14 @@ export interface Lamb extends Point {
   grown: boolean;
 }
 
+/** What `stampGround` keeps on a walker: the foot point of its last stamp and which side the next print goes on. */
+export interface Stamper {
+  lastStamp: Point | null;
+  stampSide: boolean;
+}
+
 /** One sheep; field names follow the prototype's `makeSheep`. Positions are sprite top-left. */
-export interface Sheep extends Point {
+export interface Sheep extends Point, Stamper {
   id: ActorId;
   name: string;
   color: string;
@@ -80,7 +87,7 @@ export interface StickThrow extends Point {
   phase: 'out' | 'back';
 }
 
-export interface Luna extends Point {
+export interface Luna extends Point, Stamper {
   dir: Dir;
   anim: string;
   t0Ms: number;
@@ -188,6 +195,25 @@ export interface Life {
   flies: Fly[];
 }
 
+/** A footprint in snow: where, and the sim time it was stamped. Cleared as soon as the ground is not snowy. */
+export interface SnowPrint extends Point {
+  tMs: number;
+}
+
+/** A mud patch stamped by a foot in rain (or a melted print): where, when, and its radius in px. */
+export interface MudPatch extends Point {
+  tMs: number;
+  r: number;
+}
+
+/** The ground stamps: the prototype's `prints`, `mud`, and `wasSnowy` globals. */
+export interface Ground {
+  prints: SnowPrint[];
+  mud: MudPatch[];
+  /** Whether the last `tickGround` saw snowy ground; the flip to not-snowy is the melt. */
+  wasSnowy: boolean;
+}
+
 export interface SimState {
   version: number;
   seed: number;
@@ -201,6 +227,7 @@ export interface SimState {
   npcs: Npcs;
   banks: Banks;
   life: Life;
+  ground: Ground;
   /** Next index into `NAMES` / `COLORS` for a lamb that grows up: the prototype's `nameIdx`. */
   nameIdx: number;
   /** Sim milliseconds owed to the next tick by the fixed-step loop. */
@@ -282,6 +309,8 @@ export function makeSheep(rng: Rng, i: number, foot: Point, outside = false): Sh
     tagUntilMs: 0,
     wet: 0,
     snow: 0,
+    lastStamp: null,
+    stampSide: false,
   };
 }
 
@@ -315,6 +344,8 @@ export function makeLuna(): Luna {
     dirAtMs: 0,
     tagUntilMs: 0,
     forceBoundUntilMs: 0,
+    lastStamp: null,
+    stampSide: false,
   };
 }
 
@@ -348,6 +379,7 @@ export function createInitialState(seed: number, options: InitialStateOptions = 
     npcs: { farmer: null, merchant: null, merchantAtMs: RULES.merchantFirstAtMs, lastVisitKey: -1 },
     banks: { wool: 0, coins: 0, owned: [] },
     life: { rabbit: null, bird: null, bflies, flies },
+    ground: { prints: [], mud: [], wasSnowy: false },
     // The prototype resets `nameIdx` to 5 whatever the flock; a bigger flock here continues from its own size so ids stay unique.
     nameIdx: count,
     accumulatorMs: 0,
@@ -374,6 +406,7 @@ export function cloneState(state: SimState): SimState {
       target: state.luna.target ? { ...state.luna.target } : null,
       wp: state.luna.wp ? { ...state.luna.wp } : null,
       stick: state.luna.stick ? { ...state.luna.stick } : null,
+      lastStamp: state.luna.lastStamp ? { ...state.luna.lastStamp } : null,
     },
     npcs: {
       ...state.npcs,
@@ -387,12 +420,23 @@ export function cloneState(state: SimState): SimState {
       bflies: state.life.bflies.map((b) => ({ ...b })),
       flies: state.life.flies.map((f) => ({ ...f })),
     },
+    ground: {
+      prints: state.ground.prints.map((p) => ({ ...p })),
+      mud: state.ground.mud.map((m) => ({ ...m })),
+      wasSnowy: state.ground.wasSnowy,
+    },
     pendingIntents: state.pendingIntents.slice(),
   };
 }
 
 function cloneSheep(s: Sheep): Sheep {
-  return { ...s, wp: s.wp ? { ...s.wp } : null, path: s.path.map((p) => ({ ...p })), lambs: s.lambs.map((l) => ({ ...l })) };
+  return {
+    ...s,
+    wp: s.wp ? { ...s.wp } : null,
+    path: s.path.map((p) => ({ ...p })),
+    lambs: s.lambs.map((l) => ({ ...l })),
+    lastStamp: s.lastStamp ? { ...s.lastStamp } : null,
+  };
 }
 
 function cloneNpc(n: Npc): Npc {

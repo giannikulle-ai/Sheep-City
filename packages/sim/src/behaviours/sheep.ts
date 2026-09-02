@@ -4,7 +4,7 @@
 //   1. fleece growth and a pending shear;
 //   2. in rain: walk to the barn door once; otherwise: leave the barn if inside, night rest or a
 //      daytime wake-up roll, the needs pick, eating, and lambs;
-//   3. the movement pass, then clamp, wet, snow, and the lambs trailing behind.
+//   3. the movement pass, then clamp, the ground stamp, wet, snow, and the lambs trailing behind.
 //
 // Those are independent sections rather than one if/else, so they are registry chains that all
 // run each tick in the prototype's order: `shelter`, `rest`, `needs`, `eat`, `lambs`, `move`.
@@ -14,6 +14,7 @@
 import { nearestTuft } from '../actors';
 import { phaseOf } from '../clock';
 import { SFOOT, SPOT, randomFoot, type Point } from '../geometry';
+import { groundSnowy, stampGround } from '../ground';
 import { clampField, clampMoverTarget, stepToward } from '../movement';
 import { chance, nextFloat, type Rng } from '../rng';
 import { RULES, TICK_SEC } from '../rules';
@@ -364,6 +365,7 @@ function clamp01(v: number): number {
 export function tickSheep(s: SimState): void {
   const ctx = sheepContext(s);
   const { dt, rain, snow } = ctx;
+  const snowy = groundSnowy(s);
   // An index loop on purpose: a lamb that grows up this tick is pushed onto `sheep`, and the
   // prototype's `for (const s of sheep)` reached it in the same frame.
   for (let i = 0; i < s.sheep.length; i++) {
@@ -379,6 +381,8 @@ export function tickSheep(s: SimState): void {
     ctx.fy = sheep.y + SFOOT[1];
     SHEEP_BEHAVIOURS.step(ctx, sheep);
     clampField(sheep, SFOOT);
+    // A walking sheep on the field leaves prints in snow and mud in rain.
+    if (sheep.tx !== null && !sheep.inBarn) stampGround(s, sheep, SFOOT, ctx.now, snowy);
     // Weather looks: wet in rain, snow settling on the back while standing still.
     const outside = !sheep.inBarn;
     sheep.wet = clamp01(sheep.wet + (rain && outside ? dt / 6 : -dt / 45));

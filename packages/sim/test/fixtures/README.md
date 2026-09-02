@@ -6,6 +6,7 @@ One frozen save per schema version. `save-v<n>.json` is what `toSave` wrote at v
 - `save-v1.json`: `{ format, version: 1, world }` (#8). Seed 8, 1,200 ticks, plus hand-filled lambs, a shear timer, a farmer with a plan, small life, and a queued intent.
 - `save-v2.json`: same envelope, `version: 2` (#5 part a). Same seed and build recipe as v1, so the world also has DL's five behaviour-chain fields (`stick`, `circleUntilMs`, `dirAtMs`, `tagUntilMs`, `forceBoundUntilMs`); v1 saves get them filled with fresh-state defaults by the v2 migration.
 - `save-v3.json`: same envelope, `version: 3` (#5 part b). Same seed and build recipe again; the world has `nameIdx` and the farmer has the eight NPC job-plan fields (`wp`, `outside`, `entering`, `job`, `shearing`, `cart`, `icon`, `iconUntilMs`). The sheep, DL, and the NPCs now move during the 1,200 ticks, so the world is not v2 plus those fields. v1 and v2 saves get `nameIdx` (the flock size) and the NPC fields (`makeNpc`'s spawn values) filled by the v3 migration.
+- `save-v4.json`: same envelope, `version: 4` (#33). Same seed and build recipe, plus two hand-placed snow prints; the world has `ground` (`prints`, `mud`, `wasSnowy`), and each sheep and DL have `lastStamp` and `stampSide`. The mud is real: the shower's walk to the barn stamped it. The bird now rolls every tick and the butterflies drift, so the 1,200 ticks are a different 1,200 ticks than v3's. Older saves get an empty ground and unstamped walkers filled by the v4 migration.
 
 Rules:
 

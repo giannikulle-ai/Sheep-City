@@ -235,9 +235,10 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
     const tuft = nullOr(s['tuft'], `${p}.tuft`, num);
     if (tuft !== null && (!Number.isInteger(tuft) || tuft < 0 || tuft >= tufts.length)) fail(`${p}.tuft`, `a tuft index below ${tufts.length}`, tuft);
     nullOr(s['shearAtMs'], `${p}.shearAtMs`, num);
-    for (const flag of ['outside', 'entering', 'resting', 'eating', 'hayTrip', 'drinkTrip', 'shelter', 'inBarn', 'toBarn', 'ridden']) {
+    for (const flag of ['outside', 'entering', 'resting', 'eating', 'hayTrip', 'drinkTrip', 'shelter', 'inBarn', 'toBarn', 'ridden', 'stampSide']) {
       bool(s[flag], `${p}.${flag}`);
     }
+    nullOr(s['lastStamp'], `${p}.lastStamp`, point);
   });
 
   const luna = point(w['luna'], 'world.luna');
@@ -259,6 +260,8 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
   num(luna['dirAtMs'], 'world.luna.dirAtMs');
   num(luna['tagUntilMs'], 'world.luna.tagUntilMs');
   num(luna['forceBoundUntilMs'], 'world.luna.forceBoundUntilMs');
+  nullOr(luna['lastStamp'], 'world.luna.lastStamp', point);
+  bool(luna['stampSide'], 'world.luna.stampSide');
 
   const npcs = obj(w['npcs'], 'world.npcs');
   nullOr(npcs['farmer'], 'world.npcs.farmer', npc);
@@ -276,6 +279,16 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
   nullOr(life['bird'], 'world.life.bird', (v, p) => oneOf(point(v, p)['state'], `${p}.state`, ['in', 'sit', 'out']));
   arr(life['bflies'], 'world.life.bflies').forEach((b, i) => point(b, `world.life.bflies[${i}]`));
   arr(life['flies'], 'world.life.flies').forEach((f, i) => point(f, `world.life.flies[${i}]`));
+
+  const ground = obj(w['ground'], 'world.ground');
+  arr(ground['prints'], 'world.ground.prints').forEach((pr, i) => num(point(pr, `world.ground.prints[${i}]`)['tMs'], `world.ground.prints[${i}].tMs`));
+  arr(ground['mud'], 'world.ground.mud').forEach((m, i) => {
+    const p = `world.ground.mud[${i}]`;
+    const patch = point(m, p);
+    num(patch['tMs'], `${p}.tMs`);
+    num(patch['r'], `${p}.r`);
+  });
+  bool(ground['wasSnowy'], 'world.ground.wasSnowy');
 
   const nameIdx = nonNegative(w['nameIdx'], 'world.nameIdx');
   if (!Number.isInteger(nameIdx)) fail('world.nameIdx', 'an integer', nameIdx);

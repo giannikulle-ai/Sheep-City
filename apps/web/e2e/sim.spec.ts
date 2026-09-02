@@ -74,7 +74,9 @@ test('the farm saves every sim-minute and on visibilitychange, and a reload cont
   });
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('sheepcliff-save') ?? 'null') as { format: string; savedAt: number; save: { version: number; world: { clock: { t: number } } } });
   expect(stored.format).toBe('sheepcliff-web-save');
-  expect(stored.save.version).toBe(3);
+  // the sim's current schema version (`SAVE_VERSION`, stamped on every state), never a literal;
+  // read off the page because the sim's balance JSON cannot be imported by the Playwright runner
+  expect(stored.save.version).toBe(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().version));
   expect(stored.save.world.clock.t).toBeGreaterThan(0.59);
   await expect(page.locator('#status')).toContainText('saved (tab hidden)');
 
@@ -174,6 +176,10 @@ test('the tray grows with the flock', async ({ page }) => {
   expect(before).toBe(5);
   // a lamb, then fast time until it grows up (lambGrowMs from the balance file)
   await page.evaluate(() => (window as unknown as WithApp).sheepcliff.send({ type: 'sheepAction', action: 'lamb', target: 'flock' }));
+  // `send` queues the intent for the next tick boundary, so wait for the lamb to be in the world
+  // before taking the save: a save taken in the same breath does not hold it, and the day below
+  // would then only ever grow whatever lamb the seed happens to bear on its own.
+  await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().sheep.reduce((n, q) => n + q.lambs.length, 0))).toBe(1);
   const grown = await page.evaluate(() => {
     const w = window as unknown as WithApp;
     const day = w.sheepcliff.sim().clock.periodSec;
@@ -184,7 +190,7 @@ test('the tray grows with the flock', async ({ page }) => {
     w.sheepcliff.save.load(JSON.stringify(env));
     return w.sheepcliff.sim().sheep.length;
   });
-  // the planted lamb grew up; a day is long enough for the flock to have had another on its own
+  // the planted lamb grew up (90 s into a 180 s day); any lamb the flock had on its own is extra
   expect(grown).toBeGreaterThanOrEqual(6);
   await expect(page.locator('#who .chip')).toHaveCount(grown + 5);
   await expect(page.locator('#who button[data-who="sheep-5"]')).toContainText('Willow');

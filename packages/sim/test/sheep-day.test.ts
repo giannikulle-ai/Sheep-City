@@ -1,12 +1,16 @@
-// Scripted day: every sheep's state over one sim day (1,800 ticks of 100 ms) from seed 6.
+// Scripted day: every sheep's state over one sim day (1,800 ticks of 100 ms) from seed 71.
 //
 // Each entry is the tick a change first shows, the sheep's name, and one word for what it is
 // doing (see `describeSheep`): idle, toTuft / graze, toHay / hay, toTrough / drink, wander, rest,
-// toBarn / barn; `*` ridden by DL, `+n` lambs in tow. Seed 6 was chosen because its day has the
-// whole loop in it: grazing and a trough trip by day, rest forced at night, Maple's lamb born at
-// tick 179 and growing up as Willow at 1080, a night shower at 1138 that walks all six into the
-// barn (Biscuit first at 1193, Daisy last at 1265, and Digital Luna in after her at 1271), the
-// flock wandering back out when it clears at 1489, and DL riding Daisy and Maple in the morning.
+// toBarn / barn; `*` ridden by DL, `+n` lambs in tow. Seed 71 was chosen because its day has the
+// whole loop in it: grazing, a hay trip and a trough trip by day, Clover's lamb born at tick 32
+// and growing up as Willow at 933, Digital Luna riding Daisy at 197, rest forced at night, and a
+// daytime shower at 1539 that walks all six into the barn (Daisy first at 1588, Pepper last at
+// 1776, and DL in after her at 1781) with the farmer's second visit arriving into it at 1585. The
+// bird lands three times, and the shower leaves mud under the walk to the door.
+//
+// Seed 6 was the pinned day until #33: the bird's per-tick landing roll moves every later draw,
+// so seed 6's day is a different day (no shower). Seed 71 was picked for having the whole loop.
 //
 // If the sheep needs weights, timers, or the tick order change on purpose, regenerate this list
 // and say so in the PR: the owner pins the needs weights (gate high in the charter).
@@ -24,102 +28,109 @@ const EXPECTED = [
   '1 Biscuit idle',
   '1 Pepper idle',
   '1 Maple idle',
-  '29 Pepper toTuft',
-  '64 Pepper graze',
-  '81 Clover toTuft',
-  '92 Maple toTuft',
-  '99 Biscuit toTuft',
-  '104 Daisy toTuft',
-  '130 Biscuit graze',
-  '135 Maple graze',
+  '8 Pepper toTuft',
+  '10 Maple toTuft',
+  '32 Clover idle+1',
+  '37 Biscuit toTuft',
+  '45 Clover toTuft+1',
+  '48 Daisy toTuft',
+  '60 Pepper graze',
+  '63 Clover graze+1',
+  '79 Maple graze',
+  '87 Daisy graze',
+  '106 Biscuit graze',
   '139 Maple idle',
-  '143 Maple graze',
-  '149 Daisy graze',
-  '170 Clover graze',
-  '175 Pepper idle',
-  '179 Maple graze+1',
-  '199 Maple idle+1',
-  '224 Daisy idle',
-  '232 Maple wander+1',
-  '263 Biscuit idle',
-  '329 Biscuit rest',
-  '335 Pepper toTuft',
-  '339 Clover idle',
-  '364 Pepper graze',
-  '365 Biscuit idle',
-  '430 Clover toTuft',
-  '430 Daisy toTrough',
-  '455 Clover graze',
-  '504 Maple idle+1',
-  '531 Maple toTuft+1',
-  '541 Pepper idle',
-  '552 Clover idle',
-  '561 Daisy drink',
-  '561 Maple graze+1',
-  '577 Clover wander',
-  '613 Biscuit rest',
+  '141 Daisy idle',
+  '144 Daisy graze',
+  '145 Maple toTrough',
+  '168 Pepper idle',
+  '191 Maple drink',
+  '197 Daisy graze*',
+  '201 Maple idle',
+  '212 Biscuit idle',
+  '231 Daisy walk*',
+  '231 Maple toTuft',
+  '234 Pepper toTuft',
+  '236 Clover idle+1',
+  '253 Daisy idle*',
+  '258 Daisy idle',
+  '267 Pepper graze',
+  '275 Maple graze',
+  '299 Clover toHay+1',
+  '301 Daisy toTuft',
+  '329 Maple idle',
+  '348 Biscuit toTuft',
+  '359 Maple wander',
+  '379 Daisy graze',
+  '383 Biscuit graze',
+  '395 Biscuit idle',
+  '406 Maple idle',
+  '408 Maple wander',
+  '444 Pepper idle',
+  '464 Pepper toTuft',
+  '496 Biscuit graze',
+  '500 Pepper graze',
+  '528 Pepper idle',
+  '538 Clover hay+1',
+  '556 Daisy idle',
+  '579 Maple idle',
+  '588 Daisy wander',
+  '589 Maple toTuft',
   '613 Pepper rest',
-  '738 Maple idle+1',
-  '739 Maple rest+1',
-  '758 Daisy idle',
-  '759 Daisy rest',
-  '834 Clover idle',
-  '835 Clover rest',
-  '919 Pepper rest+1',
-  '1080 Maple rest',
-  '1080 Willow rest',
-  '1138 Clover toBarn',
-  '1138 Daisy toBarn',
-  '1138 Biscuit toBarn',
-  '1138 Pepper toBarn+1',
-  '1138 Maple toBarn',
-  '1138 Willow toBarn',
-  '1193 Biscuit barn',
-  '1238 Clover barn',
-  '1251 Willow barn',
-  '1259 Pepper barn+1',
-  '1260 Maple barn',
-  '1265 Daisy barn',
-  '1489 Clover wander',
-  '1489 Daisy wander',
-  '1489 Biscuit wander',
-  '1489 Pepper wander+1',
-  '1489 Maple wander',
-  '1489 Willow wander',
-  '1569 Daisy idle*',
-  '1570 Biscuit idle',
-  '1574 Daisy wander*',
-  '1600 Biscuit toTrough',
-  '1605 Pepper idle+1',
-  '1608 Pepper wander+1',
-  '1630 Daisy wander',
-  '1669 Maple idle',
-  '1682 Daisy idle',
-  '1696 Maple wander',
-  '1698 Pepper idle+1',
-  '1719 Willow idle',
-  '1734 Clover idle',
-  '1740 Clover toTuft',
-  '1746 Maple idle*',
-  '1749 Daisy toTuft',
-  '1750 Maple wander*',
-  '1778 Daisy graze',
-  '1787 Clover graze',
-  '1792 Clover graze+1',
-  '1794 Willow toTuft',
-  '1800 Biscuit drink',
+  '643 Maple graze',
+  '644 Biscuit idle',
+  '645 Biscuit rest',
+  '679 Maple idle',
+  '680 Maple rest',
+  '773 Daisy idle',
+  '774 Daisy rest',
+  '896 Daisy rest+1',
+  '933 Clover hay',
+  '933 Willow rest',
+  '1126 Clover idle',
+  '1127 Clover rest',
+  '1336 Maple idle',
+  '1348 Clover idle',
+  '1349 Maple graze',
+  '1359 Pepper idle',
+  '1365 Willow idle',
+  '1367 Daisy idle+1',
+  '1391 Clover toTrough',
+  '1408 Pepper toTrough',
+  '1460 Daisy toTuft+1',
+  '1493 Clover drink',
+  '1501 Biscuit idle',
+  '1509 Willow wander',
+  '1515 Biscuit graze',
+  '1525 Daisy graze+1',
+  '1526 Maple idle',
+  '1539 Maple toBarn',
+  '1588 Daisy barn+1',
+  '1609 Biscuit barn',
+  '1610 Willow idle',
+  '1611 Willow toBarn',
+  '1645 Pepper drink',
+  '1668 Clover barn',
+  '1684 Maple barn',
+  '1730 Willow barn',
+  '1776 Pepper barn',
 ];
 
-/** Weather, visitors, and DL's barn entry on the same day, for the shape of the story. */
+/** Weather, visitors, DL's barn entry, and the bird on the same day, for the shape of the story. */
 const EVENTS = [
+  '165 bird lands',
+  '225 bird leaves',
   '361 farmer true',
   '451 merchant true',
+  '596 bird lands',
+  '666 bird leaves',
   '852 merchant false',
-  '1138 rain true',
-  '1271 luna in',
-  '1312 farmer false',
-  '1489 rain false',
+  '1103 bird lands',
+  '1170 bird leaves',
+  '1226 farmer false',
+  '1539 rain true',
   '1585 farmer true',
+  '1781 luna in',
 ];
 
 function scriptedDay(seed: number): { transitions: string[]; events: string[]; state: SimState } {
@@ -131,6 +142,7 @@ function scriptedDay(seed: number): { transitions: string[]; events: string[]; s
   let farmer = false;
   let merchant = false;
   let lunaIn = false;
+  let bird = 'none';
   for (let i = 0; i < TICKS_PER_DAY; i++) {
     s = tick(s);
     s.sheep.forEach((q, j) => {
@@ -156,27 +168,36 @@ function scriptedDay(seed: number): { transitions: string[]; events: string[]; s
       lunaIn = true;
       events.push(`${s.clock.tick} luna in`);
     }
+    const now = s.life.bird ? s.life.bird.state : 'none';
+    if (now !== bird) {
+      if (now === 'sit') events.push(`${s.clock.tick} bird lands`);
+      if (now === 'none') events.push(`${s.clock.tick} bird leaves`);
+      bird = now;
+    }
   }
   return { transitions, events, state: s };
 }
 
 describe('scripted sheep day', () => {
-  it('seed 6: the sequence of every sheep state over one sim day', () => {
-    const { transitions, events, state } = scriptedDay(6);
+  it('seed 71: the sequence of every sheep state over one sim day', () => {
+    const { transitions, events, state } = scriptedDay(71);
     expect(state.clock.tick).toBe(TICKS_PER_DAY);
     expect(events).toEqual(EVENTS);
     expect(transitions).toEqual(EXPECTED);
     expect(state.sheep.map((q) => q.name)).toEqual(['Clover', 'Daisy', 'Biscuit', 'Pepper', 'Maple', 'Willow']);
     expect(state.banks.wool).toBe(5); // the farmer's afternoon shearing, sold on the merchant's next visit
     expect(state.banks.coins).toBe(0);
+    // The shower is still on at midnight: the walk to the barn left mud, and there is no snow to print.
+    expect(state.ground.prints).toEqual([]);
+    expect(state.ground.mud.length).toBe(MUD_AT_DAY_END);
   });
 
-  it('seed 6 twice gives the same day and the same hash', () => {
-    const a = scriptedDay(6);
-    const b = scriptedDay(6);
+  it('seed 71 twice gives the same day and the same hash', () => {
+    const a = scriptedDay(71);
+    const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('52504841b26d3ee9');
+    expect(hashState(a.state)).toBe('14d17f24e11a589a');
   });
 
   it('the shape of the day holds for other seeds: needs by day, rest by night, in the barn in rain', () => {
@@ -195,6 +216,11 @@ describe('scripted sheep day', () => {
       if (events.some((e) => /rain true/.test(e))) expect(text, `seed ${seed}`).toMatch(/^\d+ \w+ toBarn/m);
       expect(events, `seed ${seed}`).toContain('361 farmer true');
       expect(events, `seed ${seed}`).toContain('451 merchant true');
+      // Prints only ever lie on snowy ground, and the flock walking in from a shower leaves mud.
+      if (state.weather.kind !== 'snow') expect(state.ground.prints, `seed ${seed}`).toEqual([]);
     }
   });
 });
+
+/** Mud patches on the ground at the end of seed 71's day: the shower's walk to the barn, none faded yet. */
+const MUD_AT_DAY_END = 157;

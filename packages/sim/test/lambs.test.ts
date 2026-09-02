@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { SFOOT } from '../src/geometry';
 import { applyIntent } from '../src/intents';
 import { RULES, TICK_MS, TICK_SEC } from '../src/rules';
-import { NAMES, createInitialState } from '../src/state';
+import { NAMES, createInitialState, type SimState } from '../src/state';
 import { tickInPlace } from '../src/tick';
 import { rain, run, runUntil, world } from './luna-helpers';
 import { atLeast, below, flockOf, rngWhereFloats, settle } from './sheep-helpers';
@@ -11,11 +11,21 @@ import { atLeast, below, flockOf, rngWhereFloats, settle } from './sheep-helpers
 const BIRTH = below(RULES.lambChancePerSec * TICK_SEC);
 
 /**
+ * A bird already on its way out draws nothing (no spawn roll while one is there, no stay roll
+ * once it has left the post), and that far down it clears the top edge in no test's time. With it
+ * in the sky, the birth roll is the tick's only draw.
+ */
+function noBirdRoll(s: SimState): SimState {
+  s.life.bird = { x: 0, y: 4000, tx: 0, ty: 0, state: 'out', t0Ms: 0 };
+  return s;
+}
+
+/**
  * One sheep, ridden, so the needs gate and the eat roll are skipped and its first draw each tick
  * is the birth roll. The other four are taken off the field (the name index stays at 5).
  */
 function quiet() {
-  const s = settle(world());
+  const s = noBirdRoll(settle(world()));
   s.luna.x = 40;
   s.luna.y = 320;
   s.sheep = [s.sheep[0]!];
@@ -25,7 +35,7 @@ function quiet() {
 
 /** Five settled, ridden sheep. */
 function flock() {
-  const s = settle(world());
+  const s = noBirdRoll(settle(world()));
   s.luna.x = 40;
   s.luna.y = 320;
   for (const q of s.sheep) q.ridden = true;
@@ -62,7 +72,7 @@ describe('birth', () => {
   });
 
   it('the flock caps at flockCap sheep plus lambs: at the cap no roll is made', () => {
-    const s = settle(world({ sheep: RULES.flockCap }));
+    const s = noBirdRoll(settle(world({ sheep: RULES.flockCap })));
     for (const q of s.sheep) q.ridden = true;
     s.rng = rngWhereFloats([BIRTH]);
     const before = s.rng.s;

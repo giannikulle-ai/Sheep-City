@@ -6,9 +6,13 @@ import { SAVE_FORMAT, SaveError, type UnknownSaveDoc } from '../src/save/doc';
 import { assertMigrationChain, MIGRATIONS, migrateSave, readVersion, type Migration } from '../src/save/migrations/index';
 import { V2_LUNA_DEFAULTS, v2LunaFetchFields } from '../src/save/migrations/v2-luna-fetch-fields';
 import { v3FlockAndNpcFields, v3NameIdxDefault, v3NpcDefaults } from '../src/save/migrations/v3-flock-and-npc-fields';
+import { V4_STAMP_DEFAULTS, v4GroundAndStamps, v4GroundDefault } from '../src/save/migrations/v4-ground-and-stamps';
+import { applyIntent } from '../src/intents';
 import { makeNpc } from '../src/npcs';
+import { createRng } from '../src/rng';
 import { fromSave, toSave } from '../src/save/serialize';
-import { createInitialState, SAVE_VERSION, type Npc } from '../src/state';
+import { cloneState, createInitialState, makeLuna, makeSheep, SAVE_VERSION, type Npc } from '../src/state';
+import { advance } from '../src/tick';
 
 const fixture = (name: string): unknown => JSON.parse(readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url)), 'utf8'));
 
@@ -142,11 +146,14 @@ describe('v1 to v2', () => {
     expect(current.version).toBe(SAVE_VERSION);
     expect(current.world.luna).toMatchObject(V2_LUNA_DEFAULTS);
     expect(current.world['nameIdx']).toBe(5);
+    expect(current.world['ground']).toEqual(v4GroundDefault());
     const loaded = fromSave(v0);
     expect(loaded.luna.stick).toBeNull();
     expect(loaded.luna.forceBoundUntilMs).toBe(0);
     expect(loaded.nameIdx).toBe(5);
     expect(loaded.npcs.farmer).toMatchObject(v3NpcDefaults('farmer'));
+    expect(loaded.ground).toEqual({ prints: [], mud: [], wasSnowy: false });
+    expect(loaded.luna).toMatchObject(V4_STAMP_DEFAULTS);
   });
 });
 
@@ -172,7 +179,7 @@ describe('v2 to v3', () => {
     for (const key of NPC_KEYS) expect(farmer).not.toHaveProperty(key);
     expect(v2.world.npcs.merchant).toBeNull();
     const before = hashValue(v2);
-    const migrated = migrateSave(v2) as unknown as Doc;
+    const migrated = migrateSave(v2, MIGRATIONS.slice(0, 3), 3) as unknown as Doc;
     expect(migrated.version).toBe(3);
     expect(hashValue(v2)).toBe(before);
     const { npcs, ...rest } = v2.world;
@@ -219,5 +226,78 @@ describe('v2 to v3', () => {
     for (const key of NPC_KEYS) expect(farmer).toHaveProperty(key);
     expect(farmer.plan.map((j) => j.job)).toEqual(['shear', 'leave']);
     expect(loaded.nameIdx).toBe(loaded.sheep.length);
+  });
+});
+
+describe('v3 to v4', () => {
+  type Walker = Record<string, unknown>;
+  type Doc = { version: number; world: { sheep: Walker[]; luna: Walker } & Record<string, unknown> };
+  const STAMP_KEYS = Object.keys(V4_STAMP_DEFAULTS);
+
+  it('the defaults are what a fresh state, a fresh sheep, and a fresh DL hold', () => {
+    const fresh = createInitialState(1);
+    expect(fresh.ground).toEqual(v4GroundDefault());
+    expect(v4GroundDefault()).not.toBe(v4GroundDefault()); // a new object each call: no shared arrays between worlds
+    const sheep = makeSheep(createRng(1), 0, { x: 300, y: 250 }) as unknown as Walker;
+    const luna = makeLuna() as unknown as Walker;
+    for (const [key, value] of Object.entries(V4_STAMP_DEFAULTS)) {
+      expect(sheep[key], `sheep.${key}`).toEqual(value);
+      expect(luna[key], `luna.${key}`).toEqual(value);
+    }
+  });
+
+  it('fills ground and the two stamp fields on every sheep and on luna with fresh-state defaults and touches nothing else', () => {
+    const v3 = fixture('save-v3.json') as Doc;
+    expect(v3.version).toBe(3);
+    expect(v3.world).not.toHaveProperty('ground');
+    for (const key of STAMP_KEYS) {
+      expect(v3.world.luna).not.toHaveProperty(key);
+      for (const q of v3.world.sheep) expect(q).not.toHaveProperty(key);
+    }
+    const before = hashValue(v3);
+    const migrated = migrateSave(v3) as unknown as Doc;
+    expect(migrated.version).toBe(4);
+    expect(hashValue(v3)).toBe(before);
+    const { sheep, luna, ...rest } = v3.world;
+    const { sheep: sheepAfter, luna: lunaAfter, ground, ...restAfter } = migrated.world;
+    expect(restAfter).toEqual(rest);
+    expect(ground).toEqual(v4GroundDefault());
+    expect(lunaAfter).toEqual({ ...luna, ...V4_STAMP_DEFAULTS });
+    expect(sheepAfter).toEqual(sheep.map((q) => ({ ...q, ...V4_STAMP_DEFAULTS })));
+  });
+
+  it('keeps a field that is already present', () => {
+    const v3 = fixture('save-v3.json') as Doc;
+    const luna = { ...v3.world.luna, lastStamp: { x: 1, y: 2 } };
+    const sheep = v3.world.sheep.map((q, i) => (i === 0 ? { ...q, stampSide: true } : q));
+    const ground = { prints: [{ x: 3, y: 4, tMs: 5 }], mud: [], wasSnowy: true };
+    const doc = { ...v3, world: { ...v3.world, luna, sheep, ground } };
+    const migrated = v4GroundAndStamps.up(doc) as unknown as Doc;
+    expect(migrated.world['ground']).toEqual(ground);
+    expect(migrated.world.luna).toMatchObject({ lastStamp: { x: 1, y: 2 }, stampSide: false });
+    expect(migrated.world.sheep[0]).toMatchObject({ lastStamp: null, stampSide: true });
+    expect(migrated.world.sheep[1]).toMatchObject(V4_STAMP_DEFAULTS);
+  });
+
+  it('bumps the version and leaves a malformed world for validation to refuse', () => {
+    expect(v4GroundAndStamps.up({ version: 3, world: 'nope' })).toEqual({ version: 4, world: 'nope' });
+    expect(v4GroundAndStamps.up({ version: 3, world: { luna: null, sheep: 'x' } })).toEqual({ version: 4, world: { luna: null, sheep: 'x', ground: v4GroundDefault() } });
+    expect(code(() => fromSave({ format: SAVE_FORMAT, version: 3, world: { luna: null } }))).toBe('invalid-world');
+  });
+
+  it('a loaded v3 world is complete and steps: the walkers stamp once they are out on the field', () => {
+    const loaded = fromSave(fixture('save-v3.json'));
+    expect(loaded.ground).toEqual({ prints: [], mud: [], wasSnowy: false });
+    for (const q of loaded.sheep) for (const key of STAMP_KEYS) expect(q).toHaveProperty(key);
+    for (const key of STAMP_KEYS) expect(loaded.luna).toHaveProperty(key);
+    // The fixture's shower has everyone in the barn, so the rain stamps nothing; when it clears,
+    // the flock steps out and wanders, and the migrated walkers' stamp gates start moving.
+    expect(loaded.weather.rain).toBe(true);
+    expect(loaded.sheep.every((q) => q.inBarn)).toBe(true);
+    const after = advance(loaded, 100);
+    expect(after.ground.mud).toEqual([]);
+    const out = advance(applyIntent(cloneState(after), { type: 'setWeather', weather: 'sun' }), 100);
+    expect(out.sheep.some((q) => q.lastStamp !== null)).toBe(true);
+    expect(out.ground.mud).toEqual([]); // dry ground: the gate moves, nothing is left behind
   });
 });

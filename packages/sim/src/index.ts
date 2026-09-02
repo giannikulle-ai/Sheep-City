@@ -73,6 +73,10 @@ export {
   type Bird,
   type Butterfly,
   type Fly,
+  type Stamper,
+  type SnowPrint,
+  type MudPatch,
+  type Ground,
 } from './state';
 export {
   applyIntent,
@@ -117,7 +121,8 @@ export {
 export { NPC_FOOT, makeNpc, summonFarmer, summonMerchant, npcStep, tickNpcs, buyUpgrades, type JobHook, type JobResult } from './npcs';
 export { stepToward, clampField, clampTarget, clampMoverTarget, segHitsBarn, waypointAround, type Mover } from './movement';
 export { LUNA_ID, findSheep, bubble, nearestTuft } from './actors';
-export { tickRabbit } from './life';
+export { tickRabbit, tickButterflies, tickBird, landBird } from './life';
+export { groundSnowy, stampGround, tickGround, PRINT_CAP, MUD_CAP, MELT_MUD_CAP, STAMP_EVERY_PX, MUD_FADE_MS, MUD_FADE_RAIN_MS } from './ground';
 export { tick, tickInPlace, advance } from './tick';
 export { step, type StepOptions } from './step';
 export { hashState, hashValue, canonicalJson, fnv1a, mix32 } from './hash';

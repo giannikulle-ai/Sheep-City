@@ -7,6 +7,7 @@ import { leaveBarn, petLuna } from './behaviours/luna';
 import { newLamb, setPath } from './behaviours/sheep';
 import type { SeasonName } from './clock';
 import { LFOOT, LUNA_SIZE, SFOOT, SHEEP_SIZE, SPOT, insideField, randomFoot } from './geometry';
+import { landBird } from './life';
 import { nextFloat } from './rng';
 import { RULES } from './rules';
 import { buyUpgrades, summonFarmer, summonMerchant } from './npcs';
@@ -42,11 +43,11 @@ export const LUNA_ACTIONS = [
 export type LunaAction = (typeof LUNA_ACTIONS)[number];
 
 /**
- * The prototype's "Sheep" and "Farm" entries in its `ACTIONS` table. `bird` is not here because
- * the bird is not ported yet; `reset` is a new state, not an intent. `rabbit` is the client's name
- * for `rabbitOnly` (the Farm group's "release a rabbit, no chase") and does the same thing.
+ * The prototype's "Sheep" and "Farm" entries in its `ACTIONS` table. `reset` is not here because
+ * it is a new state, not an intent. `rabbit` is the client's name for `rabbitOnly` (the Farm
+ * group's "release a rabbit, no chase") and does the same thing.
  */
-export const FARM_ACTIONS = ['shearAll', 'petAll', 'lamb', 'graze', 'rest', 'scatter', 'wool', 'farmer', 'merchant', 'rabbitOnly', 'rabbit', 'coins'] as const;
+export const FARM_ACTIONS = ['shearAll', 'petAll', 'lamb', 'graze', 'rest', 'scatter', 'wool', 'farmer', 'merchant', 'bird', 'rabbitOnly', 'rabbit', 'coins'] as const;
 export type FarmAction = (typeof FARM_ACTIONS)[number];
 
 /** The prototype's "Sheep" actions that make sense for one sheep as well as the flock. */
@@ -406,6 +407,10 @@ function farmAction(state: SimState, act: FarmAction): void {
       return;
     case 'merchant':
       summonMerchant(state);
+      return;
+    case 'bird':
+      // "a bird lands": a new bird for a post, whatever bird is already there, as the prototype's action.
+      landBird(state);
       return;
     case 'rabbitOnly':
     case 'rabbit':

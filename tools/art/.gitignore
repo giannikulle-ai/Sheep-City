@@ -1,6 +1,8 @@
 # Build outputs. The sheet, its JSON and the frame check image are committed so a reviewer can
 # diff them without Playwright; everything else (backgrounds, GIFs, showcase, demos) is regenerated.
+# build/review/ holds the per-creature review images a PR body links to (contact sheet, loop GIFs).
 build/*
 !build/spritesheet.png
 !build/spritesheet.json
 !build/check_hand_anims.png
+!build/review/

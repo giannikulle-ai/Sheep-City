@@ -1,0 +1,136 @@
+# Garage API discovery (issue #12).
+#
+# Manually triggered. Calls The Garage (lab.sheepcliff.com) with the
+# GARAGE_TOKEN repository secret and prints, for each probed path, the HTTP
+# status, response headers, and the first 4 KB of the body, so the upload API
+# can be written from what the lab actually answers rather than guessed.
+#
+# The token never reaches the log: GitHub masks the secret, the job adds an
+# explicit ::add-mask::, and the probe script replaces the token value with
+# [REDACTED] before printing anything. The token is passed to the script via
+# the environment, never on a command line.
+name: garage-discover
+
+on:
+  workflow_dispatch:
+    inputs:
+      extra_paths:
+        description: "Extra paths to probe, comma-separated (e.g. /api/v1,/tiles/sheep-city/files)"
+        required: false
+        default: ""
+      base_url:
+        description: "Base URL of the lab"
+        required: false
+        default: "https://lab.sheepcliff.com"
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    name: Probe The Garage API
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GARAGE_TOKEN: ${{ secrets.GARAGE_TOKEN }}
+      BASE_URL: ${{ inputs.base_url }}
+      EXTRA_PATHS: ${{ inputs.extra_paths }}
+    steps:
+      - name: Check that GARAGE_TOKEN is set
+        run: |
+          if [ -z "${GARAGE_TOKEN}" ]; then
+            echo "::error::The GARAGE_TOKEN repository secret is not set. Add it at https://github.com/${GITHUB_REPOSITORY}/settings/secrets/actions and re-run this workflow. Nothing was probed."
+            exit 1
+          fi
+          echo "::add-mask::${GARAGE_TOKEN}"
+          echo "GARAGE_TOKEN is set (length ${#GARAGE_TOKEN}). Probing ${BASE_URL}."
+
+      - name: Probe likely API paths
+        shell: python3 {0}
+        run: |
+          import json
+          import os
+          import ssl
+          import sys
+          import urllib.error
+          import urllib.request
+
+          token = os.environ["GARAGE_TOKEN"]
+          base = os.environ["BASE_URL"].rstrip("/")
+          extra = [p.strip() for p in os.environ.get("EXTRA_PATHS", "").split(",") if p.strip()]
+
+          # The paths the ticket asks for, plus a few common doc/API locations.
+          paths = [
+              "/", "/docs", "/openapi.json", "/api", "/tiles", "/tiles/sheep-city",
+              "/openapi.yaml", "/redoc", "/swagger.json", "/api/docs", "/api/openapi.json",
+              "/api/tiles", "/api/tiles/sheep-city", "/health", "/healthz", "/version",
+              "/robots.txt", "/.well-known/openapi.json",
+          ] + extra
+
+          MAX_BODY = 4096
+
+          def redact(text):
+              # Belt and braces: GitHub masks the secret too, but never rely on one layer.
+              return text.replace(token, "[REDACTED]") if token else text
+
+          def show(label, method, url, headers, resp, body_bytes):
+              print("=" * 78)
+              print(f"{label}: {method} {url}")
+              print(f"status: {resp.status} {resp.reason}")
+              print("response headers:")
+              for k, v in resp.headers.items():
+                  print(f"  {k}: {redact(v)}")
+              print(f"body (first {MAX_BODY} bytes of {len(body_bytes)} read):")
+              text = body_bytes[:MAX_BODY].decode("utf-8", errors="replace")
+              # Prettify JSON when the whole body fit in the window.
+              ctype = resp.headers.get("Content-Type", "")
+              if "json" in ctype and len(body_bytes) <= MAX_BODY:
+                  try:
+                      text = json.dumps(json.loads(text), indent=2)[:MAX_BODY]
+                  except ValueError:
+                      pass
+              print(redact(text))
+              print()
+
+          def probe(path, method="GET", auth=True, label=None):
+              url = base + path
+              headers = {"User-Agent": "sheepcliff-garage-discover/1 (github-actions)", "Accept": "*/*"}
+              if auth:
+                  headers["Authorization"] = f"Bearer {token}"
+              req = urllib.request.Request(url, method=method, headers=headers)
+              label = label or ("auth" if auth else "no-auth")
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as resp:
+                      body = resp.read(MAX_BODY + 1)
+                      show(label, method, url, headers, resp, body)
+                      return resp.status
+              except urllib.error.HTTPError as e:
+                  body = e.read(MAX_BODY + 1)
+                  show(label, method, url, headers, e, body)
+                  return e.code
+              except Exception as e:  # DNS, TLS, timeout, connection refused
+                  print("=" * 78)
+                  print(f"{label}: {method} {url}")
+                  print(f"error: {type(e).__name__}: {redact(str(e))}")
+                  print()
+                  return None
+
+          summary = []
+          # First: does the root even need auth? One unauthenticated call for comparison.
+          summary.append(("no-auth", "GET", "/", probe("/", auth=False)))
+          for p in paths:
+              summary.append(("auth", "GET", p, probe(p)))
+          # OPTIONS on the tile path often lists allowed methods on small APIs.
+          summary.append(("auth", "OPTIONS", "/tiles/sheep-city", probe("/tiles/sheep-city", method="OPTIONS")))
+
+          print("=" * 78)
+          print("SUMMARY (label method path -> status)")
+          for label, method, path, status in summary:
+              print(f"  {label:7} {method:7} {path:32} -> {status}")
+
+          step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if step_summary:
+              with open(step_summary, "a") as fh:
+                  fh.write(f"## Garage discovery against `{base}`\n\n| auth | method | path | status |\n|---|---|---|---|\n")
+                  for label, method, path, status in summary:
+                      fh.write(f"| {label} | {method} | `{path}` | {status} |\n")

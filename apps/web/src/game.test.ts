@@ -18,14 +18,16 @@ describe('Game', () => {
     g.frame(0);
     expect(g.dispatch({ type: 'setWeather', weather: 'rain' }).sim).toBe(true);
     expect(g.dispatch({ type: 'pet', target: 'luna' }).sim).toBe(true);
-    expect(g.dispatch({ type: 'sheepAction', action: 'rest', target: 'sheep-1' }).sim).toBe(false);
-    expect(g.log.map((r) => r.intent.type)).toEqual(['setWeather', 'pet', 'sheepAction']);
+    expect(g.dispatch({ type: 'farmAction', action: 'coins' }).sim).toBe(true);
+    expect(g.dispatch({ type: 'farmAction', action: 'bird' }).sim).toBe(false);
+    expect(g.log.map((r) => r.intent.type)).toEqual(['setWeather', 'pet', 'farmAction', 'farmAction']);
     // the weather lands at the next tick boundary (100 ms of sim time)
     expect(g.frame(50).weather).toBe('sun');
     expect(g.frame(100).weather).toBe('rain');
-    // and DL got her heart from the sim, not from a cue
+    // DL got her heart and the farm its coins in the sim, not from a cue
     expect(g.current().luna.icon).toBe('heart');
-    expect(g.reactions.cues.map((c) => c.target)).toEqual(['sheep-1']);
+    expect(g.sim.banks.coins).toBe(50 - 12 - 30); // the auto-buy took the flowerbed and hay2 at once, as the prototype's action does
+    expect(g.reactions.cues).toEqual([]);
   });
 
   it('steps the sim on the fixed 100 ms accumulator, one tick per boundary', () => {
@@ -40,13 +42,15 @@ describe('Game', () => {
     expect(g.renderNow).toBeCloseTo(g.sim.clock.nowMs + g.sim.accumulatorMs);
   });
 
-  it('shows a cue at once for a verb the sim cannot do yet', () => {
-    const g = new Game({ seed: 1, liveWeather: false });
+  it('holds a verb the sim cannot do yet: logged, not queued, the world untouched', () => {
+    const g = new Game({ seed: 1, liveWeather: false, boot: [{ type: 'setWeather', weather: 'sun' }] });
     g.frame(1000);
-    g.dispatch({ type: 'sheepAction', action: 'graze', target: 'sheep-1' });
-    const v = g.frame(FRAME);
-    expect(v.sheep[1]?.icon).toBe('bang');
-    expect(v.sheep[1]?.tagUntil).toBeGreaterThan(g.renderNow);
+    const before = g.sim;
+    expect(g.dispatch({ type: 'farmAction', action: 'bird' }).sim).toBe(false);
+    g.frame(FRAME);
+    expect(g.sim.pendingIntents).toEqual([]);
+    expect(g.sim.life.bird).toBe(before.life.bird);
+    expect(g.log.at(-1)?.intent).toEqual({ type: 'farmAction', action: 'bird' });
   });
 
   it('reports moments on transitions only, from the sim', () => {

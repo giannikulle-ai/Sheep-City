@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cloneState, createInitialState, SHEEP_SIZE } from '@sheepcliff/sim';
+import { cloneState, createInitialState } from '@sheepcliff/sim';
 import { describeIntent, sheepId, sheepIndex, simUnderstands, targetName, toSimIntents, type ClientIntent } from './intents';
 
 const NAMES = ['Clover', 'Daisy'];
@@ -13,42 +13,33 @@ describe('toSimIntents', () => {
     expect(toSimIntents({ type: 'setPeriod', periodSec: 60 })).toEqual([{ type: 'setPeriod', periodSec: 60 }]);
   });
 
-  it("turns a tap into the sim's click at the tapped point", () => {
-    expect(toSimIntents({ type: 'pet', target: 'sheep-0', at: { x: 150, y: 238 } })).toEqual([{ type: 'click', x: 150, y: 238 }]);
-    expect(toSimIntents({ type: 'shear', target: 'sheep-3', at: { x: 10, y: 20 } })).toEqual([{ type: 'click', x: 10, y: 20 }]);
-    expect(toSimIntents({ type: 'pet', target: 'luna', at: { x: 140, y: 300 } })).toEqual([{ type: 'click', x: 140, y: 300 }]);
+  it("passes the tap and tray verbs through under the sim's own names", () => {
+    expect(toSimIntents({ type: 'pet', target: 'luna' })).toEqual([{ type: 'pet', target: 'luna' }]);
+    expect(toSimIntents({ type: 'pet', target: 'flock' })).toEqual([{ type: 'pet', target: 'flock' }]);
+    expect(toSimIntents({ type: 'shear', target: 'flock' })).toEqual([{ type: 'shear', target: 'flock' }]);
     expect(toSimIntents({ type: 'throwStick', x: 300, y: 250 })).toEqual([{ type: 'throwStick', x: 300, y: 250 }]);
+    expect(toSimIntents({ type: 'dlAction', action: 'flop' })).toEqual([{ type: 'dlAction', action: 'flop' }]);
+    expect(toSimIntents({ type: 'dlAction', action: 'bed' })).toEqual([{ type: 'dlAction', action: 'bed' }]);
+    expect(toSimIntents({ type: 'sheepAction', action: 'lamb', target: 'flock' })).toEqual([{ type: 'sheepAction', action: 'lamb', target: 'flock' }]);
+    expect(toSimIntents({ type: 'farmAction', action: 'merchant' })).toEqual([{ type: 'farmAction', action: 'merchant' }]);
+    expect(toSimIntents({ type: 'farmAction', action: 'rabbit' })).toEqual([{ type: 'farmAction', action: 'rabbit' }]);
+    expect(toSimIntents({ type: 'farmAction', action: 'coins' })).toEqual([{ type: 'farmAction', action: 'coins' }]);
   });
 
-  it("turns a tray verb for one sheep into a click at that sheep's centre, or holds it in the barn", () => {
+  it("resolves a chip's sheep-<index> to the sim's actor id, and keeps it when there is no state", () => {
     const sim = cloneState(createInitialState(1));
     const s = sim.sheep[2];
     if (!s) throw new Error('no sheep');
-    const centre = { type: 'click', x: s.x + SHEEP_SIZE.w / 2, y: s.y + SHEEP_SIZE.h / 2 };
-    expect(toSimIntents({ type: 'pet', target: 'sheep-2' }, sim)).toEqual([centre]);
-    expect(toSimIntents({ type: 'shear', target: 'sheep-2' }, sim)).toEqual([centre]);
-    s.inBarn = true;
-    expect(toSimIntents({ type: 'pet', target: 'sheep-2' }, sim)).toEqual([]);
-    expect(toSimIntents({ type: 'pet', target: 'sheep-7' }, sim)).toEqual([]);
-    expect(toSimIntents({ type: 'pet', target: 'sheep-2' })).toEqual([]);
-  });
-
-  it("maps DL's verbs, the flock's, and the farm's to the sim's own names", () => {
-    expect(toSimIntents({ type: 'pet', target: 'luna' })).toEqual([{ type: 'lunaAction', action: 'pet' }]);
-    expect(toSimIntents({ type: 'dlAction', action: 'flop' })).toEqual([{ type: 'lunaAction', action: 'flop' }]);
-    expect(toSimIntents({ type: 'dlAction', action: 'bed' })).toEqual([{ type: 'lunaAction', action: 'bed' }]);
-    expect(toSimIntents({ type: 'pet', target: 'flock' })).toEqual([{ type: 'farmAction', action: 'petAll' }]);
-    expect(toSimIntents({ type: 'shear', target: 'flock' })).toEqual([{ type: 'farmAction', action: 'shearAll' }]);
-    expect(toSimIntents({ type: 'sheepAction', action: 'lamb', target: 'flock' })).toEqual([{ type: 'farmAction', action: 'lamb' }]);
-    expect(toSimIntents({ type: 'farmAction', action: 'merchant' })).toEqual([{ type: 'farmAction', action: 'merchant' }]);
-    expect(toSimIntents({ type: 'farmAction', action: 'rabbit' })).toEqual([{ type: 'farmAction', action: 'rabbitOnly' }]);
-    expect(toSimIntents({ type: 'farmAction', action: 'coins' })).toEqual([{ type: 'farmAction', action: 'coins' }]);
+    s.id = 'sheep-7'; // the sim numbers by birth, chips by position; the sim's id wins
+    expect(toSimIntents({ type: 'pet', target: 'sheep-2' }, sim)).toEqual([{ type: 'pet', target: 'sheep-7' }]);
+    expect(toSimIntents({ type: 'shear', target: 'sheep-2' }, sim)).toEqual([{ type: 'shear', target: 'sheep-7' }]);
+    expect(toSimIntents({ type: 'sheepAction', action: 'rest', target: 'sheep-2' }, sim)).toEqual([{ type: 'sheepAction', action: 'rest', target: 'sheep-7' }]);
+    expect(toSimIntents({ type: 'pet', target: 'sheep-2' })).toEqual([{ type: 'pet', target: 'sheep-2' }]);
+    expect(toSimIntents({ type: 'pet', target: 'sheep-9' }, sim)).toEqual([{ type: 'pet', target: 'sheep-9' }]);
   });
 
   it('holds the verbs the sim has no rule for yet', () => {
     const held: ClientIntent[] = [
-      { type: 'sheepAction', action: 'graze', target: 'sheep-0' },
-      { type: 'sheepAction', action: 'rest', target: 'sheep-1' },
       { type: 'farmAction', action: 'bird' },
       { type: 'farmAction', action: 'reset' },
     ];

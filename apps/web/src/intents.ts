@@ -1,23 +1,16 @@
 // Client intents: everything a tap or a tray button can ask of the world. The client never
 // changes the world itself; it sends one of these, and the sim decides what happens.
 //
-// `toSimIntents` turns each one into the sim's own intents (packages/sim/src/intents.ts). Most map
-// one to one. A tap carries its world point and becomes the sim's `click`, which hit-tests exactly
-// as the prototype's click handler did (DL first, then sheep, then grass). A tray verb for one
-// sheep has no point, so it becomes a `click` at that sheep's sprite centre. The sim has no rule
-// yet for a task on one sheep (graze, rest, ...: its actions are flock-wide, as the prototype's
-// were), the bird, or reset; those return no sim intent, the client shows a cue, and the status
-// line says "waiting for the sim". Issue #25 tracks the sim half.
-import { SHEEP_SIZE, type Intent, type SeasonName, type SimState, type WeatherKind } from '@sheepcliff/sim';
+// Since #25 the sim's `Intent` union carries these under the client's own names (`pet`, `shear`,
+// `throwStick`, `dlAction`, `sheepAction`, `farmAction`), so `toSimIntents` passes them straight
+// through; the client only resolves its `sheep-<index>` chip ids to the sim's actor ids. Two verbs
+// still have no sim rule: the bird (not ported yet, #33) and reset (a new world, which the client
+// makes itself). Those return no sim intent and the status line says "waiting for the sim".
+import type { Intent, SeasonName, SimState, WeatherKind } from '@sheepcliff/sim';
 
 export type SheepId = `sheep-${number}`;
 /** Who a verb is for: Digital Luna, one sheep, or the whole flock. */
 export type Target = 'luna' | SheepId | 'flock';
-
-export interface WorldPoint {
-  x: number;
-  y: number;
-}
 
 /** The prototype's `dlAction` ids plus the two ACTIONS-only entries (`trundle`, `bed`). */
 export const DL_ACTIONS = ['sit', 'tilt', 'pant', 'run', 'stick', 'nibble', 'flop', 'sleep', 'stretch', 'ride', 'rabbit', 'come', 'trundle', 'bed'] as const;
@@ -32,9 +25,8 @@ export const FARM_ACTIONS = ['farmer', 'merchant', 'bird', 'rabbit', 'coins', 'r
 export type FarmAction = (typeof FARM_ACTIONS)[number];
 
 export type ClientIntent =
-  /** `at` is the tapped world point when the verb came from a tap; a tray button has none */
-  | { type: 'pet'; target: Target; at?: WorldPoint }
-  | { type: 'shear'; target: SheepId | 'flock'; at?: WorldPoint }
+  | { type: 'pet'; target: Target }
+  | { type: 'shear'; target: SheepId | 'flock' }
   | { type: 'throwStick'; x: number; y: number }
   | { type: 'dlAction'; action: DlAction }
   | { type: 'sheepAction'; action: SheepAction; target: SheepId | 'flock' }
@@ -57,20 +49,21 @@ export function sheepIndex(target: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
-/** The world point a `click` on this sheep lands on: its sprite centre, or null when it is in the barn. */
-function sheepCentre(sim: SimState | null, target: string): WorldPoint | null {
+/**
+ * The sim's actor id for a client target. Chips are numbered by position in the flock and the
+ * sim numbers sheep by birth order; the two agree today, but the sim's id is the truth, so it is
+ * read from the state when there is one. A chip with no sheep behind it keeps its name and the
+ * sim ignores it.
+ */
+function simTarget<T extends string>(sim: SimState | null, target: T): T | string {
   const i = sheepIndex(target);
-  const s = i === null ? undefined : sim?.sheep[i];
-  if (!s || s.inBarn) return null;
-  return { x: s.x + SHEEP_SIZE.w / 2, y: s.y + SHEEP_SIZE.h / 2 };
+  if (i === null || !sim) return target;
+  return sim.sheep[i]?.id ?? target;
 }
-
-const click = (p: WorldPoint): Intent => ({ type: 'click', x: p.x, y: p.y });
 
 /**
  * The sim intents a client intent becomes today. Empty means the sim has no rule for it yet;
- * the client keeps it in its log and shows a cue instead. `sim` resolves a sheep target to a
- * point for the sim's click; without it (or with the sheep in the barn) the verb is held.
+ * the client keeps it in its log and shows a cue instead.
  */
 export function toSimIntents(intent: ClientIntent, sim: SimState | null = null): Intent[] {
   switch (intent.type) {
@@ -84,40 +77,20 @@ export function toSimIntents(intent: ClientIntent, sim: SimState | null = null):
       return [{ type: 'pauseClock', paused: intent.paused }];
     case 'setPeriod':
       return [{ type: 'setPeriod', periodSec: intent.periodSec }];
-    case 'pet': {
-      if (intent.at) return [click(intent.at)];
-      if (intent.target === 'luna') return [{ type: 'lunaAction', action: 'pet' }];
-      if (intent.target === 'flock') return [{ type: 'farmAction', action: 'petAll' }];
-      const p = sheepCentre(sim, intent.target);
-      return p ? [click(p)] : [];
-    }
-    case 'shear': {
-      if (intent.at) return [click(intent.at)];
-      if (intent.target === 'flock') return [{ type: 'farmAction', action: 'shearAll' }];
-      const p = sheepCentre(sim, intent.target);
-      return p ? [click(p)] : [];
-    }
+    case 'pet':
+      return [{ type: 'pet', target: simTarget(sim, intent.target) }];
+    case 'shear':
+      return [{ type: 'shear', target: simTarget(sim, intent.target) }];
     case 'throwStick':
       return [{ type: 'throwStick', x: intent.x, y: intent.y }];
     case 'dlAction':
-      return [{ type: 'lunaAction', action: intent.action }];
+      return [{ type: 'dlAction', action: intent.action }];
     case 'sheepAction':
-      // the sim's sheep actions are flock-wide, as the prototype's ACTIONS were
-      return intent.target === 'flock' ? [{ type: 'farmAction', action: intent.action }] : [];
+      return [{ type: 'sheepAction', action: intent.action, target: simTarget(sim, intent.target) }];
     case 'farmAction':
-      switch (intent.action) {
-        case 'farmer':
-        case 'merchant':
-        case 'coins':
-          return [{ type: 'farmAction', action: intent.action }];
-        case 'rabbit':
-          return [{ type: 'farmAction', action: 'rabbitOnly' }];
-        case 'bird':
-        case 'reset':
-          // no bird in the sim yet; reset is a new world, which the client makes itself
-          return [];
-      }
-      return [];
+      // no bird in the sim yet (#33); reset is a new world, which the client makes itself
+      if (intent.action === 'bird' || intent.action === 'reset') return [];
+      return [{ type: 'farmAction', action: intent.action }];
     default: {
       const never: never = intent;
       throw new Error(`unknown intent ${JSON.stringify(never)}`);

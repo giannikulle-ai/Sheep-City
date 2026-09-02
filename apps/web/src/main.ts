@@ -262,8 +262,6 @@ async function main(): Promise<void> {
     const hit = hitTest(view, wx, wy, sizes);
     const intent = tapIntent(view, hit);
     if (!intent) return;
-    // the tap point goes with the verb, so the sim hit-tests exactly where the finger landed
-    if (intent.type === 'pet' || intent.type === 'shear') intent.at = { x: wx, y: wy };
     send(intent);
     if (hit.kind === 'luna') tray.select('luna');
     if (hit.kind === 'sheep') tray.select(`sheep-${hit.index}`);

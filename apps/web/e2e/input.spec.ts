@@ -79,8 +79,8 @@ test.describe('portrait phone', () => {
 
     const intents = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.intents.map((r) => ({ ...r.intent, sim: r.sim })));
     expect(intents).toHaveLength(3);
-    expect(intents[0]).toMatchObject({ type: 'pet', target: 'sheep-0', sim: true });
-    expect(intents[1]).toMatchObject({ type: 'pet', target: 'luna', sim: true });
+    expect(intents[0]).toEqual({ type: 'pet', target: 'sheep-0', sim: true });
+    expect(intents[1]).toEqual({ type: 'pet', target: 'luna', sim: true });
     expect(intents[2]).toMatchObject({ type: 'throwStick', sim: true });
     const stick = intents[2] as { x: number; y: number };
     expect(Math.abs(stick.x - 320)).toBeLessThan(2);
@@ -113,22 +113,23 @@ test.describe('portrait phone', () => {
     await open(page);
     await page.locator('#who button[data-who="sheep-2"]').click();
     await page.locator('#verbs button[data-verb="rest"]').click();
-    await expect(page.locator('#say')).toHaveClass(/waiting/);
-    await page.locator('#who button[data-who="flock"]').click();
-    await page.locator('#verbs button[data-verb="rest"]').click();
+    await expect(page.locator('#say')).not.toHaveClass(/waiting/);
+    // Biscuit lay down in the sim (by day a resting sheep gets up again on a roll, so look at once)
+    await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().sheep[2]?.resting)).toBe(true);
     await page.locator('#who button[data-who="luna"]').click();
     await page.locator('#verbs button[data-verb="flop"]').click();
+    await page.locator('#who button[data-who="farm"]').click();
+    await page.locator('#verbs button[data-verb="bird"]').click();
+    await expect(page.locator('#say')).toHaveClass(/waiting/);
     await page.locator('#who button[data-who="sky"]').click();
     await page.locator('#verbs button[data-verb="rain"]').click();
     const intents = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.intents.map((r) => ({ ...r.intent, sim: r.sim })));
     expect(intents).toEqual([
-      { type: 'sheepAction', action: 'rest', target: 'sheep-2', sim: false },
-      { type: 'sheepAction', action: 'rest', target: 'flock', sim: true },
+      { type: 'sheepAction', action: 'rest', target: 'sheep-2', sim: true },
       { type: 'dlAction', action: 'flop', sim: true },
+      { type: 'farmAction', action: 'bird', sim: false },
       { type: 'setWeather', weather: 'rain', sim: true },
     ]);
-    // the flock lay down (by day a resting sheep gets up again on a roll, so any still down proves it) and DL flopped, in the sim
-    await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().sheep.some((s) => s.resting))).toBe(true);
     await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().luna.anim)).toBe('flop');
     await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.view().weather)).toBe('rain');
     await expect

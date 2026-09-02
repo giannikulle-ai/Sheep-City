@@ -1,6 +1,8 @@
 # Garage API discovery (issue #12).
 #
-# Manually triggered. Calls The Garage (lab.sheepcliff.com) with the
+# Triggered manually, or automatically on any push that changes this file
+# (so it can be iterated on a lane branch before it exists on the trunk,
+# where workflow_dispatch becomes available). Calls The Garage (lab.sheepcliff.com) with the
 # GARAGE_TOKEN repository secret and prints, for each probed path, the HTTP
 # status, response headers, and the first 4 KB of the body, so the upload API
 # can be written from what the lab actually answers rather than guessed.
@@ -12,6 +14,9 @@
 name: garage-discover
 
 on:
+  push:
+    paths:
+      - ".github/workflows/garage-discover.yml"
   workflow_dispatch:
     inputs:
       extra_paths:
@@ -33,8 +38,8 @@ jobs:
     timeout-minutes: 10
     env:
       GARAGE_TOKEN: ${{ secrets.GARAGE_TOKEN }}
-      BASE_URL: ${{ inputs.base_url }}
-      EXTRA_PATHS: ${{ inputs.extra_paths }}
+      BASE_URL: ${{ inputs.base_url || 'https://lab.sheepcliff.com' }}
+      EXTRA_PATHS: ${{ inputs.extra_paths || '' }}
     steps:
       - name: Check that GARAGE_TOKEN is set
         run: |

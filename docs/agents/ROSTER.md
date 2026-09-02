@@ -12,7 +12,9 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | world | done | session_016yv8aPqYXfRfWNuFCyBiQS | #10 farm content, merged as PR #15 | 2026-09-02 |
 | sim | done | session_01RNhjEJp3aB7MZj9NRYpDeh | #4 clock, RNG, step, merged as PR #18 (Verifier session_01ChUNxEUTH453EE89FtFTGn approved) | 2026-09-02 |
 | sim | done | session_01Y8mRE88YxpXSCaE4dv8foL | #5 part a: registry and DL chain, merged as PR #23 after the owner's pin (fix workers session_01NV8mL9L7nchRpJ1N8ySjBZ and session_01Ki5ZREZCkJ6eqBHBqsaaSt) | 2026-09-02 |
-| sim | in review | session_01UHyCUx8NRHHoBXzGVTHEiq | #5 part b: sheep, lambs, NPCs, PR #26; Verifier session_012nbMWpRbm7RxGEB1oM1EQU approved, owner pinned okay; worker session_01HdMizhyRarxe8Wxa6jWBQS merging base with save v3 | 2026-09-02 |
+| sim | done | session_01UHyCUx8NRHHoBXzGVTHEiq | #5 part b: sheep, lambs, NPCs, merged as PR #26 after the owner's pin (Verifier session_012nbMWpRbm7RxGEB1oM1EQU; merge worker session_01HdMizhyRarxe8Wxa6jWBQS) | 2026-09-02 |
+| sim | active | session_018purx56Sqfu5RbqPFvLyoQ | #25 player intents applied by the sim | 2026-09-02 |
+| sim | active | session_01Y9Qsy4i5yNo4fZUJZCJALL | #27 registry hot path and bench bar | 2026-09-02 |
 | sim | done | session_01QRszNSGVx7TZV97ud6uZwn | #8 save v1, merged as PR #22 (Verifier session_01MKos2vVS14sLaH3N4dWKoD approved) | 2026-09-02 |
 | client | done | session_01BzngZosAW3AvFAP4XMhC1A | #6 renderer port, merged as PR #19 (Verifier session_013uNxpKjNWXAVSXaAJs7zDr; Foreman resolved a spec-name collision with #21) | 2026-09-02 |
 | client | in review | session_01M7oHrnRiqrvqwGM7aWZ1JP | #7 input and pin overlay, PR #24; Verifier approved, owner pinned okay; fix worker session_01Q7HsUjbWsdCM89DZwhrbqN applying three nits, then merge | 2026-09-02 |
@@ -22,9 +24,9 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 Budget tier: Standard (about four lanes), set 2026-09-02.
 
 ## Phase 0 ticket order
-#2 scaffold (landed) → #4 clock/RNG (landed) → #5 behaviour registry (part a active, part b next) and #8 save v1 (landed)
+#2 scaffold (landed) → #4 clock/RNG (landed) → #5 behaviour registry (both parts landed) and #8 save v1 (landed)
 #2 scaffold (landed) → #6 renderer (landed) → #7 input and pin overlay (active); #9 watch test (landed)
 #3 art pipeline (landed) → #11 palette and ownership checks (landed; CI now enforces lane paths)
 #10 farm content (landed)
 #12 Garage deploy from GitHub Actions (landed; LIVE at https://sheep-city.sheepcliff.com serving the v31 prototype until the owner pins the port)
-#25 sim player intents (queued; starts after #23 and #26 merge)
+#25 sim player intents (active) and #27 sim perf (active), both after #5

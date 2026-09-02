@@ -27,8 +27,10 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | infra | done | session_017tkbiMa17hfXxX8Npx71TT | #38 sheep-city tile swap, PR #50 merged by the owner 21:37 UTC; both tiles serve the app | 2026-09-02 |
 | world | done | session_01CevVn4SyV2V83qBWBgDeyq | #41 farm event deck, merged as PR #52 | 2026-09-02 |
 | art | done | session_01Q47K68B53zVR6UFSQfpzLJ | #47 crow brief and frames, PR #53 merged by the owner 22:07 UTC (the pin; Verifier session_01WUXF4oyVKuAY2XN4sFhzVr) | 2026-09-02 |
-| sim | active | session_01KvdHVJrPpHcy7fN9XctWFo | #39 Ledger and catch-up beyond one day | 2026-09-02 |
-| client | active | session_01RLbJ7BSan8mt2pBH5DM11Q | #20 jump-to dawn and dusk outside the crossfade band | 2026-09-02 |
+| sim | done | session_01KvdHVJrPpHcy7fN9XctWFo | #39 Ledger, PR #57 merged by the owner 23:05 UTC before a Verifier pass; post-merge audit by an Opus Verifier (see below) | 2026-09-02 |
+| client | done | session_01RLbJ7BSan8mt2pBH5DM11Q | #20 jump-to dawn and dusk, PR #56 merged by the owner 23:05 UTC | 2026-09-02 |
+| sim | active (Opus) | session_01Rwt7bfLwfMgVJifDib5pVA | #40 Director with a pacing curve and deck runner | 2026-09-02 |
+| verifier | active (Opus) | session_01FamLoXMbsgSSLwowPTo5kk | post-merge audit of PR #57 (Ledger) on trunk; findings become sim issues | 2026-09-02 |
 | economy | not started | — | Phase 2 | — |
 
 Budget tier: Standard (about four lanes), set 2026-09-02.
@@ -51,7 +53,7 @@ Passed 2026-09-02 21:22 UTC: the owner merged PR #34 (real sim in the app at v31
 
 ## Phase 1 ticket order
 Landed: #41 world event deck (PR #52), #47 art crows (PR #53, pinned). Running: #39 sim Ledger. Queued client: #55 (wall-clock poll in the tray-verbs e2e) after #20.
-Sim order: #39 sim Ledger (running), #40 sim Director, #45 sim social behaviours, #43 sim deity intents (one or two sim workers at a time; the save version bump is shared, so the second merges trunk before its PR).
+Sim order: #39 sim Ledger (landed as PR #57), #40 sim Director (running on Opus), #45 sim social behaviours, #43 sim deity intents (one or two sim workers at a time; the save version bump is shared, so the second merges trunk before its PR).
 After #39 and #40: #42 client storybook (owner pin), #48 sim crows.
 After #43: #44 client deity powers UX (owner pin).
 After #45: #46 art social frames (owner pin).

@@ -13,7 +13,7 @@
   "scripts": {
     "dev": "npm run dev -w apps/web",
     "build": "npm run build -w apps/web",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && node --test \"tools/ci/*.test.mjs\"",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "e2e": "npm run e2e -w apps/web",
     "deploy": "tools/deploy/deploy.sh"

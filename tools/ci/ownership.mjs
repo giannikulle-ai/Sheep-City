@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Lane ownership check: every path a PR changes must sit inside the "Owns (paths)" globs of the
-// lane named in the PR title, unless the PR body carries an `ownership-exception:` line.
+// lane named in the PR title, unless the PR body carries an `ownership-exception: <reason>` line
+// (bare, as a Markdown list item, or bold; see EXCEPTION_LINE).
 //
 // Lane = the word before the first colon in the PR title ("art: move the pipeline" -> art).
 // Globs = every backtick-quoted pattern in the "## Owns (paths)" section of
@@ -22,7 +23,10 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
-const EXCEPTION_PREFIX = "ownership-exception:";
+// One line of the PR body, trimmed. Accepts the bare form and the ways a worker writes it in
+// Markdown: a leading list marker (`-`, `*`, `+`, or `1.`/`1)`), and `**` or `__` bold around the
+// key or around the whole line (PR #32 wrote "- ownership-exception: ..." and got no credit).
+const EXCEPTION_LINE = /^(?:(?:[-*+]|\d+[.)])\s+)?(?:\*\*|__)?\s*ownership-exception:\s*(.*)$/i;
 
 export function laneFromTitle(title) {
   const m = /^\s*([A-Za-z0-9_-]+)\s*:/.exec(title || "");
@@ -78,10 +82,11 @@ export function isOwned(file, globs) {
 
 export function exceptionReason(body) {
   for (const raw of (body || "").split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line.toLowerCase().startsWith(EXCEPTION_PREFIX)) {
-      return line.slice(EXCEPTION_PREFIX.length).trim() || "(no reason given)";
-    }
+    const m = EXCEPTION_LINE.exec(raw.trim());
+    if (!m) continue;
+    // Drop a bold close right after the key ("**ownership-exception:** reason") or at the end.
+    const reason = m[1].replace(/^(?:\*\*|__)/, "").replace(/(?:\*\*|__)$/, "").trim();
+    return reason || "(no reason given)";
   }
   return null;
 }

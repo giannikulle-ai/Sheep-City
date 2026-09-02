@@ -17,6 +17,7 @@ on:
   push:
     branches:
       - claude/sheepcliff-civilization-framework-bkgla5   # trunk until main exists
+      - lane/infra/29-second-tile   # TEMPORARY: test the matrix from the lane branch; removed before the PR
     paths-ignore:
       - "docs/**"
       - "**.md"

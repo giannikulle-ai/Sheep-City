@@ -142,6 +142,8 @@ sheep-city/
 
 **Content.** Data files with JSON schemas. A new event or building is a data PR with a Low gate. A new creature is data plus art, High gate.
 
+**Deploy target.** The Garage (lab.sheepcliff.com), tile `sheep-city`, served at sheep-city.sheepcliff.com. Deploys authenticate with a bearer token read from the `GARAGE_TOKEN` environment variable. The exact upload API is documented in `docs/DEPLOY.md` once observed.
+
 **Persistence.** Versioned save in localStorage plus an export-as-text fallback (downloads may be blocked). Every schema change ships a migration and a fixture test. Phase 3 adds an optional server: a Node worker runs the same sim package, the client sends intents and receives state deltas over WebSocket, and the world stays alive while everyone is away.
 
 **Quality bar in CI.** Typecheck, unit tests, determinism test, art frame build, palette diff (zero new colours unless declared), lane ownership check, bundle size budget, Playwright smoke, golden screenshots at four phases by two weathers, and the watch test.
@@ -266,6 +268,6 @@ Answer in one comment whenever convenient; the defaults are the assumptions in s
 
 1. Confirm A1 to A8 or correct them.
 2. Budget tier: Lean, confirmed 2026-09-02.
-3. The live dev environment: host and how a static build gets there, so ticket 1 can deploy.
+3. The live dev environment: answered 2026-09-02. Builds deploy to the owner's private lab, The Garage, at lab.sheepcliff.com, tile `sheep-city`, live at sheep-city.sheepcliff.com. The Garage token lives only in the environment configuration, never in the repo. Agent sessions need lab.sheepcliff.com and sheep-city.sheepcliff.com on the environment's network allowlist.
 4. Whether you want the two missing Sheepcliff artifacts folded in (attach them like the zip).
 5. Deity powers: weather first, then direct per-inhabitant actions. No pick-up-and-move. Confirmed 2026-09-02.

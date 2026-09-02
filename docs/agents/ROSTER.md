@@ -13,7 +13,7 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | sim | done | session_01RNhjEJp3aB7MZj9NRYpDeh | #4 clock, RNG, step, merged as PR #18 (Verifier session_01ChUNxEUTH453EE89FtFTGn approved) | 2026-09-02 |
 | sim | done | session_01Y8mRE88YxpXSCaE4dv8foL | #5 part a: registry and DL chain, merged as PR #23 after the owner's pin (fix workers session_01NV8mL9L7nchRpJ1N8ySjBZ and session_01Ki5ZREZCkJ6eqBHBqsaaSt) | 2026-09-02 |
 | sim | done | session_01UHyCUx8NRHHoBXzGVTHEiq | #5 part b: sheep, lambs, NPCs, merged as PR #26 after the owner's pin (Verifier session_012nbMWpRbm7RxGEB1oM1EQU; merge worker session_01HdMizhyRarxe8Wxa6jWBQS) | 2026-09-02 |
-| sim | active | session_018purx56Sqfu5RbqPFvLyoQ | #25 player intents applied by the sim | 2026-09-02 |
+| sim | in review | session_018purx56Sqfu5RbqPFvLyoQ | #25 player intents, PR #30 open, Verifier spawned | 2026-09-02 |
 | sim | active | session_01Y9Qsy4i5yNo4fZUJZCJALL | #27 registry hot path and bench bar | 2026-09-02 |
 | sim | done | session_01QRszNSGVx7TZV97ud6uZwn | #8 save v1, merged as PR #22 (Verifier session_01MKos2vVS14sLaH3N4dWKoD approved) | 2026-09-02 |
 | client | done | session_01BzngZosAW3AvFAP4XMhC1A | #6 renderer port, merged as PR #19 (Verifier session_013uNxpKjNWXAVSXaAJs7zDr; Foreman resolved a spec-name collision with #21) | 2026-09-02 |
@@ -35,3 +35,6 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 
 ## Phase 0 exit
 All ten tickets landed 2026-09-02. Exit gate: #28 client runs the real sim at parity (owner pin) on the second tile from #29; then the sheep-city tile swaps from the prototype to the app.
+
+## Health note 2026-09-02 19:05 UTC
+Every worker session reports the account's five-hour usage window as exhausted (rate limit status rejected, overage on, resets 20:20 UTC). Workers #27, #28, #29 may stall until then. No action in the repo; the owner decides whether to raise the plan's limit.

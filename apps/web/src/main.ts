@@ -143,6 +143,14 @@ async function main(): Promise<void> {
    * ten sim-minutes"), gets a page: the chronicle for exactly the gap it ran, selected and shown.
    * Stored either way once built — pages are never dropped — and shown at once. A gap with nothing
    * in the chronicle for it gets no page: the storybook only tells.
+   *
+   * The page keeps every entry of its gap: `lineCountFor(awayMs)` of them on the card and the rest
+   * behind "and N more" (`buildStorybookPage`). It has to — the window below is exclusive of the
+   * previous gap's closing instant, so no later window can ever reach these entries again, and an
+   * entry this page does not keep is told by nothing, ever (verdict round 3, S3).
+   *
+   * The page's subtitle says the same gap in both clocks — the real time away and the farm days it
+   * covered — from these same bounds and the world's own day length (`worldDaysBetween`).
    */
   function tellGap(state: SimState, before: { clock: { nowMs: number } }, after: { clock: { nowMs: number } }, awayMs: number): void {
     if (awayMs < storybookGateMs(state.clock.periodSec)) return;

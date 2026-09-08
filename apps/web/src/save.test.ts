@@ -10,7 +10,9 @@ const somePage: StorybookPage = {
   awayMs: 4000,
   fromMs: 0,
   toMs: 4000,
+  worldDays: 40,
   lines: [{ entryId: 'c0', line: '3 wool banked', picture: 'wool' }],
+  more: [{ entryId: 'c1', line: 'the weather turned rain', picture: 'weather-rain' }],
 };
 
 describe('save text', () => {

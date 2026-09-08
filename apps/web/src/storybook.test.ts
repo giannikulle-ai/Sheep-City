@@ -6,6 +6,11 @@ import {
   buildStorybookPage,
   EMPTY_PAGE_STORE,
   gapSpansNight,
+  LINE_COUNT_STEPS,
+  lineCountFor,
+  MAX_PAGE_LINES,
+  MAX_STORED_MORE,
+  MIN_PAGE_LINES,
   pagedEntryIds,
   pageId,
   pagesNewestFirst,
@@ -15,6 +20,8 @@ import {
   storybookGateMs,
   STORYBOOK_GATE_SIM_MINUTES,
   unseenEntries,
+  worldDaysBetween,
+  worldTimeLabel,
   type PageStore,
   type StorybookPage,
 } from './storybook';
@@ -237,7 +244,9 @@ describe('buildStorybookPage', () => {
       awayMs: 2 * 24 * 3600_000,
       fromMs: 0,
       toMs: 1000,
+      worldDays: 1000 / 180_000, // the gap's own bounds through the world's day length
       lines: [{ entryId: 'c1', line: '3 wool banked', picture: 'wool' }],
+      more: [],
     });
   });
 
@@ -255,6 +264,7 @@ describe('pagedEntryIds / unseenEntries', () => {
     fromMs: 0,
     toMs: 1000,
     lines: entryIds.map((entryId) => ({ entryId, line: entryId, picture: 'wool' })),
+    more: [],
   });
 
   it('collects every entry id told across every stored page', () => {
@@ -284,6 +294,7 @@ describe('page store', () => {
     fromMs: 0,
     toMs: 1000,
     lines: [{ entryId: 'c0', line: 'x', picture: 'wool' }],
+    more: [],
   });
 
   it('never drops or overwrites a stored page', () => {
@@ -310,5 +321,170 @@ describe('page store', () => {
     expect(parsePageStore('nope')).toEqual({});
     expect(parsePageStore({ bad: { id: 'bad' } })).toEqual({});
     expect(parsePageStore({ bad: 5, good: page('good', 1) })).toEqual({ good: page('good', 1) });
+  });
+});
+
+describe('lineCountFor', () => {
+  const DAY = 24 * 3600_000;
+
+  it('holds the floor for anything up to a day away', () => {
+    expect(lineCountFor(0)).toBe(MIN_PAGE_LINES); // a page that opens at all shows the floor
+    expect(lineCountFor(60_000)).toBe(5); // a minute
+    expect(lineCountFor(2 * 3600_000)).toBe(5); // the "a night" case: two hours
+    expect(lineCountFor(DAY)).toBe(5); // exactly a day: still the floor
+  });
+
+  it('grows with the absence, step by step', () => {
+    expect(lineCountFor(DAY + 1)).toBe(8); // just past a day
+    expect(lineCountFor(2 * DAY)).toBe(8);
+    expect(lineCountFor(3 * DAY)).toBe(8); // exactly three days
+    expect(lineCountFor(3 * DAY + 1)).toBe(10);
+    expect(lineCountFor(6 * DAY)).toBe(10);
+    expect(lineCountFor(7 * DAY)).toBe(10); // exactly a week, the week itself included
+  });
+
+  it('caps past the last step, however long the absence', () => {
+    expect(lineCountFor(7 * DAY + 1)).toBe(MAX_PAGE_LINES);
+    expect(lineCountFor(30 * DAY)).toBe(12);
+    expect(lineCountFor(365 * DAY)).toBe(12); // a year away still fits a phone
+  });
+
+  it('gives a gap it cannot read the floor, never the cap', () => {
+    // a non-finite or negative gap is no gap at all, so it gets the smallest page, not the largest
+    expect(lineCountFor(Infinity)).toBe(MIN_PAGE_LINES);
+    expect(lineCountFor(NaN)).toBe(MIN_PAGE_LINES);
+    expect(lineCountFor(-DAY)).toBe(MIN_PAGE_LINES);
+  });
+
+  it('never leaves the floor-to-cap band, whatever the gap says', () => {
+    for (const ms of [NaN, -1, -Infinity, 0, 1, DAY, 9 * DAY]) {
+      const n = lineCountFor(ms);
+      expect(n, `gap ${ms}`).toBeGreaterThanOrEqual(MIN_PAGE_LINES);
+      expect(n, `gap ${ms}`).toBeLessThanOrEqual(MAX_PAGE_LINES);
+    }
+  });
+
+  it('reads the step table in order, and every step is inside the band', () => {
+    // the steps are the owner's numbers to move: this checks the shape they have to keep, not the
+    // values themselves (those are asserted case by case above)
+    const ups = LINE_COUNT_STEPS.map((s) => s.upToMs);
+    expect(ups).toEqual([...ups].sort((a, b) => a - b));
+    const counts = LINE_COUNT_STEPS.map((s) => s.lines);
+    expect(counts).toEqual([...counts].sort((a, b) => a - b));
+    for (const s of LINE_COUNT_STEPS) {
+      expect(s.lines).toBeGreaterThanOrEqual(MIN_PAGE_LINES);
+      expect(s.lines).toBeLessThanOrEqual(MAX_PAGE_LINES);
+    }
+  });
+});
+
+describe('a page keeps the rest of its gap', () => {
+  const DAY = 24 * 3600_000;
+  const many = (n: number): ChronicleEntry[] =>
+    Array.from({ length: n }, (_, i) => entry({ id: `c${i}`, line: `line ${i}`, notability: 1 - i / (n * 2) }));
+
+  it('shows the gap\'s share and keeps every other entry in `more`', () => {
+    const page = buildStorybookPage(many(9), 2 * 3600_000, 0, 1000, 5000, 180); // two hours: 5 lines
+    expect(page?.lines.map((l) => l.entryId)).toEqual(['c0', 'c1', 'c2', 'c3', 'c4']);
+    expect(page?.more.map((l) => l.entryId)).toEqual(['c5', 'c6', 'c7', 'c8']);
+  });
+
+  it('shows more of a longer absence, and keeps the remainder either way', () => {
+    const page = buildStorybookPage(many(14), 5 * DAY, 0, 1000, 5000, 180); // five days: 10 lines
+    expect(page?.lines).toHaveLength(10);
+    expect(page?.more.map((l) => l.entryId)).toEqual(['c10', 'c11', 'c12', 'c13']);
+  });
+
+  it('has nothing left over when the gap told no more than it shows', () => {
+    const page = buildStorybookPage(many(3), 2 * 3600_000, 0, 1000, 5000, 180);
+    expect(page?.lines).toHaveLength(3);
+    expect(page?.more).toEqual([]);
+  });
+
+  it('bounds the remainder, and only the remainder', () => {
+    const entries = many(MAX_PAGE_LINES + MAX_STORED_MORE + 20);
+    const page = buildStorybookPage(entries, 30 * DAY, 0, 1000, 5000, 180); // past the last step: 12 lines
+    expect(page?.lines).toHaveLength(MAX_PAGE_LINES);
+    expect(page?.more).toHaveLength(MAX_STORED_MORE);
+    // the shown lines are the most notable ones, in the chronicle's own order — the cap only ever
+    // bites the tail of the remainder
+    expect(page?.lines.map((l) => l.entryId)).toEqual(entries.slice(0, MAX_PAGE_LINES).map((e) => e.id));
+    expect(page?.more[0]?.entryId).toBe('c12');
+  });
+
+  it('counts a kept line as told, so no later page can repeat it', () => {
+    const page = buildStorybookPage(many(8), 2 * 3600_000, 0, 1000, 5000, 180);
+    const store = addPage(EMPTY_PAGE_STORE, page as StorybookPage);
+    expect(pagedEntryIds(store)).toEqual(new Set(['c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7']));
+    expect(unseenEntries(many(8), store)).toEqual([]);
+  });
+
+  it('round-trips the remainder and the world span through the page store', () => {
+    const page = buildStorybookPage(many(8), 2 * 3600_000, 0, 1000, 5000, 180) as StorybookPage;
+    const parsed = parsePageStore(JSON.parse(JSON.stringify(addPage(EMPTY_PAGE_STORE, page))));
+    expect(parsed[page.id]).toEqual(page);
+  });
+
+  it('loads a page saved before either field existed, rather than dropping it', () => {
+    const old = { id: 'p1', title: 'a night', createdAt: 1, awayMs: 1000, fromMs: 0, toMs: 1000, lines: [{ entryId: 'c0', line: 'x', picture: 'wool' }] };
+    const parsed = parsePageStore({ p1: old });
+    expect(parsed['p1']?.lines).toHaveLength(1);
+    expect(parsed['p1']?.more).toEqual([]); // no remainder rather than a failure
+    expect(parsed['p1']?.worldDays).toBeUndefined(); // and no world span invented for it
+  });
+
+  it('drops a malformed remainder without losing the page', () => {
+    const bad = { id: 'p1', title: 'a night', createdAt: 1, awayMs: 1000, fromMs: 0, toMs: 1000, worldDays: 'lots', lines: [{ entryId: 'c0', line: 'x', picture: 'wool' }], more: [{ entryId: 5 }, { entryId: 'c1', line: 'y', picture: 'wool' }] };
+    const parsed = parsePageStore({ p1: bad });
+    expect(parsed['p1']?.more.map((l) => l.entryId)).toEqual(['c1']);
+    expect(parsed['p1']?.worldDays).toBeUndefined();
+  });
+});
+
+describe('world time', () => {
+  // The day lengths the tray actually offers (actions.ts): 1, 3 and 10 minute days.
+  it('reads a real span through each shipped day length', () => {
+    const twoHours = 2 * 3600_000;
+    expect(worldDaysBetween(0, twoHours, 60)).toBeCloseTo(120, 6); // a 1-minute day: 120 farm days
+    expect(worldDaysBetween(0, twoHours, 180)).toBeCloseTo(40, 6); // the default 3-minute day
+    expect(worldDaysBetween(0, twoHours, 600)).toBeCloseTo(12, 6); // a 10-minute day
+  });
+
+  it('is the gap, whichever way round the bounds come, and never negative', () => {
+    expect(worldDaysBetween(1000, 0, 180)).toBe(worldDaysBetween(0, 1000, 180));
+    expect(worldDaysBetween(0, 0, 180)).toBe(0);
+    expect(worldDaysBetween(0, NaN, 180)).toBe(0);
+  });
+
+  it('says the span in plain words, floored, never rounded up', () => {
+    expect(worldTimeLabel(40)).toBe('40 farm days');
+    expect(worldTimeLabel(3360)).toBe('3360 farm days');
+    expect(worldTimeLabel(1)).toBe('1 farm day');
+    expect(worldTimeLabel(1.99)).toBe('1 farm day'); // never "2 farm days"
+    expect(worldTimeLabel(0.9)).toBe('half a farm day');
+    expect(worldTimeLabel(0.5)).toBe('half a farm day');
+    expect(worldTimeLabel(0.49)).toBe('less than half a farm day');
+    expect(worldTimeLabel(0)).toBe('less than half a farm day');
+    expect(worldTimeLabel(NaN)).toBe('less than half a farm day');
+    expect(worldTimeLabel(-5)).toBe('less than half a farm day');
+  });
+
+  it('does not lose a whole day to floating point', () => {
+    // The division can land just short of a whole day — 39.99999999999999 for what is really forty —
+    // and "39 farm days" would understate the gap by a day for no reason but binary arithmetic.
+    expect(worldTimeLabel(39.99999999999999)).toBe('40 farm days');
+    expect(worldTimeLabel(3359.999999999999)).toBe('3360 farm days');
+    // and a gap that genuinely is short of the next day still reads short of it
+    expect(worldTimeLabel(39.9)).toBe('39 farm days');
+  });
+
+  it('is the same gap the title reads, so the two can never disagree', () => {
+    // A page is built from one set of bounds: the title's night check and the stored world span both
+    // read `fromMs`/`toMs` through the same `periodSec` (see `buildStorybookPage`).
+    const twoHours = 2 * 3600_000;
+    const page = buildStorybookPage([entry({ id: 'c1' })], twoHours, 0, twoHours, 5000, 180);
+    expect(page?.title).toBe('a night'); // 40 farm days: many nights
+    expect(page?.worldDays).toBe(worldDaysBetween(0, twoHours, 180));
+    expect(worldTimeLabel(page?.worldDays ?? 0)).toBe('40 farm days');
   });
 });

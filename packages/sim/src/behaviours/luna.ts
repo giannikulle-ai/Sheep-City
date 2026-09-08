@@ -22,6 +22,7 @@
 import { LUNA_ID, bubble, findSheep, nearestTuft } from '../actors';
 import { type Phase, phaseOf } from '../clock';
 import { findLostLamb, releaseLostLamb } from '../engine/hooks';
+import { FETCH_LAMB_PRIORITY } from '../engine/pacing';
 import { LFOOT, SFOOT, SPOT, randomFoot, type Point } from '../geometry';
 import { groundSnowy, stampGround } from '../ground';
 import { clampField, clampTarget, stepToward } from '../movement';
@@ -381,11 +382,12 @@ export const FETCH_LAMB_REACH_PX = 34;
  * in her own chain — is what walks her out and brings the lamb home. She reaches it, the lamb goes
  * back on its mother's trail, and the card ends early because the thing it was about has happened.
  *
- * Priority 55 in the `routine` chain: above `bedtime` (50), because a lamb out at dusk is a job and
- * not a night in, and below `rainShepherd` (60), because a whole flock in the rain outranks one
- * lamb — in a shower she shelters the flock and the lamb comes home on the card's own duration
- * instead. The owner's order (fetch > manual > riding > rain shepherd > bed and dawn > idle play)
- * is untouched: this is one new entry between the rain and the bed, not a reordering.
+ * Priority `FETCH_LAMB_PRIORITY` (`engine/pacing.ts`), the owner's pin: above `bedtime` (50),
+ * because a lamb out at dusk is a job and not a night in, and below `rainShepherd` (60), because a
+ * whole flock in the rain outranks one lamb — in a shower she shelters the flock and the lamb comes
+ * home on the card's own duration instead. The owner's order (fetch > manual > riding > rain
+ * shepherd > bed and dawn > idle play) is otherwise untouched: this is one new entry between the
+ * rain and the bed, not a reordering.
  *
  * She only ever walks: `manual = 'walk'` and a target, the same vehicle the `come` button and the
  * deity `call` already use, so nothing here can teleport, hold, or force her. A player's button
@@ -394,7 +396,7 @@ export const FETCH_LAMB_REACH_PX = 34;
 export const fetchLamb: LunaBehaviour = {
   id: 'fetchLamb',
   chain: 'routine',
-  priority: 55,
+  priority: FETCH_LAMB_PRIORITY,
   condition: ({ state }, l) =>
     (state.events.lostLamb !== null || l.routine === 'fetchLamb') &&
     l.riding === null &&

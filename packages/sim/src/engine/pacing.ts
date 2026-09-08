@@ -38,10 +38,17 @@ export function msToSimMinutes(ms: number, periodSec: number): number {
 
 export const PACING = {
   /**
-   * The engine looks at the world once per sim-minute (plan section 2, "Layer 3"). At the watching
-   * period that is every 125 ms of sim time, so about four evaluations every five ticks.
+   * The engine looks at the world once every two sim-minutes (Round 1 verifier finding 2, #82). The
+   * plan's "Layer 3" said once per sim-minute (`evalEverySimMinutes: 1`); measured on the charter's
+   * own catch-up bench (one sim-hour, 40 actors, three runs each, same box), the engine's own share
+   * of the cost was trunk 897.3 ms vs. engine-on 964.1 ms at every sim-minute (+66.8 ms, +6.0%,
+   * pushing the branch from three-of-three MET to one-of-three NOT MET against the 1,000 ms budget)
+   * and 921.0 ms at every two sim-minutes (+23.7 ms, +2.1%, back under budget on this box). The
+   * density cost of the coarser look is small: events per sim-hour went 68 (every minute) to 65
+   * (every two minutes) on the same measurement. At the watching period that is every 250 ms of sim
+   * time, about four evaluations every ten ticks.
    */
-  evalEverySimMinutes: 1,
+  evalEverySimMinutes: 2,
 
   /**
    * Global concurrency cap: never more than this many events running at once, cards and authored
@@ -51,19 +58,26 @@ export const PACING = {
   concurrentCap: 2,
 
   /**
-   * Global minimum gap between one card draw and the next, start to start, in sim-minutes. 240 is
-   * four sim-hours, thirty real seconds when watching: long enough that two cards never crowd each
-   * other, short enough that a five-real-minute watch (2,400 sim-minutes) can still hold a handful.
+   * Global minimum gap between one card draw and the next, start to start, in sim-minutes. Retuned
+   * in Round 1 (owner note on #82, after `evalEverySimMinutes: 2`): the ticket asked for "about
+   * three" card/authored starts in a five-real-minute watch, and the shipped 240 (thirty real
+   * seconds) measured a median of five, range four to six. 800 is one hundred real seconds when
+   * watching: long enough that two cards never crowd each other, and that a five-real-minute watch
+   * (2,400 sim-minutes) holds three or four rather than five or six. See the retune's measurements
+   * on `warmupSimMinutes`'s neighbour below and in `test/engine-draw.test.ts`.
    */
-  minGapSimMinutes: 240,
+  minGapSimMinutes: 800,
 
   /**
    * How a draw attempt turns the eligible cards' live weight into a chance. One attempt per
-   * sim-minute succeeds with `totalWeight / weightForCertainDraw`, so a lone ordinary card (base
-   * 10) fires on average once every 240 sim-minutes of eligible time, four sim-hours — the same
-   * order as the global gap, so a busy field paces on the gap and a quiet one paces on the weight.
+   * `evalEverySimMinutes` succeeds with roughly `totalWeight * evalEverySimMinutes /
+   * weightForCertainDraw`, so a lone ordinary card (base 10) fires on average once every 1,200
+   * sim-minutes of eligible time, 150 real seconds — the same order as the global gap below, so a
+   * busy field paces on the gap and a quiet one paces on the weight. Retuned alongside
+   * `minGapSimMinutes` in Round 1 (owner note on #82); was 2,400 (240 sim-minutes average, matching
+   * the old gap).
    */
-  weightForCertainDraw: 2400,
+  weightForCertainDraw: 12000,
 
   /**
    * Ceiling on one attempt's chance however fat the eligible set is: even with every card in the
@@ -73,13 +87,20 @@ export const PACING = {
 
   /**
    * The quiet stretch, in sim-minutes, after the last event *started* before the engine relaxes its
-   * thresholds so the world never goes dead (plan section 2). 720 is half a sim-day, ninety real
-   * seconds when watching: long enough that ordinary pacing is never bent, short enough that a
-   * watching player never sits through three quiet minutes.
+   * thresholds so the world never goes dead (plan section 2). Retuned with the gap in Round 1 (owner
+   * note on #82): must stay above `minGapSimMinutes` (the test on that invariant says so) so the
+   * relaxation is a backstop past ordinary pacing, not a substitute for it, and close enough above it
+   * that the backstop still has room to act inside a five-real-minute watch — pushed further out
+   * (1,200, then 1,600) cost the ticket's own seed-9 bar of three distinct moment kinds in a five-
+   * minute run, because the relaxation (which lifts the no-repeat-moment-kind rule) then had too
+   * little of the watch left to reach. 820 is 102.5 real seconds when watching, just past the
+   * retuned gap: long enough that ordinary pacing is never bent by it, and measured to keep the
+   * seed-9 bar with room either side (empirically fine from 801 through about 830, breaking again by
+   * 840 — see `test/engine-draw.test.ts`, which pins the exact bar this constant has to clear).
    */
-  quietStretchSimMinutes: 720,
+  quietStretchSimMinutes: 820,
 
-  /** While relaxed, the global gap is scaled by this: 240 sim-minutes becomes 60. */
+  /** While relaxed, the global gap is scaled by this: 800 sim-minutes becomes 200. */
   quietGapScale: 0.25,
 
   /** While relaxed, an attempt's chance is multiplied by this (still capped by `maxDrawChance`). */
@@ -106,7 +127,31 @@ export const PACING = {
    * a cycle and cannot fire twice in the same one.
    */
   simDateCooldownCycles: 0.95,
+
+  /**
+   * No card draws in the world's first `warmupSimMinutes` of sim time (owner note, Round 1, #82): a
+   * fresh world's very first look at the world was winning the merchant caravan card on 29 of 30
+   * seeds, median 17.3 real seconds in, sometimes under one second — a watching player usually met
+   * him before they had settled in. 60 sim-minutes is one real minute at the watching rate, long
+   * enough that the field has a beat before the deck starts drawing from it. Authored events (the
+   * birthday, the storm, first snow) are punctuation on their own trigger, and category actions (the
+   * farmer's dawn walk) are the world's scheduled rhythm — neither is a draw, so neither is gated by
+   * this; only `attemptDraw`'s card draw checks it. Measured from `state.clock.nowMs`, so it holds
+   * for a fresh world and has already passed for anything loaded from a save or fast-forwarded past
+   * it.
+   */
+  warmupSimMinutes: 60,
 } as const;
+
+/**
+ * Digital Luna's `fetchLamb` behaviour (`behaviours/luna.ts`, #40's `lostLamb` half) sits at this
+ * priority in her `routine` chain, above `bedtime` (50): a lamb out at dusk is a job, not a night
+ * in, so she fetches it even after bedtime would otherwise claim her. The alternative considered
+ * (Round 1 verifier finding 1) was below 50, where bedtime wins outright and a stray lamb waits
+ * until morning; the owner decided "fetch wins" on 2026-09-08. `test/luna.test.ts` pins this
+ * constant, not the literal 55, so a future change of heart is still a one-number change here.
+ */
+export const FETCH_LAMB_PRIORITY = 55;
 
 /** What the pacing looks like right now: the gap and boost a draw attempt is working under. */
 export interface Pacing {

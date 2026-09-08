@@ -11,6 +11,7 @@ Read these before touching anything:
 ## Non-negotiables (owner's taste, do not relitigate)
 - Character art is hand-pixelled text grids (`pixel_grids.py`, `hand_sprites.py`). Never rasterise vectors into characters. Never scale or rotate a sprite except an exact 90° turn. Frames are variations, not transforms.
 - Digital Luna (DL) and the sheep look are settled. Do not redesign them.
+- Digital Luna cannot be harmed. No event, inhabitant, weather, or power hurts her, on screen or off. Any PR that could is wrong by definition.
 - Palette is fixed; add colours deliberately and say so in the PR.
 - Every frame touches the ground; do not defeat the bottom-trim in the sheet builder.
 - New characters, props, and colours ship only after the owner's pin review (label `needs-owner-pin`).
@@ -23,4 +24,5 @@ Read these before touching anything:
 - A PR includes a screenshot or GIF of what changed when anything visual moved.
 - Never force-push, never rewrite someone else's branch, never skip or disable a test to go green.
 - Secrets never enter the repo. API keys live in the environment only.
+- The storybook only tells. A line that is not backed by a chronicle entry is a bug.
 - When blocked, write what you tried and what you need on the issue, then stop. Do not guess your way past a design decision that is the owner's.

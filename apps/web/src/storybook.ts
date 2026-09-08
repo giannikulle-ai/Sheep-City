@@ -51,6 +51,12 @@ function countWord(n: number, unit: 'minute' | 'hour' | 'day'): string {
  * `periodSec` is the world's own day length (`Clock.periodSec`) — a farm can run a fast day, so
  * whether "a night" happened is checked against the real phase the clock passed through, never
  * guessed from a fixed real-time span. A gap of a full day or more always contains a night.
+ *
+ * The clock's own `t` at a given `nowMs` is `frac(startT + nowMs / dayLenMs)` (`createClock` starts
+ * at `RULES.clock.startT`, mid-morning, and `advanceClock` only ever adds `dtMs / periodSec / 1000`
+ * to it) — never `frac(nowMs / dayLenMs)` alone. So the night window's boundaries in `nowMs` terms
+ * have to subtract that same `startT` (fix round 2 on #42, R2-2: without it, this disagreed with
+ * `phaseOf` for 9 of every 24 hour-windows at a real-time day length).
  */
 export function gapSpansNight(fromMs: number, toMs: number, periodSec: number): boolean {
   const dayLenMs = Math.max(1, periodSec) * 1000;
@@ -58,8 +64,9 @@ export function gapSpansNight(fromMs: number, toMs: number, periodSec: number): 
   const hi = Math.max(fromMs, toMs);
   if (hi <= lo) return false;
   if (hi - lo >= dayLenMs) return true;
-  const nightStart = RULES.clock.phases.night;
-  const nightEnd = RULES.clock.phases.dawn;
+  const startT = RULES.clock.startT;
+  const nightStart = RULES.clock.phases.night - startT;
+  const nightEnd = RULES.clock.phases.dawn - startT;
   const k0 = Math.floor(lo / dayLenMs) - 1;
   const k1 = Math.floor(hi / dayLenMs) + 1;
   for (let k = k0; k <= k1; k++) {
@@ -72,15 +79,18 @@ export function gapSpansNight(fromMs: number, toMs: number, periodSec: number): 
 
 /**
  * The time away in plain words, true to the real gap `[fromMs, toMs)` (sim ms, one to one with
- * wall-clock ms — see `gapSpansNight`): minutes under an hour ("six minutes"), hours under a day
- * ("two hours") — unless the gap actually spans the world's own night, in which case "a night" —
- * then days ("three days"), "a week" at exactly seven, "over a week" short of two, and a rounded
- * week count beyond that. Never a word the gap does not support: nothing here rounds up across a
- * bucket boundary (a 23-hour gap never becomes "a day").
+ * wall-clock ms — see `gapSpansNight`): "a moment" under a minute (never "a minute" for a gap the
+ * clock itself would round to zero of them — fix round 2 on #42, R2-3), minutes under an hour ("six
+ * minutes"), hours under a day ("two hours") — unless the gap actually spans the world's own night,
+ * in which case "a night" — then days ("three days"), "a week" at exactly seven, "over a week" short
+ * of two, and a rounded week count beyond that. Never a word the gap does not support: nothing here
+ * rounds up across a bucket boundary (a 23-hour gap never becomes "a day", and a 59-second gap never
+ * becomes "a minute").
  */
 export function awayTitle(awayMs: number, fromMs: number, toMs: number, periodSec: number): string {
   const ms = Number.isFinite(awayMs) && awayMs > 0 ? awayMs : 0;
-  if (ms < HOUR_MS) return countWord(Math.max(1, Math.floor(ms / MIN_MS)), 'minute');
+  if (ms < MIN_MS) return 'a moment';
+  if (ms < HOUR_MS) return countWord(Math.floor(ms / MIN_MS), 'minute');
   if (ms < DAY_MS) {
     if (gapSpansNight(fromMs, toMs, periodSec)) return 'a night';
     return countWord(Math.floor(ms / HOUR_MS), 'hour');

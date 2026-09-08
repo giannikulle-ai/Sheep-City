@@ -208,6 +208,68 @@ test('two consecutive real absences each get their own page: the second never re
   expect(pageCount).toBe(2);
 });
 
+test('a quiet return opens no page, even when read from the app\'s own load save (fix round 2, #42: R2-1)', async ({ page }) => {
+  // Reproduces the Verifier's round-2 finding: `main.ts:153` read `chronicleBetween`'s lower bound
+  // as `before.clock.nowMs`, inclusive — the exact instant `tellLedgerDiff` stamps every entry of a
+  // gap at, and the same instant the app's own `load` save (`main.ts:247`, `storage.set(SAVE_KEY, …)`
+  // right after `adopt`) persists as the *next* gap's starting bound. So a second, genuinely quiet
+  // absence — read from that real load save, not a frame-later `save.text()` snapshot (the round-1
+  // regression test above plants from `save.text()` and cannot catch this: by the time it reads,
+  // the sim has ticked past the gap-closing instant, so the boundary entries are no longer sitting
+  // exactly on it) — could still open a page, carrying entries from the *previous* gap that never
+  // made it onto its own page because they ranked below the top five. Fix: `before.clock.nowMs + 1`.
+  await open(page);
+
+  // a real two-hour absence, long enough that the chronicle holds more than the five lines a page
+  // can show — so some of its entries are genuine, unshown leftovers sitting at the gap's own end
+  const text = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.save.text());
+  const env = JSON.parse(text) as { savedAt: number };
+  env.savedAt = Date.now() - 2 * 3600_000;
+  await page.evaluate((t) => {
+    (window as unknown as WithApp).sheepcliff.qa.seed(1); // stop the unload save clobbering the planted text
+    localStorage.setItem('sheepcliff-save', t);
+  }, JSON.stringify(env));
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
+
+  const afterGap1 = await page.evaluate(() => {
+    const app = (window as unknown as WithApp).sheepcliff;
+    const sb = app.storybook.current();
+    return { shown: !!sb, pageCount: app.storybook.pages().length, chronicleCount: app.sim().chronicle.entries.length };
+  });
+  expect(afterGap1.shown, 'the first (2h) absence must open a page').toBe(true);
+  expect(afterGap1.pageCount).toBe(1);
+  // more entries in the chronicle than a page's five lines hold: some are unseen leftovers, exactly
+  // the shape the finding needs — entries the page store never told, sitting at the instant the next
+  // gap's window would otherwise re-read
+  expect(afterGap1.chronicleCount).toBeGreaterThan(5);
+
+  // Plant the *next* gap from the app's own load save (`localStorage`) — the save `main.ts:153`'s
+  // window actually reads its lower bound from — not from a fresh `save.text()` snapshot.
+  const loadSaveText = await page.evaluate(() => localStorage.getItem('sheepcliff-save'));
+  expect(loadSaveText).not.toBeNull();
+  const loadSave = JSON.parse(loadSaveText as string) as { savedAt: number };
+  loadSave.savedAt = Date.now() - 10_000; // ten seconds away: over the storybook gate, but truly quiet
+  await page.evaluate((t) => {
+    (window as unknown as WithApp).sheepcliff.qa.seed(1);
+    localStorage.setItem('sheepcliff-save', t);
+  }, JSON.stringify(loadSave));
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
+  await expect(page.locator('#say')).toContainText('restored: back after 10 s');
+
+  const afterGap2 = await page.evaluate(() => {
+    const app = (window as unknown as WithApp).sheepcliff;
+    const sb = app.storybook.current();
+    return { shown: !!sb, pageCount: app.storybook.pages().length, chronicleCount: app.sim().chronicle.entries.length };
+  });
+  // ten seconds of a farm this quiet writes nothing new to the chronicle...
+  expect(afterGap2.chronicleCount).toBe(afterGap1.chronicleCount);
+  // ...so no page opens for it, and the store still holds only the first gap's page
+  expect(afterGap2.shown, 'a gap with nothing new to tell must open no page').toBe(false);
+  expect(afterGap2.pageCount).toBe(1);
+});
+
 test('the save exports as text in the page and loads back from it', async ({ page }) => {
   // portrait: the tray, with its farm bar, sits under the scene instead of in the landscape drawer
   await page.setViewportSize({ width: 390, height: 844 });

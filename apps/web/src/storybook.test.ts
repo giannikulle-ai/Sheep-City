@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ChronicleEntry } from '@sheepcliff/sim';
+import { RULES, phaseOf, type ChronicleEntry } from '@sheepcliff/sim';
 import {
   addPage,
   awayTitle,
@@ -45,8 +45,12 @@ describe('simMinutesToMs / storybookGateMs', () => {
 
 describe('gapSpansNight', () => {
   const DAY = 86_400_000; // periodSec 86400: a world day exactly as long as a real day
-  const NIGHT_START = 0.52 * DAY; // RULES.clock.phases.night
-  const DAWN = 0.92 * DAY; // RULES.clock.phases.dawn
+  // The clock starts at t = RULES.clock.startT (mid-morning), not t = 0 (fix round 2 on #42, R2-2)
+  // — `nowMs = 0` is already `startT` of the way into the day, so the first real crossing of each
+  // phase boundary after `nowMs = 0` sits `(boundary - startT)` of a day in, not `boundary` itself.
+  const START_T = RULES.clock.startT;
+  const NIGHT_START = (RULES.clock.phases.night - START_T) * DAY;
+  const DAWN = (RULES.clock.phases.dawn - START_T) * DAY;
 
   it('is false for a span that stays inside one day phase', () => {
     expect(gapSpansNight(0, 2 * 3600_000, 86400)).toBe(false); // 2h, well before dusk
@@ -74,6 +78,42 @@ describe('gapSpansNight', () => {
     // but a window spanning from before day 0's night into day 1's own night is still caught
     expect(gapSpansNight(NIGHT_START - 1, DAY + NIGHT_START + 1, 86400)).toBe(true);
   });
+
+  // Fix round 2 on #42, R2-2: `gapSpansNight` used to compute the night window as if the clock's
+  // `t` were `nowMs / dayLenMs`, dropping `RULES.clock.startT` — the sim's own `phaseOf` disagreed
+  // for 9 of every 24 hour-windows at a real-time (86400 s) day. This checks `gapSpansNight` against
+  // `phaseOf` itself (the same function the clock's phase display uses), at both the shipped day
+  // length (180 s) and the real-time day length `farm.json` names (86400 s), across every hour-long
+  // window in a full day — not against a hand-derived constant that could encode the same mistake.
+  describe('agrees with phaseOf across every hour-window of a day', () => {
+    // The clock's own `t` at `nowMs`: `createClock` starts at `startT` and `advanceClock` only ever
+    // adds `dtMs / periodSec / 1000` to it, so `t(nowMs) = frac(startT + nowMs / dayLenMs)` — the
+    // same mapping `gapSpansNight` now has to invert. Sampled densely (every simulated second) so
+    // the check is a real trace through `phaseOf`, not another copy of `gapSpansNight`'s own math.
+    function tOf(nowMs: number, dayLenMs: number): number {
+      const t = (START_T + nowMs / dayLenMs) % 1;
+      return t < 0 ? t + 1 : t;
+    }
+    function windowTouchesNightByPhaseOf(fromMs: number, toMs: number, dayLenMs: number): boolean {
+      const stepMs = 1000; // one simulated second: coarser than any phase window at either day length
+      for (let m = fromMs; m < toMs; m += stepMs) {
+        if (phaseOf(tOf(m, dayLenMs)) === 'night') return true;
+      }
+      return false;
+    }
+
+    for (const periodSec of [180, 86400]) {
+      it(`periodSec ${periodSec}`, () => {
+        const dayLenMs = periodSec * 1000;
+        for (let h = 0; h < 24; h++) {
+          const fromMs = h * 3600_000;
+          const toMs = (h + 1) * 3600_000;
+          const expected = windowTouchesNightByPhaseOf(fromMs, toMs, dayLenMs);
+          expect(gapSpansNight(fromMs, toMs, periodSec), `hour ${h}`).toBe(expected);
+        }
+      });
+    }
+  });
 });
 
 describe('awayTitle', () => {
@@ -81,9 +121,15 @@ describe('awayTitle', () => {
   // isolates the minute/hour/day wording from the night override, which gapSpansNight covers above.
   const NO_NIGHT_PERIOD_SEC = 1_000_000_000;
 
-  it('minutes under an hour, spelled out', () => {
-    expect(awayTitle(0, 0, 0, 180)).toBe('a minute'); // clamped to the smallest word, never "zero"
-    expect(awayTitle(5_000, 0, 5_000, 180)).toBe('a minute');
+  it('under a minute, never "a minute" the gap does not support (fix round 2 on #42, R2-3)', () => {
+    expect(awayTitle(0, 0, 0, 180)).toBe('a moment'); // clamped to the smallest word, never "zero"
+    expect(awayTitle(5_000, 0, 5_000, 180)).toBe('a moment'); // 5 s
+    expect(awayTitle(10_000, 0, 10_000, 180)).toBe('a moment'); // 10 s: the R2-3 reproduction
+    expect(awayTitle(59_999, 0, 59_999, 180)).toBe('a moment'); // just short of a full minute
+  });
+
+  it('minutes from exactly one, under an hour, spelled out', () => {
+    expect(awayTitle(60_000, 0, 60_000, 180)).toBe('a minute'); // exactly one full minute
     expect(awayTitle(6 * 60_000, 0, 6 * 60_000, 180)).toBe('six minutes');
     expect(awayTitle(59 * 60_000, 0, 59 * 60_000, 180)).toBe('59 minutes');
   });
@@ -97,7 +143,8 @@ describe('awayTitle', () => {
 
   it('"a night" when the gap actually spans the world\'s own night, not any gap under a day', () => {
     const day = 86400; // periodSec: a world day as long as a real day
-    const nightStart = 0.52 * day * 1000;
+    const startT = RULES.clock.startT;
+    const nightStart = (RULES.clock.phases.night - startT) * day * 1000;
     const from = nightStart - 1_000_000;
     const to = nightStart + 5_000_000;
     expect(gapSpansNight(from, to, day)).toBe(true);
@@ -110,6 +157,15 @@ describe('awayTitle', () => {
     // periodSec 180 (the default): a farm day is 3 minutes, so any real gap over an hour is
     // hundreds of farm days — always at least one night. Matches the real app's own behaviour.
     expect(awayTitle(2 * 3600_000, 0, 2 * 3600_000, 180)).toBe('a night');
+  });
+
+  it('23 hours reads "a night" only because it genuinely spans one (fix round 2 on #42, R2-4)', () => {
+    // At the default (fast) day length a 23-hour gap really does cross hundreds of nights, so "a
+    // night" is true here — unlike the 23-hour case above, which is pinned to NO_NIGHT_PERIOD_SEC
+    // and reads "23 hours" instead. Both must hold: the word always has to match the actual span.
+    const ms23 = 23 * 3600_000;
+    expect(gapSpansNight(0, ms23, 180)).toBe(true);
+    expect(awayTitle(ms23, 0, ms23, 180)).toBe('a night');
   });
 
   it('days, spelled out, and "a week" at exactly seven', () => {
@@ -126,8 +182,8 @@ describe('awayTitle', () => {
   });
 
   it('clamps a non-finite or negative gap to the smallest true word', () => {
-    expect(awayTitle(NaN, 0, 0, 180)).toBe('a minute');
-    expect(awayTitle(-100, 0, 0, 180)).toBe('a minute');
+    expect(awayTitle(NaN, 0, 0, 180)).toBe('a moment');
+    expect(awayTitle(-100, 0, 0, 180)).toBe('a moment');
   });
 });
 

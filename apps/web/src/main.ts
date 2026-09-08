@@ -149,8 +149,14 @@ async function main(): Promise<void> {
     // The raw window can repeat an earlier page's entries (fix round 1 on #42, see storybook.ts's
     // `unseenEntries`): the sim stamps every entry of a gap at the instant the gap ends, the same
     // clock instant the next load's window opens from, so only entries no stored page has told yet
-    // are ever eligible for a new one.
-    const entries = unseenEntries(chronicleBetween(state, before.clock.nowMs, after.clock.nowMs), pageStore);
+    // are ever eligible for a new one. That dedupe covers what was actually *shown*, but the window
+    // itself must not even ask for the previous gap's closing instant in the first place (fix round
+    // 2 on #42, R2-1): `chronicleBetween` is inclusive at both ends, so a `fromMs` of the previous
+    // gap's end re-admits entries stamped exactly there — including into a page store that has never
+    // seen them (a fresh page store, or one restored from a save older than the entries themselves).
+    // `before.clock.nowMs` is that previous instant, never part of *this* gap, so the window starts
+    // one ms after it; `after.clock.nowMs` stays inclusive since it is this gap's own closing stamp.
+    const entries = unseenEntries(chronicleBetween(state, before.clock.nowMs + 1, after.clock.nowMs), pageStore);
     const page = buildStorybookPage(entries, awayMs, before.clock.nowMs, after.clock.nowMs, Date.now(), state.clock.periodSec);
     if (!page) return;
     pageStore = addPage(pageStore, page);

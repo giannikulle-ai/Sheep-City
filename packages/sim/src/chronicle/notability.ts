@@ -20,9 +20,21 @@ import type { FactValue } from './types';
 export const NOTABILITY_WINDOW = 12;
 const ALPHA = 2 / (NOTABILITY_WINDOW + 1);
 
+/** A key's deviation is not judged until at least this many prior tellings have shaped its
+ * trailing mean and variance. Below it, the mean is still settling toward its real value and the
+ * variance is still small from having too few points to have spread across, so an ordinary number
+ * reads as a wild outlier: measured, tellings 3-10 of a routine key (a variance built from 1-9
+ * priors) read notability 0.39-0.85 with no floor at all, worse than the untold-yet 0 a key with
+ * no history reads. Deliberately the same span the trailing normal itself covers
+ * (`NOTABILITY_WINDOW`): by the time a deviation is judged, the mean and variance have had a real
+ * window's worth of history behind them, not just a couple of samples. Below the floor, a telling
+ * that is not a first reads notability 0, same as a key that has never been told before. */
+const MIN_DEVIATION_SAMPLES = NOTABILITY_WINDOW;
+
 /** One fact key's trailing normal. */
 export interface FactStat {
-  /** Tellings so far. Deviation is not judged until there have been at least two before this one. */
+  /** Tellings so far. Deviation is not judged until there have been at least
+   * `MIN_DEVIATION_SAMPLES` before this one. */
   n: number;
   mean: number;
   variance: number;
@@ -85,8 +97,10 @@ function factActorKey(key: string, actor: ActorId): string {
  * to include `value` (numeric facts only — a string fact only ever updates the seen-sets), and the
  * key, plus every `(key, actor)` pair in `actors`, is marked seen. Call it once per fact.
  *
- * A string fact, or a numeric one with fewer than two prior tellings of its key, has no normal yet
- * to deviate from: its notability is 1 if this is a first, 0 otherwise.
+ * A string fact, or a numeric one with fewer than `MIN_DEVIATION_SAMPLES` prior tellings of its
+ * key, has no normal trustworthy enough yet to deviate from: its notability is 1 if this is a
+ * first, 0 otherwise — a genuinely routine value in that early span reads the same as if the key
+ * had no history at all, rather than as an overstated deviation from a normal that has not settled.
  */
 export function noteFact(stats: ChronicleStats, key: string, value: FactValue, actors: readonly ActorId[]): { notability: number; first: boolean } {
   let first = !stats.seenFacts[key];
@@ -103,7 +117,7 @@ export function noteFact(stats: ChronicleStats, key: string, value: FactValue, a
 
   const prev = stats.facts[key];
   let notability = first ? 1 : 0;
-  if (prev && prev.n >= 2) {
+  if (prev && prev.n >= MIN_DEVIATION_SAMPLES) {
     const sd = Math.sqrt(prev.variance);
     // A trailing normal with no spread yet (every prior telling was the same number) reads any
     // change as a real, if unscaled, deviation rather than an infinite one.

@@ -371,6 +371,7 @@ export function chronicleShape(value: unknown, path: string): void {
     oneOf(e['source'], `${p}.source`, CHRONICLE_SOURCES);
     const notability = num(e['notability'], `${p}.notability`);
     if (notability < 0 || notability > 1) fail(`${p}.notability`, 'a number in [0, 1]', notability);
+    bool(e['first'], `${p}.first`);
     const facts = obj(e['facts'], `${p}.facts`);
     for (const [k, v] of Object.entries(facts)) {
       if (typeof v !== 'number' && typeof v !== 'string') fail(`${p}.facts.${k}`, 'a number or a string', v);

@@ -389,7 +389,7 @@ describe('v5 to v6', () => {
 
   it('keeps a chronicle that is already present', () => {
     const v5 = fixture('save-v5.json') as Doc;
-    const chronicle = { entries: [{ id: 'c0', atMs: 1, district: 'farm', line: 'x', picture: 'p', actors: [], source: 'authored', notability: 0, facts: {} }], nextId: 1, stats: { facts: {}, seenFacts: {}, seenFactActors: {} } };
+    const chronicle = { entries: [{ id: 'c0', atMs: 1, district: 'farm', line: 'x', picture: 'p', actors: [], source: 'authored', notability: 0, first: false, facts: {} }], nextId: 1, stats: { facts: {}, seenFacts: {}, seenFactActors: {} } };
     const doc = { ...v5, world: { ...v5.world, chronicle } };
     const migrated = v6Chronicle.up(doc as unknown as UnknownSaveDoc) as unknown as Doc;
     expect(migrated.world['chronicle']).toBe(chronicle);

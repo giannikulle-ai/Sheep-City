@@ -1470,6 +1470,7 @@
           "actors": [],
           "source": "ledger",
           "notability": 1,
+          "first": true,
           "facts": {
             "wool": 2
           }
@@ -1485,6 +1486,7 @@
           ],
           "source": "authored",
           "notability": 1,
+          "first": true,
           "facts": {
             "weather": "rain"
           }

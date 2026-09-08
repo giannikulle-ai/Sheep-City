@@ -5,11 +5,13 @@
 // `tell`) and the version taken off, the same way test/ledger.test.ts's `v4View` proved #39 didn't
 // move the tick. The rest covers `tell`, notability, the read API, `tellLedgerDiff`, and a rough
 // size for a year of entries.
+import { hrtime } from 'node:process';
 import { describe, expect, it } from 'vitest';
 import { chronicleBetween, cloneChronicle, createChronicle, deviationNotability, notabilityScale, tell, tellLedgerDiff } from '../src/chronicle/index';
 import { diffLedger } from '../src/ledger/diff';
 import { catchUp } from '../src/ledger/catch-up';
 import { summarise } from '../src/ledger/ledger';
+import { respawn } from '../src/ledger/respawn';
 import { hashState } from '../src/hash';
 import { createInitialState, type SimState } from '../src/state';
 import { advance } from '../src/tick';
@@ -56,7 +58,7 @@ describe('the store is append-only', () => {
     expect(s.chronicle.entries).toEqual([first, second]);
     // The first entry, by reference and by value, is exactly as it was written.
     expect(s.chronicle.entries[0]).toBe(first);
-    expect(s.chronicle.entries[0]).toEqual({ id: 'c0', atMs: 0, district: 'farm', line: 'the flock settled in', picture: 'sit', actors: [], source: 'authored', notability: notabilityScale(0.1), facts: {} });
+    expect(s.chronicle.entries[0]).toEqual({ id: 'c0', atMs: 0, district: 'farm', line: 'the flock settled in', picture: 'sit', actors: [], source: 'authored', notability: notabilityScale(0.1), first: false, facts: {} });
     for (let i = 0; i < 50; i++) tell(s, { atMs: 2000 + i, district: 'farm', line: 'a quiet moment', picture: 'sit', source: 'authored' });
     expect(s.chronicle.entries).toHaveLength(52);
     expect(s.chronicle.entries.slice(0, 2)).toEqual([first, second]);
@@ -74,16 +76,71 @@ describe('the store is append-only', () => {
     expect(s.chronicle.entries).toHaveLength(2);
   });
 
-  it('cloneState carries the chronicle forward as a deep copy: a tick never touches the input', () => {
+  it('cloneState carries the chronicle forward as a new array of the same, frozen entries: a tick never touches the input', () => {
     const s = createInitialState(3);
     tell(s, { atMs: 0, district: 'farm', line: 'a', picture: 'p', source: 'authored', actors: ['sheep-0'], facts: { wool: 1 } });
     const before = s.chronicle.entries.length;
     const after = advance(s, 10);
     expect(s.chronicle.entries).toHaveLength(before);
     expect(after.chronicle.entries).toHaveLength(before);
-    expect(after.chronicle.entries[0]).toEqual(s.chronicle.entries[0]);
-    expect(after.chronicle.entries[0]).not.toBe(s.chronicle.entries[0]);
-    expect(after.chronicle.entries[0]!.actors).not.toBe(s.chronicle.entries[0]!.actors);
+    // The entries array itself is a new one (appending on either side never touches the other)...
+    expect(after.chronicle.entries).not.toBe(s.chronicle.entries);
+    // ...but since an entry is never edited once told, the clone shares the entry by reference
+    // rather than copying it: cloning is O(distinct chronicle-holding states), not O(entries).
+    expect(after.chronicle.entries[0]).toBe(s.chronicle.entries[0]);
+    // An entry, and its actors and facts, are frozen the moment `tell` writes it, so nothing
+    // downstream — a tick, a clone, a reader — can mutate a telling after the fact.
+    const entry = s.chronicle.entries[0]!;
+    expect(Object.isFrozen(entry)).toBe(true);
+    expect(Object.isFrozen(entry.actors)).toBe(true);
+    expect(Object.isFrozen(entry.facts)).toBe(true);
+    expect(() => {
+      'use strict';
+      (entry as { line: string }).line = 'tampered';
+    }).toThrow(TypeError);
+    expect(entry.line).toBe('a');
+  });
+
+  it("cloneChronicle is not linear in the log: cloning a chronicle of 40,000 entries costs about what cloning an empty one does", () => {
+    // Both districts tick with 40 sheep, the charter's bench line, so the rest of a tick's own cost
+    // (behaviours, ground, small life) is the same on both sides and only the chronicle differs.
+    // The median, not the mean, of many single-tick timings: this suite runs its files in
+    // parallel, so a stray GC pause or a neighbour's turn on the CPU can spike one iteration by a
+    // lot without the underlying cost having changed; a mean carries that spike, a median shrugs
+    // off a handful of outliers either side.
+    const medianTickMs = (build: () => SimState): number => {
+      const warm = build();
+      advance(warm, 1); // let the JIT settle before timing, as the ledger speed tests do
+      const iterations = 25;
+      const timings: number[] = [];
+      for (let i = 0; i < iterations; i++) {
+        const s = build();
+        const t0 = hrtime.bigint();
+        advance(s, 1);
+        timings.push(Number(hrtime.bigint() - t0) / 1e6);
+      }
+      timings.sort((a, b) => a - b);
+      return timings[Math.floor(timings.length / 2)]!;
+    };
+
+    const emptyMs = medianTickMs(() => createInitialState(15, { sheep: 40 }));
+
+    const withHistory = (): SimState => {
+      const s = createInitialState(16, { sheep: 40 });
+      for (let i = 0; i < 40_000; i++) {
+        tell(s, { atMs: i, district: 'farm', line: 'x', picture: 'p', source: 'ledger', facts: { wool: 40 + (i % 5) } });
+      }
+      return s;
+    };
+    expect(withHistory().chronicle.entries).toHaveLength(40_000);
+    const bigMs = medianTickMs(withHistory);
+
+    console.log(`chronicle: one tick costs ${emptyMs.toFixed(4)} ms (median) with an empty chronicle, ${bigMs.toFixed(4)} ms with 40,000 entries`);
+    // Generous, not tight: this bound only has to catch a real O(entries) regression, not chase a
+    // tight constant on a shared, parallel box. Before the fix (cloneChronicle deep-copying every
+    // entry) this was measured at 7.5 ms for 40,000 entries against an empty-chronicle tick of
+    // about 0.1 ms — tens of times the cost, not a handful.
+    expect(bigMs).toBeLessThan(emptyMs * 8 + 2);
   });
 });
 
@@ -106,6 +163,47 @@ describe('notability', () => {
     const deviant = tell(s, { atMs: 3, district: 'farm', line: 'deviant', picture: 'p', source: 'ledger', facts: { wool: 14 } });
     expect(deviant.notability).toBeGreaterThan(0.9);
     expect(deviant.notability).toBeGreaterThan(routine.notability);
+  });
+
+  it('a routine number close to, but not exactly, the trailing mean still reads low once the trailing normal has real history behind it', () => {
+    const s = createInitialState(20);
+    tell(s, { atMs: 0, district: 'farm', line: 'first', picture: 'p', source: 'ledger', facts: { warm: 40 } });
+    // Six full cycles of 38..42 (30 tellings): a real spread around 40, unlike the "right on the
+    // trailing mean" case above, which warms on the same run of values it is later judged exactly
+    // against. This is `MIN_DEVIATION_SAMPLES` worth of history and then some, so the trailing
+    // normal is trustworthy by the time the routine value below is judged.
+    for (let i = 0; i < 30; i++) {
+      const warm = [38, 39, 40, 41, 42][i % 5]!;
+      tell(s, { atMs: i + 1, district: 'farm', line: 'warm-up', picture: 'p', source: 'ledger', facts: { warm } });
+    }
+    // 41 sits well inside the range this key has always shown — a day above the mean, not a story.
+    // Before the fix (deviation judged from as few as 2 priors), the still-settling early variance
+    // read values like this as 0.39-0.85; the fix requires MIN_DEVIATION_SAMPLES priors first.
+    const routine = tell(s, { atMs: 100, district: 'farm', line: 'a bit above the mean', picture: 'p', source: 'ledger', facts: { warm: 41 } });
+    expect(routine.notability).toBeLessThan(0.25);
+  });
+
+  it('the first flag tells a genuine first apart from a saturated deviation or a hint-1 card, even though all three can read notability 1', () => {
+    const s = createInitialState(21);
+    const firstBirth = tell(s, { atMs: 0, district: 'farm', line: 'a lamb is born', picture: 'lamb', source: 'ledger', facts: { births: 1 } });
+    expect(firstBirth.notability).toBe(1);
+    expect(firstBirth.first).toBe(true);
+
+    // Warm 'wool' up on a run around 40, then tell a wildly deviant one: it saturates near 1
+    // without being a first, since 'wool' has been told many times before.
+    for (const wool of [41, 39, 42, 38, 40, 41, 39, 42, 38, 40, 41, 39]) {
+      tell(s, { atMs: 1, district: 'farm', line: 'warm-up', picture: 'p', source: 'ledger', facts: { wool } });
+    }
+    const deviant = tell(s, { atMs: 2, district: 'farm', line: 'a wild week', picture: 'wool', source: 'ledger', facts: { wool: 14 } });
+    expect(deviant.notability).toBeGreaterThan(0.9);
+    expect(deviant.first).toBe(false);
+
+    // A card with a maxed-out hint reads notability 1 too, but carries no fact at all to be a
+    // first of: a storybook page cannot tell "the world's first X" from "a card author said 1"
+    // without this flag.
+    const card = tell(s, { atMs: 3, district: 'farm', line: 'a huge card fired', picture: 'p', source: 'card', hint: 1 });
+    expect(card.notability).toBe(1);
+    expect(card.first).toBe(false);
   });
 
   it('deviationNotability is 0 at or below no deviation and approaches, but never reaches, 1', () => {
@@ -223,6 +321,33 @@ describe('tellLedgerDiff', () => {
     const told = long.state.chronicle.entries.slice(s.chronicle.entries.length);
     expect(told.length).toBeGreaterThan(0);
     for (const e of told) expect(e.atMs).toBe(long.after.clock.nowMs);
+  });
+});
+
+describe('respawn: the chronicle survives a district leave and return', () => {
+  it('summarise, then respawn on the outgoing chronicle, carries the log forward rather than dropping it', () => {
+    const s = createInitialState(17);
+    tell(s, { atMs: 0, district: 'farm', line: 'the world began', picture: 'p', source: 'authored', hint: 0.5 });
+    tell(s, { atMs: 1, district: 'farm', line: '2 wool banked', picture: 'wool', source: 'ledger', facts: { wool: 2 } });
+    expect(s.chronicle.entries).toHaveLength(2);
+
+    // The plan's Layer-2 flow: a district is summarised to numbers when nobody is watching, and
+    // respawned onto its own field when someone returns — not only the offline catch-up path.
+    const L = summarise(s);
+    const back = respawn(L, s.chronicle);
+    expect(back.chronicle.entries).toEqual(s.chronicle.entries);
+    // A real deep copy: telling on the respawned world never touches the state it came from.
+    tell(back, { atMs: 2, district: 'farm', line: 'settled back in', picture: 'p', source: 'authored', hint: 0.1 });
+    expect(back.chronicle.entries).toHaveLength(3);
+    expect(s.chronicle.entries).toHaveLength(2);
+  });
+
+  it('a fresh, empty chronicle is still a choice a caller has to make, not a silent default', () => {
+    const s = createInitialState(18);
+    tell(s, { atMs: 0, district: 'farm', line: 'a', picture: 'p', source: 'authored' });
+    const L = summarise(s);
+    const fresh = respawn(L, createChronicle());
+    expect(fresh.chronicle.entries).toEqual([]);
   });
 });
 

@@ -4,7 +4,6 @@
 // through the remainder. Deterministic for a given state and gap: the ledger draws from the
 // state's generator, and the respawn seed is its next draw.
 
-import { cloneChronicle } from '../chronicle/store';
 import { tellLedgerDiff } from '../chronicle/ledger-diff';
 import { cloneRng, nextU32 } from '../rng';
 import type { SimState } from '../state';
@@ -50,10 +49,10 @@ export interface CatchUp {
  * - `awayMs < dayMs(state)`: `step(state, [], awayMs)`, actors all the way.
  * - otherwise: `summarise`, `advanceLedger` for the whole days, `respawn` from the result, then
  *   `step` for the remainder. Queued intents carry over to the respawned world and land on its
- *   first tick. The result's `ledger` snapshot and `lastLedgerAt` are taken at the end. The
- *   respawned world also carries `state`'s chronicle forward (`respawn` on its own starts a fresh,
- *   empty one), and `tellLedgerDiff` (chronicle/ledger-diff.ts) tells this gap's diff onto it — the
- *   one span the Ledger runs with no actors in the room to tell it themselves.
+ *   first tick. The result's `ledger` snapshot and `lastLedgerAt` are taken at the end. `respawn` is
+ *   handed `state`'s own chronicle, so the respawned world carries it forward rather than starting
+ *   fresh, and `tellLedgerDiff` (chronicle/ledger-diff.ts) tells this gap's diff onto it — the one
+ *   span the Ledger runs with no actors in the room to tell it themselves.
  *
  * Pure: `state` is never modified.
  */
@@ -76,9 +75,8 @@ export function catchUp(state: SimState, awayMs: number, options: CatchUpOptions
   const actorMs = gap - ledgerMs;
   const rng = cloneRng(state.rng);
   const ledger = advanceLedger(before, ledgerMs, rng);
-  let s = respawn(ledger, nextU32(rng));
+  let s = respawn(ledger, state.chronicle, nextU32(rng));
   s.pendingIntents = state.pendingIntents.slice();
-  s.chronicle = cloneChronicle(state.chronicle);
   s = step(s, [], actorMs);
   s = { ...s, ledger: summarise(s), lastLedgerAt: s.clock.nowMs };
   const after = summarise(s);

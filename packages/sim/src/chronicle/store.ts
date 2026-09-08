@@ -1,7 +1,11 @@
 // The append-only store: every `tell` call adds one entry and never edits or removes one. Lives on
 // `SimState.chronicle`; `cloneChronicle` gives the tick loop's clone-per-tick pattern (state.ts) a
-// deep copy so a tick can append to its own private copy without touching the input. `tell` is the
-// package's only way to add to it.
+// copy so a tick can append to its own private copy without touching the input. An entry, once
+// told, is never edited — `tell` freezes it (and its `actors` and `facts`) before it is pushed —
+// so `cloneChronicle` only needs a new *array*, not a new copy of every entry: `entries.slice()` is
+// enough, and a tick's cost stops scaling with how much history the world has told (a deep
+// per-entry copy here was linear in the whole log's length; see chronicle.test.ts, "cloneChronicle
+// is not linear in the log"). `tell` is the package's only way to add to the store.
 
 import type { ActorId, SimState } from '../state';
 import { cloneChronicleStats, createChronicleStats, noteFact, notabilityScale, type ChronicleStats } from './notability';
@@ -20,26 +24,31 @@ export function createChronicle(): Chronicle {
   return { entries: [], nextId: 0, stats: createChronicleStats() };
 }
 
-/** A deep copy: the entries array, every entry's own `actors` and `facts`, and the stats are all
- * new, so appending to the copy never touches the original. */
+/** A new store, safe to append to without touching the original: a new `entries` array and new
+ * stats maps. Entries themselves are never copied — `tell` freezes every one it writes and never
+ * edits or replaces one already in `entries`, so the clone can share them by reference and stay
+ * O(distinct fact keys), not O(entries). */
 export function cloneChronicle(chronicle: Chronicle): Chronicle {
   return {
-    entries: chronicle.entries.map((e) => ({ ...e, actors: e.actors.slice(), facts: { ...e.facts } })),
+    entries: chronicle.entries.slice(),
     nextId: chronicle.nextId,
     stats: cloneChronicleStats(chronicle.stats),
   };
 }
 
-/** `noteFact` every fact in `facts` and return the highest notability any of them turned up (0 if
- * `facts` is empty). Always runs, regardless of source, so a card's or an authored line's numbers
- * feed the same trailing normals a ledger number is later judged against. */
-function recordFacts(stats: ChronicleStats, facts: Record<string, FactValue>, actors: readonly ActorId[]): number {
+/** `noteFact` every fact in `facts`, and return the highest notability any of them turned up (0 if
+ * `facts` is empty) and whether any of them was a first. Always runs, regardless of source, so a
+ * card's or an authored line's numbers feed the same trailing normals a ledger number is later
+ * judged against. */
+function recordFacts(stats: ChronicleStats, facts: Record<string, FactValue>, actors: readonly ActorId[]): { notability: number; first: boolean } {
   let best = 0;
+  let first = false;
   for (const [key, value] of Object.entries(facts)) {
-    const { notability } = noteFact(stats, key, value, actors);
-    if (notability > best) best = notability;
+    const result = noteFact(stats, key, value, actors);
+    if (result.notability > best) best = result.notability;
+    if (result.first) first = true;
   }
-  return best;
+  return { notability: best, first };
 }
 
 /**
@@ -47,20 +56,30 @@ function recordFacts(stats: ChronicleStats, facts: Record<string, FactValue>, ac
  * to be remembered — a card, an authored beat, the Ledger diff, the social graph, the economy, a
  * category action, a deity intent — calls `tell` and never touches `state.chronicle` directly.
  * Appends a new `ChronicleEntry` (nothing already written is ever edited or dropped) and returns it
- * with `id` and `notability` filled in.
+ * with `id`, `notability`, and `first` filled in. The returned entry, and its `actors` and `facts`,
+ * are frozen: this is the one place the chronicle is written, so nothing downstream can mutate a
+ * telling after the fact, and `cloneChronicle` can trust every entry it shares by reference is
+ * exactly as it was told.
  *
  * `notability`: for `source: 'card'` or `'authored'`, `input.hint` (default 0) through
  * `notabilityScale`, maxed with whatever `facts` turns up on its own; every other source's
  * notability comes from `facts` alone (chronicle/notability.ts has the one formula, including the
  * first-occurrence flag that can push it to 1). An entry with no numeric facts and no first among
  * them, from a source that gets no hint, is notability 0 — routine, not absent: it is still told.
+ *
+ * `first`: true if telling this entry was the first-ever telling of one of its fact keys, or the
+ * first telling of a (fact key, actor) pair among its `actors` (`noteFact`, notability.ts). Always
+ * false for an entry with no `facts`, regardless of its `hint`.
  */
 export function tell(state: Pick<SimState, 'chronicle'>, input: TellInput): ChronicleEntry {
-  const actors = input.actors ? [...input.actors] : [];
-  const facts = input.facts ? { ...input.facts } : {};
-  const factNotability = recordFacts(state.chronicle.stats, facts, actors);
+  // Frozen for real at runtime (readonly here is just what TS can express for an array/object
+  // literal); ChronicleEntry's own fields stay plainly typed since nothing outside this function
+  // is meant to know or care that its instances happen to be frozen.
+  const actors = Object.freeze(input.actors ? [...input.actors] : []) as ActorId[];
+  const facts = Object.freeze(input.facts ? { ...input.facts } : {}) as Record<string, FactValue>;
+  const { notability: factNotability, first } = recordFacts(state.chronicle.stats, facts, actors);
   const notability = input.source === 'card' || input.source === 'authored' ? Math.max(notabilityScale(input.hint ?? 0), factNotability) : factNotability;
-  const entry: ChronicleEntry = {
+  const entry = Object.freeze({
     id: `c${state.chronicle.nextId}`,
     atMs: input.atMs,
     district: input.district,
@@ -69,8 +88,9 @@ export function tell(state: Pick<SimState, 'chronicle'>, input: TellInput): Chro
     actors,
     source: input.source,
     notability,
+    first,
     facts,
-  };
+  }) as ChronicleEntry;
   state.chronicle.nextId++;
   state.chronicle.entries.push(entry);
   return entry;

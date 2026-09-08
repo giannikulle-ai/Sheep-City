@@ -35,6 +35,12 @@ export interface ChronicleEntry {
   actors: ActorId[];
   source: ChronicleSource;
   notability: number;
+  /** True if telling this entry was the first-ever telling of one of its fact keys, or the first
+   * telling of a (fact key, actor) pair among its `actors` — see `noteFact` (notability.ts). An
+   * entry with no `facts` is never a first. This is what lets a client tell a genuine first (a new
+   * ewe's first lamb) apart from a deviation that happens to saturate notability at 1, or a
+   * card/authored line whose own `hint` alone reached 1. */
+  first: boolean;
   facts: Record<string, FactValue>;
 }
 

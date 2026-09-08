@@ -338,12 +338,43 @@ function attemptDraw(state: SimState, deck: Deck, view: EventView): RunningEvent
   return startEvent(state, deck, (eligible[eligible.length - 1] as EligibleCard).card.id, 'card');
 }
 
-/** One look at the world: ends, category actions, authored triggers, then a card draw. */
+/**
+ * A cheap-only pass: could this look at the world possibly start anything at all? No predicate
+ * view is built here and nothing is allocated — just `running.length`, cooldowns already on
+ * `state.events`, and the same pacing gap `drawAllowed` itself checks, none of which needs a card
+ * or a trigger's own conditions read. It only has to rule out the common case where nothing at all
+ * can start; saying "yes" for an authored event that has never fired (so has no cooldown yet) even
+ * though its own predicate rarely holds is fine — the goal is to skip the object allocation and
+ * the predicate reads on the evaluations where the answer is already a plain "no" from data the
+ * engine has in hand (Round 2 verifier finding B, #82: the catch-up budget).
+ */
+function couldStartSomething(state: SimState, deck: Deck): boolean {
+  const e = state.events;
+  if (e.running.length >= PACING.concurrentCap) return false; // every start path checks this first
+  const now = state.clock.nowMs;
+  for (const event of deck.authored) {
+    if (isRunning(e, event.id)) continue;
+    const until = e.cooldowns[event.id];
+    if (until === undefined || now >= until) return true; // off cooldown: worth a real look
+  }
+  return msToSimMinutes(now, state.clock.periodSec) >= PACING.warmupSimMinutes && drawAllowed(state);
+}
+
+/**
+ * One look at the world: ends, category actions, authored triggers, then a card draw. The
+ * predicate view — and everything it can cost to build (the mean fleece, the mean grass, the
+ * flock's spread, each an O(actors) walk cached on first ask) — is built only when
+ * `couldStartSomething` says a start is actually possible (Round 2 verifier finding B, #82: the
+ * catch-up budget). With the global gap at 800 sim-minutes and every authored trigger usually on
+ * cooldown, most evaluations are a "no" the engine already knows without reading a single card's
+ * conditions; those cost a handful of comparisons and nothing more.
+ */
 export function evaluate(state: SimState, deck: Deck = FARM_DECK): void {
   endDue(state, deck);
   runScheduledCategoryActions(state);
-  // One view for the whole look at the world: its aggregates (the mean fleece, the mean grass, the
-  // flock's spread) are computed at most once even though the triggers and every card read them.
+  if (!couldStartSomething(state, deck)) return;
+  // One view for the whole look at the world: its aggregates are computed at most once even
+  // though the triggers and every card read them.
   const view = viewOf(state);
   for (const event of readyAuthored(state, deck, view)) {
     if (state.events.running.length >= PACING.concurrentCap) break;

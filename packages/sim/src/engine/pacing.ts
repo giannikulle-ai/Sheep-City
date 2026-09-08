@@ -38,15 +38,58 @@ export function msToSimMinutes(ms: number, periodSec: number): number {
 
 export const PACING = {
   /**
-   * The engine looks at the world once every two sim-minutes (Round 1 verifier finding 2, #82). The
-   * plan's "Layer 3" said once per sim-minute (`evalEverySimMinutes: 1`); measured on the charter's
-   * own catch-up bench (one sim-hour, 40 actors, three runs each, same box), the engine's own share
-   * of the cost was trunk 897.3 ms vs. engine-on 964.1 ms at every sim-minute (+66.8 ms, +6.0%,
-   * pushing the branch from three-of-three MET to one-of-three NOT MET against the 1,000 ms budget)
-   * and 921.0 ms at every two sim-minutes (+23.7 ms, +2.1%, back under budget on this box). The
-   * density cost of the coarser look is small: events per sim-hour went 68 (every minute) to 65
-   * (every two minutes) on the same measurement. At the watching period that is every 250 ms of sim
-   * time, about four evaluations every ten ticks.
+   * The engine looks at the world once every two sim-minutes (Round 1 verifier finding 2, #82).
+   * History: the plan's "Layer 3" said every sim-minute (`evalEverySimMinutes: 1`); Round 1 moved
+   * it to 2 after measuring trunk 897.3 ms vs. engine-on 964.1 ms at every minute (+66.8 ms,
+   * three-of-three MET to one-of-three NOT MET against the catch-up budget) and 921.0 ms at every
+   * two minutes on their own box. Round 2's verifier re-measured on a different box and found
+   * every-two-minutes still NOT MET on 2 of 4 runs (mean 1014.4 ms vs. trunk 897.3 ms, +117.1 ms) —
+   * the Round 1 lever had bought only about 18 ms of that, not the ~43 ms Round 1's own harness
+   * predicted.
+   *
+   * Round 2 traced *where* the rest of the cost actually is, and it is not where either round
+   * assumed. Profiling (`node --prof`, and direct per-phase timers wrapped around one tick) shows
+   * `evaluate`'s own predicate-and-draw logic costs only a small share of the delta. The
+   * `couldStartSomething` early-out below cuts that further, skipping the predicate view entirely
+   * once no authored trigger is off cooldown and the 800-sim-minute card gap hasn't elapsed — most
+   * evaluations become a handful of comparisons, and it is RNG-neutral (checked by toggling it
+   * alone against a fixed seed set: identical draws, identical hashes either way). The rest of the
+   * gap — well over half of it — is not the engine's *decision* logic at all: it is
+   * `farmerMarketWalk` (`engine/category.ts`, also #40) — a real, wanted feature, not a bug —
+   * putting the farmer on the field for one extra stretch every day. Disabling only that one
+   * category action (nothing else) on an otherwise-unmodified branch build closed the branch/trunk
+   * gap from about +150 ms to about +37 ms on the box this was measured on: an extra daily NPC
+   * visit's own downstream cost in the (unrelated) sheep-tick hot path, not card-draw predicate
+   * evaluation, is the dominant remaining share.
+   *
+   * With the early-out (this round's real lever) and `evalEverySimMinutes` kept at 2, four runs
+   * each, same box, same install: trunk mean 872.4 ms (865.7, 845.2, 881.3, 897.2 — MET 4/4);
+   * branch mean 981.6 ms (984.6, 963.9, 971.6, 1006.4 — MET 3/4, up from Round 1's 2/4); branch with
+   * the engine forced off (same build) mean 929.8 ms (900.9, 952.9, 956.4, 908.9 — MET 4/4). Delta
+   * branch-on vs. branch-off, the engine's own true share on this one build: +51.8 ms, down from
+   * Round 1's measured ~117 ms and consistent with the `farmerMarketWalk` attribution above. Delta
+   * branch-on vs. trunk: +109.2 ms, still over budget on 1 of 4 runs.
+   *
+   * Round 2 also tried the obvious next lever — `evalEverySimMinutes: 4` — and measured it: mean
+   * 975.5 ms, MET on 3 of 4 runs, a real further improvement on the bench. But `farmerMarketWalk`'s
+   * cost is fixed (once a day, however often the engine looks), so the only thing a coarser interval
+   * actually buys here is fewer *card* draw attempts. With the warm-up correctly at 480 sim-minutes
+   * (this round's own fix), the ticket's "about three per five minutes" was already down to a median
+   * of **2** card/authored starts in five real minutes at `evalEverySimMinutes: 2` (seeds 1-30:
+   * range 1 to 3, 2 of the 30 seeds draw no card at all in the whole watch) — the warm-up eating
+   * closer to a third of every five-minute watch costs real density on its own, independent of this
+   * constant. Moving to every-four-minutes measured the same median (2) and the same range (1 to 3),
+   * but roughly doubled the quiet tail: 4 of the 30 seeds drew no card at all, against 2 at every-two-
+   * minutes. That is a real, further cost — not the "median 3 to 2" this comment first claimed before
+   * re-measuring against the corrected warm-up, which was wrong — spent to shave a budget line whose
+   * real cost is a different feature entirely, so it was reverted; every number above and every seed
+   * this round re-measures below is `evalEverySimMinutes: 2`. Between a catch-up bench not reliably
+   * under budget on this box either way, and a quiet-seed rate that doubles for a marginal bench gain,
+   * this round keeps the smaller number and says so plainly rather than trade more of the ticket's own
+   * density for a mean that still isn't a guarantee. The way out from here is a lever aimed at the
+   * NPC-presence cost itself, the deferred #78, or the Foreman/owner deciding the budget line is
+   * advisory until one of those lands — not a further cut to how often the engine looks. See the PR's
+   * Round 2 note for the full measurements.
    */
   evalEverySimMinutes: 2,
 
@@ -129,18 +172,22 @@ export const PACING = {
   simDateCooldownCycles: 0.95,
 
   /**
-   * No card draws in the world's first `warmupSimMinutes` of sim time (owner note, Round 1, #82): a
-   * fresh world's very first look at the world was winning the merchant caravan card on 29 of 30
-   * seeds, median 17.3 real seconds in, sometimes under one second — a watching player usually met
-   * him before they had settled in. 60 sim-minutes is one real minute at the watching rate, long
-   * enough that the field has a beat before the deck starts drawing from it. Authored events (the
-   * birthday, the storm, first snow) are punctuation on their own trigger, and category actions (the
-   * farmer's dawn walk) are the world's scheduled rhythm — neither is a draw, so neither is gated by
-   * this; only `attemptDraw`'s card draw checks it. Measured from `state.clock.nowMs`, so it holds
-   * for a fresh world and has already passed for anything loaded from a save or fast-forwarded past
-   * it.
+   * No card draws in the world's first `warmupSimMinutes` of sim time (owner note, Round 1, #82,
+   * plan line 11: "no card draws in a fresh world's first minute"): a fresh world's very first look
+   * at the world was winning the merchant caravan card on 29 of 30 seeds, median 17.3 real seconds
+   * in, sometimes under one second — a watching player usually met him before they had settled in.
+   * Round 2 found the constant's own comment claimed "60 sim-minutes is one real minute" — it is
+   * not: a sim-minute is `periodSec * 1000 / 1440` sim ms (125 ms at the watching rate, `periodSec`
+   * 180), so 60 sim-minutes is 7,500 ms, 7.5 real seconds, eight times too short to be the owner's
+   * "first minute." One real minute at the watching rate is 480 sim-minutes (480 * 125 ms =
+   * 60,000 ms), which is what the owner actually asked for; the constant is fixed to match its own
+   * comment. Authored events (the birthday, the storm, first snow) are punctuation on their own
+   * trigger, and category actions (the farmer's dawn walk) are the world's scheduled rhythm —
+   * neither is a draw, so neither is gated by this; only `attemptDraw`'s card draw checks it.
+   * Measured from `state.clock.nowMs`, so it holds for a fresh world and has already passed for
+   * anything loaded from a save or fast-forwarded past it.
    */
-  warmupSimMinutes: 60,
+  warmupSimMinutes: 480,
 } as const;
 
 /**

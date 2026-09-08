@@ -15,7 +15,7 @@
       "chance":      { "value": 0.35,            "comment": "Base chance a roll brings rain (the season table below overrides it in season mode)." },
       "lengthMs":    { "value": [20000, 45000],  "comment": "Rain lasts a uniform time in this range; snow lasts up to 1.5x the spread." }
     },
-    "season":  { "realDays": { "value": 9, "comment": "One in-world season lasts this many real days (10% of a real season) in auto mode." } },
+    "season":  { "realDays": { "value": 9, "comment": "SIM COMPAT ONLY (packages/sim/src/rules.ts, clock.ts SEASON_MS): the old fixed nine-real-day season the sim still reads today. Superseded by outsideRules.seasons.calendar below, the owner's real-year model (2026-09-08); sim ticket #84 retires this field once the sim reads the calendar instead. Do not tune this number for feel any more." } },
     "speed": {
       "sheepWander":   { "value": 9,  "comment": "Sheep px/s when wandering." },
       "sheepWalk":     { "value": 16, "comment": "Sheep px/s when walking to a need (tuft, hay, trough, barn)." },
@@ -50,6 +50,27 @@
       "odds":  {
         "value": { "spring": { "rain": 0.35, "snow": 0.02 }, "summer": { "rain": 0.18, "snow": 0 }, "autumn": { "rain": 0.42, "snow": 0.05 }, "winter": { "rain": 0.05, "snow": 0.5 } },
         "comment": "SEASON_ODDS: per weather roll, chance of snow then rain, in season mode."
+      },
+      "calendar": {
+        "comment": "New for #83, the owner's calendar decision (2026-09-08, plan section 2 'Time' and section 11 decision 10): seasons follow the real year instead of a fixed nine-day cycle. Proposed to the sim lane on #84 as outsideRules.seasons.calendar, sitting beside rules.season.realDays above until #84 retires that field. Rule for #84 to implement exactly: anchors plus startOffsetDriftRealDays fix each season's start date (each season's offset drawn independently); a season's length is derived as the gap from its own start to the next season's start, never sampled on its own, so drift can never make two seasons overlap or invert (see lengthDriftRealDays below).",
+        "nominalRealDays": { "value": 91, "comment": "Nominal length of one season in real days: 365 real days / 4 seasons ≈ 91, a quarter of a real year — a reference average (e.g. for scaling other tunables), not itself the value that drives a season's realized length; see the rule above." },
+        "lengthDriftRealDays": {
+          "value": [-22, 22],
+          "comment": "Derived, not independently drawn: with the anchors' true real-calendar gaps (93, 93, 90, 89 real days spring→summer→autumn→winter→spring, not a uniform 91) and each season's start independently offset by up to ±10 real days (startOffsetDriftRealDays below), a season's realized length — the gap from its own start to the next season's start — lands about 69 to 113 real days across the year, i.e. about −22 to +22 around the nominal 91. This field documents that derived spread for anyone reading the numbers; it is not itself sampled to produce a length."
+        },
+        "startOffsetDriftRealDays": {
+          "value": [-10, 10],
+          "comment": "Each season's start date drifts from its anchor (below) by a value seeded uniformly from this [min, max] range of real days, so a season does not begin on the exact same calendar date every year — 'a little seeded drift is the point' (plan section 2)."
+        },
+        "anchors": {
+          "value": {
+            "spring": { "month": 3,  "day": 20 },
+            "summer": { "month": 6,  "day": 21 },
+            "autumn": { "month": 9,  "day": 22 },
+            "winter": { "month": 12, "day": 21 }
+          },
+          "comment": "The real calendar date (month, day; northern hemisphere) each season begins around, before startOffsetDriftRealDays is applied: the spring equinox (Mar 20), the summer solstice (Jun 21), the autumn equinox (Sep 22), the winter solstice (Dec 21)."
+        }
       }
     },
     "merchant": { "firstVisitMs": { "value": 45000, "comment": "Delay from reset to the first merchant visit." } },

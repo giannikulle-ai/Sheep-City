@@ -306,13 +306,41 @@ and a long cooldown. The plan itself frames DL's birthday as one of the examples
 authored punctuation, not a draw; #59 moves both here, and gives `farm.json` two new
 cards (above) to keep the deck at fifteen.
 
+**The calendar (#83).** Seasons follow the real year — the owner's decision, 2026-09-08
+(plan section 2, "Time" and section 11 decision 10): a nominal length of about 91 real
+days per season, a quarter of 365, with a little seeded drift on when a season starts,
+so no two years land on the same dates. All of it lives in `balance/farm.json`'s
+`outsideRules.seasons.calendar` — `nominalRealDays`, `lengthDriftRealDays`,
+`startOffsetDriftRealDays`, and the `anchors` each season begins around, northern
+hemisphere: spring the equinox around March 20, summer the solstice around June 21,
+autumn the equinox around September 22, winter the solstice around December 21. The
+rule #84 must implement exactly: `anchors` plus `startOffsetDriftRealDays` fix each
+season's start date, each offset drawn independently; a season's length is then derived
+as the gap from its own start to the next season's start, never sampled on its own, so
+drift can never make two seasons overlap or invert — `lengthDriftRealDays` documents
+that derived spread (about −22 to +22 real days around the 91-day nominal, since the
+anchors' real gaps are 93, 93, 90, and 89 days, not a uniform 91), it is not itself
+sampled. The old fixed nine-real-day season (`rules.season.realDays`) stays in the
+data too, because the sim still reads it today; sim ticket #84 retires it once the sim
+reads the calendar instead. One consequence: because a season's real length now varies,
+a `simDate` trigger's `dayOfSeason` is no longer an absolute day count
+(`clock.dayCount mod 9`) — it is a fraction, 0 up to but not including 1, of however long
+the current season turns out to be that year, so 0.5 always means the season's midpoint
+whether it ran 81 real days or 101. A date that should recur every real year regardless
+of the sim's season — DL's birthday — is not a `simDate` at all any more: it is the new
+`realDate` trigger kind below, a plain `month` and `day` plus an optional
+`windowSimMinutes` for how much sim time either side of that moment still counts as a
+match.
+
 ### DL's birthday
 
 Once a year, the flock turns as one and walks towards DL. A cake bubble. Heart bubbles
 all round. She does her spin. Nobody knows how the sheep know.
 
-**Trigger.** `simDate`: the first day of spring. We don't know DL's real birthday, so
-it is pinned there; the owner can move it. Recurs once every four-season cycle.
+**Trigger.** `realDate`: December 15, the owner's decision (2026-09-08). Recurs every
+real year, regardless of which sim season that calendar date falls in for a given
+world's seeded calendar — a change from v1's guess at the first day of spring, since a
+birthday is a real date, not a point in the sim's own season cycle.
 
 **Variables.** `cakeFlavour` (honey — a light nod to the wildwood's eventual honey
 economy, plan section 3, not a dependency on it), `ringFormation` (how the flock
@@ -369,10 +397,16 @@ looks up at the same moment. The lambs bounce. DL leaps at a flake, misses, and 
 again. Then everybody goes back to grazing with white on their backs, as if nothing
 happened.
 
-**Trigger.** `predicates`: season is winter and weather is snow, with a 30-sim-day
-cooldown — under a full year (four nine-day seasons = 36 sim days), long enough to span
-most of a year so the predicates holding again the next snowy moment doesn't retrigger
-it, but short enough that the next winter's first snow isn't skipped. v1's card made this
+**Trigger.** `predicates`: season is winter and weather is snow, with a 60,000-sim-day
+cooldown. Fixed for #83's calendar review: a sim day is not a real day — at
+`outsideRules.clock.periodSec = 180` (`packages/sim/src/clock.ts:35`), one real day is
+86400 / 180 = 480 sim days, so the nominal 91-real-day season is 43,680 sim days and a
+four-season year is about 174,720, not "4 * 91 = 364 sim days" as an earlier version of
+this cooldown assumed. 60,000 sim days sits above the longest a winter can realistically
+run under `outsideRules.seasons.calendar` (about 109 real days from the anchor gaps
+plus drift, ≈52,320 sim days) and well under the shortest possible gap to the next
+winter (about 345 real days, ≈165,600 sim days), so the predicates can hold again before
+next winter is due but the event still fires at most once a winter. v1's card made this
 rare only with a 720-hour cooldown and said so was a proxy for a real "first"; the
 authored trigger's own cooldown is that fix.
 
@@ -401,7 +435,7 @@ in her mouth.* (notability 0.85)
 ## What the deck does not do yet
 
 - **No cross-district cards.** The harbour and the wildwood arrive in Phase 3 with the deck at fifty.
-- **`simMinutesSinceRain`, the `simDate` trigger's day-of-season, and `lambFarFromMother` are proposed, not confirmed.** All three are flagged to sim on #40 in the schema and in this page, the same way v1 flagged `recentWeather`. The sim has a running `dayCount` and a season cycle but no explicit "day within the season" concept yet; `simDate` assumes `clock.dayCount mod 9` is a reasonable reading of it. `lambFarFromMother` is structurally always false in today's sim: every lamb is sprung to a fixed point behind its mother each tick, with no detachment behaviour yet — `lostLamb`'s strongest multiplier is written for the sim #40 will build, not the one that exists today.
+- **`simMinutesSinceRain`, the `simDate` trigger's day-of-season, the new `realDate` trigger, the calendar it reads (`outsideRules.seasons.calendar`), and `lambFarFromMother` are proposed, not confirmed.** All are flagged to sim, `simMinutesSinceRain` and `lambFarFromMother` on #40 and the calendar and both date triggers on #84, in the schema and in this page, the same way v1 flagged `recentWeather`. The sim has a running `dayCount` and a season cycle but no explicit real-calendar concept yet, and still reads the old fixed nine-real-day season (`rules.season.realDays`) rather than the new calendar; no authored event uses `simDate` today (`dlBirthday` moved to `realDate` on #83), so its fraction-of-a-season `dayOfSeason` is untested against real sim behaviour until #84 lands. `lambFarFromMother` is structurally always false in today's sim: every lamb is sprung to a fixed point behind its mother each tick, with no detachment behaviour yet — `lostLamb`'s strongest multiplier is written for the sim #40 will build, not the one that exists today.
 - **No chained cards.** The farmer's day off leaves the flock woolly, which makes the next shearing day bigger; that is the Ledger doing the chaining (via `ledger.wool`, now a real condition), not the deck. A `recentEvents` predicate would let a card follow another on purpose.
 - **Weights are a first guess, doubly so now.** Both `base` and every multiplier's `times` are the sim's pacing curve and the qa lane's event coverage (#49) to tune. Every number sits in the JSON with a comment for a reason.
 - **Authored `variables` are open by design**, unlike every other closed shape in these two schemas (`additionalProperties: false` holds everywhere else). Each of the three events needs a different bag of named values; nothing enforces what's inside one beyond "at least one". Worth an owner's eye if that looseness turns out to matter before more authored events are written.

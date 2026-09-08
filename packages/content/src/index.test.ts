@@ -65,14 +65,19 @@ describe('the farm authored events (v2)', () => {
     for (const event of FARM_AUTHORED_EVENTS.events) expect(cardIds.has(event.id)).toBe(false);
   });
 
-  it('covers all three trigger kinds the issue asks for', () => {
+  it('covers three of the four trigger kinds the schema supports (dlBirthday now uses realDate, #83)', () => {
     const kinds = FARM_AUTHORED_EVENTS.events.map((e) => e.trigger.kind).sort();
-    expect(kinds).toEqual(['predicates', 'simDate', 'stockThreshold']);
+    expect(kinds).toEqual(['predicates', 'realDate', 'stockThreshold']);
   });
 
   it('looks events up by id and throws on a typo', () => {
-    expect(authoredEvent('dlBirthday').trigger.kind).toBe('simDate');
+    expect(authoredEvent('dlBirthday').trigger.kind).toBe('realDate');
     expect(() => authoredEvent('dlBirthdya')).toThrow(/no authored event/);
+  });
+
+  it("gives dlBirthday a real December 15, regardless of the sim's season cycle", () => {
+    const trigger = authoredEvent('dlBirthday').trigger;
+    expect(trigger).toEqual(expect.objectContaining({ kind: 'realDate', month: 12, day: 15 }));
   });
 
   it('gives every event at least one real variable (not just a comment) and one priorityOver entry', () => {

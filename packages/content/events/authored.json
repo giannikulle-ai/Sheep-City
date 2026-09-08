@@ -13,12 +13,12 @@
     {
       "id": "dlBirthday",
       "title": "DL's birthday",
-      "comment": "Was the rarest-weighted card in v1 (weight 1 of 100, cooldown 720h); as an authored event it is not a draw at all, it is a date, which is a better fit for something that should happen once and only once a year. We do not know DL's real birthday, so it is pinned to the first day of spring; the owner can move it.",
+      "comment": "Was the rarest-weighted card in v1 (weight 1 of 100, cooldown 720h); as an authored event it is not a draw at all, it is a date, which is a better fit for something that should happen once and only once a year. The owner decided (2026-09-08, plan section 2 'Time' and section 11 decision 10): Digital Luna's birthday is December 15, a real calendar date, so a world that starts in June waits for it. #83 moves the trigger from a first-day-of-spring `simDate` guess to the real `realDate` this always meant.",
       "trigger": {
-        "kind": "simDate",
-        "season": "spring",
-        "dayOfSeason": 1,
-        "comment": "Recurs once every four-season cycle, i.e. once a year."
+        "kind": "realDate",
+        "month": 12,
+        "day": 15,
+        "comment": "December 15, every real year, regardless of which sim season that calendar date falls in for a given world's seeded calendar (balance/farm.json outsideRules.seasons.calendar)."
       },
       "variables": {
         "cakeFlavour": "honey",
@@ -87,8 +87,8 @@
           { "on": "season", "op": "eq", "value": "winter" },
           { "on": "weather", "op": "eq", "value": "snow" }
         ],
-        "cooldownSimDays": 30,
-        "comment": "Under a full year (four nine-day seasons = 36 sim days), so the predicates can hold again before next winter is due but the cooldown still spans most of a year, keeping this the first snow of the current winter rather than a second flurry days later."
+        "cooldownSimDays": 60000,
+        "comment": "Fixed for #83's calendar review: a sim day is not a real day. At outsideRules.clock.periodSec = 180 (packages/sim/src/clock.ts:35), one real day = 86400 / 180 = 480 sim days, so the nominal 91-real-day season is 43,680 sim days and a four-season year is about 174,720, not '4 * 91 = 364 sim days' as the old comment here said. cooldownSimDays = 60,000 sits above the longest a winter can realistically run under outsideRules.seasons.calendar (about 109 real days from the anchor gaps plus drift, ≈52,320 sim days — comfortably over even the old naive 101-day/48,480-sim-day estimate) and well under the shortest possible gap to the next winter (about 345 real days, ≈165,600 sim days), so the predicate can lapse and re-arm exactly once each winter, not once every ~15 hours of watched play like the old 30 (and un-rescaled 303) did."
       },
       "variables": {
         "flakeBurst": 24

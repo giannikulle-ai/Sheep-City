@@ -4,7 +4,7 @@
 A deterministic, testable simulation core that makes Sheepcliff feel alive without a renderer in the room.
 
 ## Owns (paths)
-- `packages/sim/**`
+- `packages/sim/**` (the tick, the registry, the Ledger, the event engine, the chronicle, the social graph)
 - `packages/sim/test/**`
 
 ## Never touches
@@ -18,6 +18,7 @@ npm run test -w packages/sim      # expected: all tests pass, including seeded d
 npm run typecheck                 # expected: 0 errors
 npm run bench -w packages/sim     # expected: live budget, one tick of 40 actors under 2 ms; catch-up budget, one sim-hour of 40 actors at actor resolution under 1 s (both on the bench machine)
 ```
+The DL invariant test (nothing can harm her) is never skipped, loosened, or moved out of the suite.
 
 ## Gate
 Medium. High if a PR changes DL's priority order, sheep needs weights, or the tick rate.
@@ -25,7 +26,7 @@ Medium. High if a PR changes DL's priority order, sheep needs weights, or the ti
 ## Working notes
 - Fixed timestep, seeded RNG, no `Date.now()` or `Math.random()` inside the sim. Time comes in as a parameter.
 - Behaviours are registered `(id, priority, condition, tick)` objects. The if/else chain from the prototype is the reference for parity, not the pattern to copy.
-- Three layers: Ledger (district numbers), Actors (on-screen individuals), Director (events). Keep them separable; the Ledger must run alone for offline catch-up.
+- Three layers: Ledger (district numbers), Actors (on-screen individuals), the event engine (cards, authored events, category actions). Keep them separable; the Ledger must run alone for offline catch-up. Every event start and end, every Ledger diff, and every graph change writes to the chronicle through `tell`.
 - Parity with `prototype/luna-farm/src/sim_template.html` is the first milestone. Read its `RULES` block and the `tick` function before designing.
 
 ## Handoff log

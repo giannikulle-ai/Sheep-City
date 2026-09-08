@@ -13,12 +13,12 @@
     {
       "id": "dlBirthday",
       "title": "DL's birthday",
-      "comment": "Was the rarest-weighted card in v1 (weight 1 of 100, cooldown 720h); as an authored event it is not a draw at all, it is a date, which is a better fit for something that should happen once and only once a year. We do not know DL's real birthday, so it is pinned to the first day of spring; the owner can move it.",
+      "comment": "Was the rarest-weighted card in v1 (weight 1 of 100, cooldown 720h); as an authored event it is not a draw at all, it is a date, which is a better fit for something that should happen once and only once a year. The owner decided (2026-09-08, plan section 2 'Time' and section 11 decision 10): Digital Luna's birthday is December 15, a real calendar date, so a world that starts in June waits for it. #83 moves the trigger from a first-day-of-spring `simDate` guess to the real `realDate` this always meant.",
       "trigger": {
-        "kind": "simDate",
-        "season": "spring",
-        "dayOfSeason": 1,
-        "comment": "Recurs once every four-season cycle, i.e. once a year."
+        "kind": "realDate",
+        "month": 12,
+        "day": 15,
+        "comment": "December 15, every real year, regardless of which sim season that calendar date falls in for a given world's seeded calendar (balance/farm.json outsideRules.seasons.calendar)."
       },
       "variables": {
         "cakeFlavour": "honey",
@@ -87,8 +87,8 @@
           { "on": "season", "op": "eq", "value": "winter" },
           { "on": "weather", "op": "eq", "value": "snow" }
         ],
-        "cooldownSimDays": 30,
-        "comment": "Under a full year (four nine-day seasons = 36 sim days), so the predicates can hold again before next winter is due but the cooldown still spans most of a year, keeping this the first snow of the current winter rather than a second flurry days later."
+        "cooldownSimDays": 303,
+        "comment": "Re-derived for #83's calendar (a season is now ~91 real days nominal, not 9): scaling the old 30-sim-day cooldown by the same ratio, 30 * (91 / 9) ≈ 303. Comfortably under a full four-season year (4 * 91 = 364 sim days), so the predicates can hold again before next winter is due, but the cooldown still spans most of a year, keeping this the first snow of the current winter rather than a second flurry days later."
       },
       "variables": {
         "flakeBurst": 24

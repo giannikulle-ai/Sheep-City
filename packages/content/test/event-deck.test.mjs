@@ -249,14 +249,36 @@ test("every authored event's priorityOver entries are known card ids or look lik
   }
 });
 
-test("authored triggers use one of the three kinds the issue asks for, each shaped correctly", () => {
+test("authored triggers use one of the four kinds the schema supports, each shaped correctly", () => {
   for (const e of authoredEvents) {
-    assert.ok(["predicates", "simDate", "stockThreshold"].includes(e.trigger.kind), `${e.id}: trigger kind ${e.trigger.kind}`);
+    assert.ok(["predicates", "simDate", "stockThreshold", "realDate"].includes(e.trigger.kind), `${e.id}: trigger kind ${e.trigger.kind}`);
     if (e.trigger.kind === "predicates") assert.ok(e.trigger.all.length > 0 && e.trigger.cooldownSimDays > 0);
     if (e.trigger.kind === "simDate") {
       assert.ok(balance.outsideRules.seasons.order.value.includes(e.trigger.season));
-      assert.ok(e.trigger.dayOfSeason >= 1 && e.trigger.dayOfSeason <= 9);
+      assert.ok(e.trigger.dayOfSeason >= 0 && e.trigger.dayOfSeason < 1, `${e.id}: dayOfSeason is a fraction 0..1 of the current season, not a fixed day count`);
     }
     if (e.trigger.kind === "stockThreshold") assert.ok(e.trigger.cooldownSimDays > 0);
+    if (e.trigger.kind === "realDate") {
+      assert.ok(e.trigger.month >= 1 && e.trigger.month <= 12, `${e.id}: month ${e.trigger.month}`);
+      assert.ok(e.trigger.day >= 1 && e.trigger.day <= 31, `${e.id}: day ${e.trigger.day}`);
+    }
   }
+});
+
+test("dlBirthday is a realDate of December 15 (#83, the owner's decision)", () => {
+  const birthday = authoredEvents.find((e) => e.id === "dlBirthday");
+  assert.deepEqual({ kind: birthday.trigger.kind, month: birthday.trigger.month, day: birthday.trigger.day }, { kind: "realDate", month: 12, day: 15 });
+});
+
+test("the schema accepts a realDate trigger's optional windowSimMinutes and rejects a month or day out of range", () => {
+  const birthday = authoredEvents.find((e) => e.id === "dlBirthday");
+
+  const withWindow = { ...authored, events: [{ ...birthday, trigger: { ...birthday.trigger, windowSimMinutes: 60 } }] };
+  assert.deepEqual(validate(resolve(here, "../schema/authored-events.schema.json"), withWindow), [], "windowSimMinutes is optional and, when present, must validate");
+
+  const badMonth = { ...authored, events: [{ ...birthday, trigger: { ...birthday.trigger, month: 13 } }] };
+  assert.ok(validate(resolve(here, "../schema/authored-events.schema.json"), badMonth).length > 0, "month 13 must fail schema validation");
+
+  const badDay = { ...authored, events: [{ ...birthday, trigger: { ...birthday.trigger, day: 32 } }] };
+  assert.ok(validate(resolve(here, "../schema/authored-events.schema.json"), badDay).length > 0, "day 32 must fail schema validation");
 });

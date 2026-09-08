@@ -1,0 +1,113 @@
+{
+  "$schema": "../schema/authored-events.schema.json",
+  "source": "New for #59: the three reference authored events named in the issue (DL's birthday, a storm, first snow of the season), matching plan section 2's own examples of the punctuation cards don't do.",
+  "comment": "Authored events for the farm district. Where farm.json's cards are drawn under a pacing target, each of these becomes eligible only when its own trigger is met, and while it runs it outranks any card or parameter named in priorityOver. DL's birthday and first snow were random-draw cards in v1 (#41); the plan frames both as authored punctuation, not a draw, so #59 moves them here and gives farm.json two new cards (flockHuddle, farmerMeetsMerchant) to keep the deck at fifteen. Ids are disjoint from farm.json's card ids by construction; the deck test checks it.",
+  "district": "farm",
+  "timeScale": {
+    "simMinutesPerDay": 1440,
+    "simHoursPerDay": 24,
+    "realSecondsPerSimDayWatching": 180,
+    "comment": "Same conversion as events/farm.json's timeScale; repeated here so this file stands alone."
+  },
+  "events": [
+    {
+      "id": "dlBirthday",
+      "title": "DL's birthday",
+      "comment": "Was the rarest-weighted card in v1 (weight 1 of 100, cooldown 720h); as an authored event it is not a draw at all, it is a date, which is a better fit for something that should happen once and only once a year. We do not know DL's real birthday, so it is pinned to the first day of spring; the owner can move it.",
+      "trigger": {
+        "kind": "simDate",
+        "season": "spring",
+        "dayOfSeason": 1,
+        "comment": "Recurs once every four-season cycle, i.e. once a year."
+      },
+      "variables": {
+        "cakeFlavour": "honey",
+        "ringFormation": "circle",
+        "heartBubbleCount": 6
+      },
+      "variablesComment": "Cosmetic parameters the birthday's own hooks and art read: honey ties loosely to the wildwood's eventual honey economy (plan section 3), a nod not a dependency; ringFormation and heartBubbleCount steer how the flock arranges itself and how many heart bubbles show, values a card has no field for.",
+      "priorityOver": ["wellRunsLow", "farmersDayOff", "mood"],
+      "durationSimMinutes": 180,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "party", "value": true, "comment": "The flock gathers round DL; heart bubbles all round; DL does her spin. Same flag as the v1 card, now set by the authored event instead of a random draw." },
+          { "op": "mood", "target": "all", "delta": 3 }
+        ],
+        "end": [
+          { "op": "flag", "name": "party", "value": false }
+        ]
+      },
+      "storybook": { "line": "It was {dl}'s birthday. The whole flock came over to say so.", "picture": "birthday", "notability": 0.9 },
+      "moment": { "kind": "bubble", "detail": "cake" },
+      "beat": { "start": "A cake bubble over DL and the flock turning to walk towards her, within a second.", "end": "The ring of sheep drifts apart and DL flops down in the middle, done in." }
+    },
+    {
+      "id": "cliffStorm",
+      "title": "A storm off the cliff",
+      "comment": "New authored event for #59: the storm the issue asks for. Triggered by a genuine drought rather than a coin flip, so it reads as relief, not a random inconvenience — a causal design the card schema's conditions could also express, but the trigger's own cooldownSimDays is what stops it firing again the moment the threshold is still crossed a sim-minute later.",
+      "trigger": {
+        "kind": "stockThreshold",
+        "on": "ledger.grass",
+        "op": "lte",
+        "value": 0.15,
+        "cooldownSimDays": 20,
+        "comment": "Fires when the mean tuft level crosses below a real drought line, well under wellRunsLow's card-level 0.3. The cooldown gives the grass, and the flock's mood, time to recover before another one is due."
+      },
+      "variables": {
+        "windGustPx": 6,
+        "thunderClaps": 3
+      },
+      "variablesComment": "Cosmetic parameters for the sim's storm rendering: how far the weather layer shakes the scene and how many thunder beats play. Not stocks; nothing here touches the Ledger beyond the mood hooks below.",
+      "priorityOver": ["fogMorning", "stargazingNight", "nightOfTheFireflies", "weather"],
+      "durationSimMinutes": 90,
+      "hooks": {
+        "start": [
+          { "op": "setVisibility", "value": 0.5, "comment": "Driving rain greys the field; higher than fogMorning's 0.35 (clearer, less thick) so the barn stays a clear shape through it." },
+          { "op": "flag", "name": "storm", "value": true, "comment": "Sheep crowd into the barn doorway; DL's rain-shepherd priority runs at its hardest." },
+          { "op": "mood", "target": "flock", "delta": -2 }
+        ],
+        "end": [
+          { "op": "setVisibility", "value": 1 },
+          { "op": "flag", "name": "storm", "value": false },
+          { "op": "mood", "target": "flock", "delta": 1, "comment": "Wet, but the grass will be glad of it." },
+          { "op": "mood", "target": "dl", "delta": 1 }
+        ]
+      },
+      "storybook": { "line": "A storm broke over the cliff and {dl} kept the whole flock under the barn eave.", "picture": "cliffStorm", "notability": 0.75 },
+      "moment": { "kind": "weather", "detail": "storm" },
+      "beat": { "start": "The sky darkens fast, rain hits hard, and every sheep bolts for the barn doorway at once.", "end": "The rain eases to a drip off the eave and the flock spreads back out, drenched but calm." }
+    },
+    {
+      "id": "firstSnowOfSeason",
+      "title": "First snow of the season",
+      "comment": "Was the firstSnow card in v1, made rare only by a 720-hour cooldown (the file's own comment called that a proxy for a real 'first' and proposed fixing it here). As an authored event with a predicate trigger and a season-length cooldown it can only mean the actual first snow of THIS winter, which is what the plan's own notion of a 'first' (section 2, the chronicle and the storybook) asks for.",
+      "trigger": {
+        "kind": "predicates",
+        "all": [
+          { "on": "season", "op": "eq", "value": "winter" },
+          { "on": "weather", "op": "eq", "value": "snow" }
+        ],
+        "cooldownSimDays": 30,
+        "comment": "Under a full year (four nine-day seasons = 36 sim days), so the predicates can hold again before next winter is due but the cooldown still spans most of a year, keeping this the first snow of the current winter rather than a second flurry days later."
+      },
+      "variables": {
+        "flakeBurst": 24
+      },
+      "variablesComment": "Extra snowflake sprites the weather layer spawns for this one flurry, more than an ordinary snowy scene gets.",
+      "priorityOver": ["farmersDayOff", "mood"],
+      "durationSimMinutes": 120,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "firstSnow", "value": true, "comment": "Sheep look up and stand still; lambs bounce; DL snaps at flakes. Same flag as the v1 card; now authored so it can only mean the first snow, not any snow." },
+          { "op": "mood", "target": "flock", "delta": 1 }
+        ],
+        "end": [
+          { "op": "flag", "name": "firstSnow", "value": false }
+        ]
+      },
+      "storybook": { "line": "The first snow of the season fell and {dl} tried to catch it in her mouth.", "picture": "firstSnow", "notability": 0.85 },
+      "moment": { "kind": "dl-trick", "detail": "snow-bite" },
+      "beat": { "start": "Every sheep stops and looks up at the same moment; DL leaps at a flake.", "end": "The flock goes back to grazing with white on their backs." }
+    }
+  ]
+}

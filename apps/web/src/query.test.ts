@@ -16,6 +16,7 @@ describe('parseSceneParams', () => {
       fixture: false,
       scratch: false,
       fresh: false,
+      gapMinutes: null,
     });
   });
 
@@ -24,6 +25,13 @@ describe('parseSceneParams', () => {
     expect(parseSceneParams('?weather=rain')).toMatchObject({ scratch: true });
     expect(parseSceneParams('?fixture=1&now=5')).toMatchObject({ scratch: true, fixture: true, freeze: true });
     expect(parseSceneParams('?fresh=1')).toMatchObject({ scratch: false, fresh: true });
+  });
+
+  it('reads ?gap= as sim-minutes and marks the world scratch', () => {
+    expect(parseSceneParams('?gap=10080')).toMatchObject({ gapMinutes: 10080, scratch: true });
+    expect(parseSceneParams('?gap=0')).toMatchObject({ gapMinutes: 0, scratch: true });
+    expect(parseSceneParams('?gap=abc')).toMatchObject({ gapMinutes: 0 });
+    expect(parseSceneParams('').gapMinutes).toBeNull();
   });
 
   it('reads the sim seed as a non-negative integer, defaulting to 1', () => {

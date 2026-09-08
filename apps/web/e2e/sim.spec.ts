@@ -3,7 +3,8 @@ import type { SheepcliffApi } from '../src/api';
 
 // The real sim in the app (#28): the world runs from packages/sim on the fixed accumulator, the
 // fixture only appears behind ?fixture=1, the farm saves itself and comes back after a reload
-// on the same day, and a long absence is caught up at actor resolution, capped at one sim-day.
+// on the same day, and an absence is caught up by the sim's own `catchUp` (#42) — actor
+// resolution under one sim-day, the Ledger fast path beyond it, uncapped.
 type WithApp = { sheepcliff: SheepcliffApi };
 const api = (page: Page) => page.evaluate(() => (window as unknown as WithApp).sheepcliff);
 
@@ -105,12 +106,14 @@ test('the farm saves every sim-minute and on visibilitychange, and a reload cont
   expect(errors).toEqual([]);
 });
 
-test('offline catch-up runs the time away, capped at one sim-day, and says so', async ({ page }) => {
+test('offline catch-up runs the time away with no one-day cap, and opens a storybook page for a real gap', async ({ page }) => {
   await open(page);
   // two hours away, written into the save as if by an earlier visit
   const text = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.save.text());
-  const env = JSON.parse(text) as { savedAt: number; save: { world: { clock: { tick: number; dayCount: number } } } };
+  const env = JSON.parse(text) as { savedAt: number; save: { world: { clock: { tick: number; dayCount: number; periodSec: number } } } };
   const tickBefore = env.save.world.clock.tick;
+  const dayBefore = env.save.world.clock.dayCount;
+  const dayMs = env.save.world.clock.periodSec * 1000;
   env.savedAt = Date.now() - 2 * 3600_000;
   // a QA seed stops the page saving, so the unload does not overwrite the planted save
   await page.evaluate((t) => {
@@ -120,13 +123,30 @@ test('offline catch-up runs the time away, capped at one sim-day, and says so', 
   await page.reload();
   await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
   const after = await snapshot(page);
-  // one sim-day is 180 s, 1800 ticks: the cap
-  expect(after.tick - tickBefore).toBeGreaterThanOrEqual(1800);
-  expect(after.tick - tickBefore).toBeLessThan(1900);
-  expect(after.day).toBe(env.save.world.clock.dayCount + 1);
-  await expect(page.locator('#say')).toContainText(/^while you were gone \(2 h 00 min, the farm ran one day of it\): .* · [☀☂❄☾] \d\d:\d\d  \d+ sheep  \d+ wool  \d+ coins  -?\d+°$/);
+  // two real hours is many sim-days at the default 180 s day length: the Ledger fast path (#42),
+  // not the old client-only catch-up's (#34) one-day cap — at least as many days as fit in the gap
+  expect(after.day).toBeGreaterThanOrEqual(dayBefore + Math.floor((2 * 3600_000) / dayMs));
+  expect(after.tick).toBeGreaterThan(tickBefore);
+  await expect(page.locator('#say')).toContainText('restored: back after 2 h 00 min');
 
-  // a shorter absence runs exactly that long
+  // a two-hour real gap opens a storybook page — this reproduces deterministically, so the
+  // assertion is unconditional (fix round 1, #42: F3 — a conditional assertion here would let a
+  // regression that stops the page appearing on a real gap go green) — and every line on it traces
+  // to a real chronicle entry id (CLAUDE.md: "a line that is not backed by a chronicle entry is a
+  // bug"). A two-hour real gap, at the default (fast) day length, always spans the world's own
+  // night many times over, so it reads as "a night".
+  const page1 = await page.evaluate(() => {
+    const app = (window as unknown as WithApp).sheepcliff;
+    const sb = app.storybook.current();
+    if (!sb) return { shown: false, ok: false, title: '', ids: [] as string[] };
+    const ids = new Set(app.sim().chronicle.entries.map((e) => e.id));
+    return { shown: true, ok: sb.lines.every((l) => ids.has(l.entryId)), title: sb.title, ids: sb.lines.map((l) => l.entryId) };
+  });
+  expect(page1.shown, 'a page must open for a real two-hour gap').toBe(true);
+  expect(page1.ok).toBe(true);
+  expect(page1.title).toBe('a night');
+
+  // a shorter absence, under the day boundary, runs exactly that long at actor resolution
   const text2 = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.save.text());
   const env2 = JSON.parse(text2) as { savedAt: number; save: { world: { clock: { tick: number } } } };
   env2.savedAt = Date.now() - 30_000;
@@ -139,7 +159,115 @@ test('offline catch-up runs the time away, capped at one sim-day, and says so', 
   const after2 = await snapshot(page);
   expect(after2.tick - env2.save.world.clock.tick).toBeGreaterThanOrEqual(300);
   expect(after2.tick - env2.save.world.clock.tick).toBeLessThan(330);
-  await expect(page.locator('#say')).toContainText('while you were gone (30 s)');
+  await expect(page.locator('#say')).toContainText('restored: back after 30 s');
+});
+
+test('two consecutive real absences each get their own page: the second never repeats the first (fix round 1, #42: F1)', async ({ page }) => {
+  // Reproduces the Verifier's finding: `tellLedgerDiff` stamps every entry of a gap at the instant
+  // the gap ends, the same clock instant a `load` save is written at and the next gap's window
+  // starts from — so an inclusive-both-ends `chronicleBetween` read the first gap's own entries
+  // again as if they were the second gap's. The page store (`unseenEntries`, storybook.ts) is the
+  // fix: a page only ever tells entries no stored page has told before.
+  await open(page);
+
+  async function plantGapAndReload(hoursAgo: number): Promise<void> {
+    const text = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.save.text());
+    const env = JSON.parse(text) as { savedAt: number };
+    env.savedAt = Date.now() - hoursAgo * 3600_000;
+    await page.evaluate((t) => {
+      (window as unknown as WithApp).sheepcliff.qa.seed(1); // stop the unload save clobbering the planted text
+      localStorage.setItem('sheepcliff-save', t);
+    }, JSON.stringify(env));
+    await page.reload();
+    await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
+  }
+
+  const readPage = () =>
+    page.evaluate(() => {
+      const app = (window as unknown as WithApp).sheepcliff;
+      const sb = app.storybook.current();
+      return sb ? { shown: true as const, ids: sb.lines.map((l) => l.entryId) } : { shown: false as const, ids: [] as string[] };
+    });
+
+  await plantGapAndReload(2);
+  const page1 = await readPage();
+  expect(page1.shown, 'the first absence must open a page').toBe(true);
+
+  await plantGapAndReload(2);
+  const page2 = await readPage();
+  expect(page2.shown, 'the second absence must open a page of its own').toBe(true);
+
+  // page 2 must differ from page 1 outright...
+  expect(page2.ids).not.toEqual(page1.ids);
+  // ...and specifically: none of page 2's lines repeat an entry page 1 already told
+  const repeated = page2.ids.filter((id) => page1.ids.includes(id));
+  expect(repeated, `page 2 repeats page 1's entries: ${repeated.join(', ')}`).toEqual([]);
+
+  // both pages are kept, never merged or dropped for colliding on the same story
+  const pageCount = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.storybook.pages().length);
+  expect(pageCount).toBe(2);
+});
+
+test('a quiet return opens no page, even when read from the app\'s own load save (fix round 2, #42: R2-1)', async ({ page }) => {
+  // Reproduces the Verifier's round-2 finding: `main.ts:153` read `chronicleBetween`'s lower bound
+  // as `before.clock.nowMs`, inclusive — the exact instant `tellLedgerDiff` stamps every entry of a
+  // gap at, and the same instant the app's own `load` save (`main.ts:247`, `storage.set(SAVE_KEY, …)`
+  // right after `adopt`) persists as the *next* gap's starting bound. So a second, genuinely quiet
+  // absence — read from that real load save, not a frame-later `save.text()` snapshot (the round-1
+  // regression test above plants from `save.text()` and cannot catch this: by the time it reads,
+  // the sim has ticked past the gap-closing instant, so the boundary entries are no longer sitting
+  // exactly on it) — could still open a page, carrying entries from the *previous* gap that never
+  // made it onto its own page because they ranked below the top five. Fix: `before.clock.nowMs + 1`.
+  await open(page);
+
+  // a real two-hour absence, long enough that the chronicle holds more than the five lines a page
+  // can show — so some of its entries are genuine, unshown leftovers sitting at the gap's own end
+  const text = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.save.text());
+  const env = JSON.parse(text) as { savedAt: number };
+  env.savedAt = Date.now() - 2 * 3600_000;
+  await page.evaluate((t) => {
+    (window as unknown as WithApp).sheepcliff.qa.seed(1); // stop the unload save clobbering the planted text
+    localStorage.setItem('sheepcliff-save', t);
+  }, JSON.stringify(env));
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
+
+  const afterGap1 = await page.evaluate(() => {
+    const app = (window as unknown as WithApp).sheepcliff;
+    const sb = app.storybook.current();
+    return { shown: !!sb, pageCount: app.storybook.pages().length, chronicleCount: app.sim().chronicle.entries.length };
+  });
+  expect(afterGap1.shown, 'the first (2h) absence must open a page').toBe(true);
+  expect(afterGap1.pageCount).toBe(1);
+  // more entries in the chronicle than a page's five lines hold: some are unseen leftovers, exactly
+  // the shape the finding needs — entries the page store never told, sitting at the instant the next
+  // gap's window would otherwise re-read
+  expect(afterGap1.chronicleCount).toBeGreaterThan(5);
+
+  // Plant the *next* gap from the app's own load save (`localStorage`) — the save `main.ts:153`'s
+  // window actually reads its lower bound from — not from a fresh `save.text()` snapshot.
+  const loadSaveText = await page.evaluate(() => localStorage.getItem('sheepcliff-save'));
+  expect(loadSaveText).not.toBeNull();
+  const loadSave = JSON.parse(loadSaveText as string) as { savedAt: number };
+  loadSave.savedAt = Date.now() - 10_000; // ten seconds away: over the storybook gate, but truly quiet
+  await page.evaluate((t) => {
+    (window as unknown as WithApp).sheepcliff.qa.seed(1);
+    localStorage.setItem('sheepcliff-save', t);
+  }, JSON.stringify(loadSave));
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
+  await expect(page.locator('#say')).toContainText('restored: back after 10 s');
+
+  const afterGap2 = await page.evaluate(() => {
+    const app = (window as unknown as WithApp).sheepcliff;
+    const sb = app.storybook.current();
+    return { shown: !!sb, pageCount: app.storybook.pages().length, chronicleCount: app.sim().chronicle.entries.length };
+  });
+  // ten seconds of a farm this quiet writes nothing new to the chronicle...
+  expect(afterGap2.chronicleCount).toBe(afterGap1.chronicleCount);
+  // ...so no page opens for it, and the store still holds only the first gap's page
+  expect(afterGap2.shown, 'a gap with nothing new to tell must open no page').toBe(false);
+  expect(afterGap2.pageCount).toBe(1);
 });
 
 test('the save exports as text in the page and loads back from it', async ({ page }) => {
@@ -159,7 +287,7 @@ test('the save exports as text in the page and loads back from it', async ({ pag
   await page.locator('#modalBox button', { hasText: 'load this text' }).click();
   await expect(page.locator('#modal')).not.toHaveClass(/show/);
   // the text was taken a moment ago: a load under a second continues, over a second is a short absence
-  await expect(page.locator('#say')).toContainText(/loaded: the farm continues where it was|while you were gone \(\d s\)/);
+  await expect(page.locator('#say')).toContainText(/loaded: the farm continues where it was|loaded: back after \d+ s/);
   // an unreadable stored save is set aside, and a new farm starts
   await page.evaluate(() => {
     (window as unknown as WithApp).sheepcliff.qa.seed(1); // stop the page saving over the planted text on unload

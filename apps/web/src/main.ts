@@ -16,7 +16,7 @@ import {
   type BackgroundKey,
   type FarmView,
 } from '@sheepcliff/render';
-import { SaveError } from '@sheepcliff/sim';
+import { catchUp, chronicleBetween, SaveError, type SimState } from '@sheepcliff/sim';
 import type { SheepcliffApi } from './api';
 import { BACKGROUND_URLS, SHEET_META_URL, SHEET_URL } from './assets';
 import { buildFixture } from './fixture';
@@ -26,9 +26,18 @@ import { describeIntent, type ClientIntent, type Target } from './intents';
 import { emitMoment } from './moments';
 import { PinOverlay } from './pin-overlay';
 import { parseSceneParams } from './query';
-import { awaySummary, catchUp, restore, SAVE_KEY, saveText } from './save';
+import { awayLabel, restore, SAVE_KEY, saveText } from './save';
+import {
+  addPage,
+  buildStorybookPage,
+  EMPTY_PAGE_STORE,
+  pagesNewestFirst,
+  storybookGateMs,
+  unseenEntries,
+  type PageStore,
+} from './storybook';
+import { earlierPagesList, StorybookOverlay } from './storybook-overlay';
 import { buildTray } from './tray';
-import { simView } from './view';
 
 /** Frame length under the QA virtual clock. */
 const QA_FRAME_MS = 1000 / 60;
@@ -103,6 +112,7 @@ async function main(): Promise<void> {
   const exportBtn = byId<HTMLButtonElement>('saveText');
   const newFarmBtn = byId<HTMLButtonElement>('newFarm');
   const saveNote = byId<HTMLSpanElement>('saveNote');
+  const earlierPagesBtn = byId<HTMLButtonElement>('earlierPages');
 
   const wcMaybe = world.getContext('2d');
   const ucMaybe = ui.getContext('2d');
@@ -114,6 +124,52 @@ async function main(): Promise<void> {
   const [sheet, backgrounds] = await Promise.all([loadSheet(SHEET_URL, SHEET_META_URL), loadBackgrounds()]);
   const renderer = new FarmRenderer(sheet, backgrounds);
   const sizes: SpriteSizes = { sheep: sheet.size('sheep'), luna: sheet.size('digital_luna') };
+
+  // --- the storybook ------------------------------------------------------------------------
+  const storybook = new StorybookOverlay(
+    { root: byId('storybook'), title: byId('storyTitle'), subtitle: byId('storySubtitle'), lines: byId('storyLines') },
+    { sheet, backgrounds },
+  );
+  let pageStore: PageStore = EMPTY_PAGE_STORE;
+  earlierPagesBtn.addEventListener('click', () => {
+    pins.openModal([earlierPagesList(pagesNewestFirst(pageStore), (page) => {
+      pins.closeModal();
+      storybook.show(page);
+    })]);
+  });
+
+  /**
+   * A catch-up that ran, and was long enough to cross the storybook's gate (issue #42: "a gap over
+   * ten sim-minutes"), gets a page: the chronicle for exactly the gap it ran, selected and shown.
+   * Stored either way once built — pages are never dropped — and shown at once. A gap with nothing
+   * in the chronicle for it gets no page: the storybook only tells.
+   *
+   * The page keeps every entry of its gap: `lineCountFor(awayMs)` of them on the card and the rest
+   * behind "and N more" (`buildStorybookPage`). It has to — the window below is exclusive of the
+   * previous gap's closing instant, so no later window can ever reach these entries again, and an
+   * entry this page does not keep is told by nothing, ever (verdict round 3, S3).
+   *
+   * The page's subtitle says the same gap in both clocks — the real time away and the farm days it
+   * covered — from these same bounds and the world's own day length (`worldDaysBetween`).
+   */
+  function tellGap(state: SimState, before: { clock: { nowMs: number } }, after: { clock: { nowMs: number } }, awayMs: number): void {
+    if (awayMs < storybookGateMs(state.clock.periodSec)) return;
+    // The raw window can repeat an earlier page's entries (fix round 1 on #42, see storybook.ts's
+    // `unseenEntries`): the sim stamps every entry of a gap at the instant the gap ends, the same
+    // clock instant the next load's window opens from, so only entries no stored page has told yet
+    // are ever eligible for a new one. That dedupe covers what was actually *shown*, but the window
+    // itself must not even ask for the previous gap's closing instant in the first place (fix round
+    // 2 on #42, R2-1): `chronicleBetween` is inclusive at both ends, so a `fromMs` of the previous
+    // gap's end re-admits entries stamped exactly there — including into a page store that has never
+    // seen them (a fresh page store, or one restored from a save older than the entries themselves).
+    // `before.clock.nowMs` is that previous instant, never part of *this* gap, so the window starts
+    // one ms after it; `after.clock.nowMs` stays inclusive since it is this gap's own closing stamp.
+    const entries = unseenEntries(chronicleBetween(state, before.clock.nowMs + 1, after.clock.nowMs), pageStore);
+    const page = buildStorybookPage(entries, awayMs, before.clock.nowMs, after.clock.nowMs, Date.now(), state.clock.periodSec);
+    if (!page) return;
+    pageStore = addPage(pageStore, page);
+    storybook.show(page);
+  }
 
   // --- persistence ------------------------------------------------------------------------
   // A URL that pins a scene (a seed, a clock, a weather, the fixture) is a scratch world: it never
@@ -135,7 +191,7 @@ async function main(): Promise<void> {
 
   function save(why: string): boolean {
     if (!saving) return false;
-    const ok = storage.set(SAVE_KEY, saveText(game.sim, Date.now()));
+    const ok = storage.set(SAVE_KEY, saveText(game.sim, Date.now(), pageStore));
     noteSave(ok ? `saved (${why})` : 'saving blocked in this viewer: use "save as text"');
     return ok;
   }
@@ -207,14 +263,18 @@ async function main(): Promise<void> {
     return rec;
   }
 
-  /** Take a restored world over, catch it up on the time away, and say what happened. */
+  /** Take a restored world over, catch it up on the time away, and open its storybook page if the
+   * gap earned one. */
   function adopt(text: string, why: string): void {
     const r = restore(text);
-    const c = catchUp(r.sim, r.savedAt ? Date.now() - r.savedAt : 0);
-    const before = simView(null, r.sim, 0, params.liveWeather);
-    game.load(c.sim);
-    if (c.ranMs > 0) tray.say(awaySummary(before, simView(null, c.sim, 0, params.liveWeather), c));
-    else tray.say(`${why}: the farm continues where it was`);
+    pageStore = { ...pageStore, ...r.pages };
+    const awayMs = r.savedAt ? Date.now() - r.savedAt : 0;
+    const c = catchUp(r.sim, awayMs);
+    game.load(c.state);
+    if (c.ranMs > 0) {
+      tellGap(c.state, c.before, c.after, awayMs);
+      tray.say(`${why}: back after ${awayLabel(awayMs)}`);
+    } else tray.say(`${why}: the farm continues where it was`);
   }
 
   if (saving) {
@@ -233,6 +293,18 @@ async function main(): Promise<void> {
     }
     save('load');
   } else noteSave(params.fixture ? 'fixture still (not saved)' : 'scratch world from the URL (not saved)');
+
+  // QA: ?gap=<minutes> forces a catch-up on the fresh scratch world, so goldens and e2e can drive a
+  // storybook page deterministically (issue #42). `minutes` is real (wall-clock) minutes — the same
+  // unit the real load and wake paths use for `awayMs` (sim ms, one to one with wall ms, `catchUp`'s
+  // own doc comment) — never the gate's day-scaled "sim minutes" (`simMinutesToMs`), so a `?gap=`
+  // page's title reads exactly as the real path's would for the same length of time away.
+  if (params.gapMinutes !== null) {
+    const gapMs = params.gapMinutes * 60_000;
+    const c = catchUp(game.sim, gapMs);
+    game.load(c.state);
+    tellGap(c.state, c.before, c.after, gapMs);
+  }
 
   // --- pins -------------------------------------------------------------------------------
   const pins = new PinOverlay(
@@ -380,7 +452,7 @@ async function main(): Promise<void> {
     pins: { list: () => pins.list(), markdown: () => pins.markdown(), drop: (fx, fy) => pins.drop(fx, fy) },
     save: {
       now: () => save('api'),
-      text: () => saveText(game.sim, Date.now()),
+      text: () => saveText(game.sim, Date.now(), pageStore),
       load: (text) => {
         adopt(text, 'loaded');
         save('api load');
@@ -389,6 +461,12 @@ async function main(): Promise<void> {
     },
     view: currentView,
     sim: () => game.sim,
+    storybook: {
+      current: () => storybook.current(),
+      visible: () => storybook.visible,
+      pages: () => pagesNewestFirst(pageStore),
+      dismiss: () => storybook.hide(),
+    },
   };
   (window as unknown as { sheepcliff: SheepcliffApi }).sheepcliff = api;
 
@@ -411,11 +489,10 @@ async function main(): Promise<void> {
     const away = Date.now() - hiddenAt;
     hiddenAt = null;
     last = performance.now();
-    const before = game.current();
     const c = catchUp(game.sim, away);
     if (c.ranMs > 0) {
-      game.load(c.sim);
-      tray.say(awaySummary(before, game.current(), c));
+      game.load(c.state);
+      tellGap(c.state, c.before, c.after, away);
       save('back');
     }
   });

@@ -9,3 +9,4 @@ export * from './weather';
 export * from './flourish';
 export * from './ui';
 export * from './scene';
+export * from './picture';

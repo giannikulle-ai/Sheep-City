@@ -1,12 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { advance, createInitialState, hashState, SaveError } from '@sheepcliff/sim';
-import { awayLabel, awaySummary, catchUp, dayMs, ENVELOPE_FORMAT, restore, saveText } from './save';
-import { simView } from './view';
+import { awayLabel, ENVELOPE_FORMAT, restore, saveText } from './save';
+import { addPage, EMPTY_PAGE_STORE, type StorybookPage } from './storybook';
+
+const somePage: StorybookPage = {
+  id: 'c0',
+  title: 'a night',
+  createdAt: 123,
+  awayMs: 4000,
+  fromMs: 0,
+  toMs: 4000,
+  worldDays: 40,
+  lines: [{ entryId: 'c0', line: '3 wool banked', picture: 'wool' }],
+  more: [{ entryId: 'c1', line: 'the weather turned rain', picture: 'weather-rain' }],
+};
 
 describe('save text', () => {
-  it('round-trips the world and the wall clock', () => {
+  it('round-trips the world, the wall clock, and the page store', () => {
     const sim = advance(createInitialState(9), 37);
-    const text = saveText(sim, 1_700_000_000_000);
+    const pages = addPage(EMPTY_PAGE_STORE, somePage);
+    const text = saveText(sim, 1_700_000_000_000, pages);
     const doc = JSON.parse(text) as { format: string; savedAt: number; save: { format: string; version: number } };
     expect(doc.format).toBe(ENVELOPE_FORMAT);
     expect(doc.savedAt).toBe(1_700_000_000_000);
@@ -15,14 +28,33 @@ describe('save text', () => {
     expect(r.savedAt).toBe(1_700_000_000_000);
     expect(hashState(r.sim)).toBe(hashState(sim));
     expect(r.sim.clock.tick).toBe(37);
+    expect(r.pages).toEqual(pages);
   });
 
-  it("accepts the sim's bare document, with no time to catch up", () => {
+  it("accepts the sim's bare document, with no time to catch up and an empty page store", () => {
     const sim = createInitialState(3);
     const bare = JSON.stringify(JSON.parse(saveText(sim, 5)).save);
     const r = restore(bare);
     expect(r.savedAt).toBe(0);
     expect(hashState(r.sim)).toBe(hashState(sim));
+    expect(r.pages).toEqual({});
+  });
+
+  it('accepts a pre-#42 envelope with no pages field: an empty page store, not a throw', () => {
+    const sim = createInitialState(4);
+    const doc = JSON.parse(saveText(sim, 9)) as { pages?: unknown };
+    delete doc.pages;
+    const r = restore(JSON.stringify(doc));
+    expect(r.pages).toEqual({});
+    expect(hashState(r.sim)).toBe(hashState(sim));
+  });
+
+  it('drops a malformed pages field rather than throwing', () => {
+    const sim = createInitialState(4);
+    const doc = JSON.parse(saveText(sim, 9)) as { pages?: unknown };
+    doc.pages = 'not an object';
+    const r = restore(JSON.stringify(doc));
+    expect(r.pages).toEqual({});
   });
 
   it('refuses junk with a SaveError code', () => {
@@ -36,41 +68,7 @@ describe('save text', () => {
   });
 });
 
-describe('catchUp', () => {
-  it('runs the time away at actor resolution, capped at one sim-day', () => {
-    const sim = advance(createInitialState(9), 10);
-    expect(dayMs(sim)).toBe(180_000);
-    const short = catchUp(sim, 30_000);
-    expect(short.ranMs).toBe(30_000);
-    expect(short.capped).toBe(false);
-    expect(short.sim.clock.tick).toBe(10 + 300);
-    expect(hashState(short.sim)).toBe(hashState(advance(sim, 300)));
-    const long = catchUp(sim, 36 * 3600_000);
-    expect(long.ranMs).toBe(180_000);
-    expect(long.capped).toBe(true);
-    expect(long.sim.clock.tick).toBe(10 + 1800);
-    expect(long.sim.clock.dayCount).toBe(1);
-  });
-
-  it('treats a reload (under a second) as no absence', () => {
-    const sim = createInitialState(9);
-    for (const gap of [0, 500, -5, NaN]) {
-      const c = catchUp(sim, gap);
-      expect(c.sim).toBe(sim);
-      expect(c.ranMs).toBe(0);
-    }
-  });
-});
-
-describe('awaySummary', () => {
-  it('says how long, what changed, and the HUD line', () => {
-    const before = advance(createInitialState(9), 10);
-    const c = catchUp(before, 2 * 3600_000);
-    const line = awaySummary(simView(null, before, 0, false), simView(null, c.sim, 0, false), c);
-    expect(line).toMatch(/^while you were gone \(2 h 00 min, the farm ran one day of it\): /);
-    expect(line).toMatch(/ · [☀☂❄☾] \d\d:\d\d  \d+ sheep  \d+ wool  \d+ coins  -?\d+°$/);
-  });
-
+describe('awayLabel', () => {
   it('labels spans the way a person would say them', () => {
     expect(awayLabel(45_000)).toBe('45 s');
     expect(awayLabel(7 * 60_000)).toBe('7 min');

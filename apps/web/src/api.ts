@@ -5,6 +5,7 @@ import type { SimState, WeatherKind } from '@sheepcliff/sim';
 import type { IntentRecord } from './game';
 import type { ClientIntent } from './intents';
 import type { Pin } from './pins';
+import type { StorybookPage } from './storybook';
 
 export interface QaHooks {
   /** reseed the world and switch to a virtual clock that only `step` advances; saving stops */
@@ -50,4 +51,14 @@ export interface SheepcliffApi {
   view(): FarmView;
   /** the sim state behind it (read-only by convention) */
   sim(): SimState;
+  storybook: {
+    /** the page on screen now, or the last one shown, or null if none has shown this load */
+    current(): StorybookPage | null;
+    /** true while the storybook overlay is showing */
+    visible(): boolean;
+    /** every stored page, newest first */
+    pages(): StorybookPage[];
+    /** dismiss the page on screen, as a tap would */
+    dismiss(): void;
+  };
 }

@@ -33,7 +33,7 @@
 
     "conditionOn": {
       "type": "string",
-      "description": "What a predicate reads. A clock or weather field (`season`, `weather`, `timeOfDay`); one proposed weather-history field carried over from v1's `recentWeather`, now shaped as an ordinary predicate instead of a bespoke object (`simMinutesSinceRain`, flagged to sim on #40 same as v1 flagged `recentWeather`); a Ledger stock, read the way `packages/sim/src/ledger/ledger.ts` already reads it today (`ledger.wool` and `ledger.grass` are the flock's mean level 0 to 1 — `meanOf`; `ledger.coins` is the bank; `ledger.flock` is sheep plus lambs — `ledgerFlock`); or a named actor predicate the engine computes from the actors (`lambFarFromMother`, `dlFarFromFlock`, `flockScattered`, `merchantPresent`, `lambPresent`, `farmerPresent`). Plain-word meanings for every one of these are in docs/content/EVENT_DECK.md.",
+      "description": "What a predicate reads. A clock or weather field (`season`, `weather`, `timeOfDay`); one proposed weather-history field carried over from v1's `recentWeather`, now shaped as an ordinary predicate instead of a bespoke object (`simMinutesSinceRain`, flagged to sim on #40 same as v1 flagged `recentWeather`); a Ledger stock, read the way `packages/sim/src/ledger/ledger.ts` already reads it today (`ledger.wool` and `ledger.grass` are the flock's mean level 0 to 1 — `meanOf`; `ledger.coins` is the bank; `ledger.flock` is sheep plus lambs — `ledgerFlock`); or a named actor predicate the engine computes from the actors (`dlFarFromFlock`, `flockScattered`, `merchantPresent`, `lambPresent`, `farmerPresent`, and `lambFarFromMother` — PROPOSED to sim on #40, same as `simMinutesSinceRain` and the `simDate` trigger's day-of-season: today's sim springs every lamb to a fixed point behind its mother every tick with no detachment behaviour, so this predicate cannot yet be true and #40 needs to add one). Plain-word meanings for every one of these are in docs/content/EVENT_DECK.md.",
       "enum": [
         "season", "weather", "timeOfDay", "simMinutesSinceRain",
         "ledger.wool", "ledger.coins", "ledger.grass", "ledger.flock",
@@ -48,7 +48,7 @@
     },
     "condition": {
       "type": "object",
-      "description": "One predicate over world state, true or false the moment the engine looks.",
+      "description": "One predicate over world state, true or false the moment the engine looks. `value`'s shape follows `on`: `season`, `weather` and `timeOfDay` are held to their enums below (as a bare value for eq/ne, or an array of them for in/not-in), same guarantee v1's fixed `preconditions` gave; every other `on` (a Ledger stock, `simMinutesSinceRain`, or a named actor predicate) stays open here.",
       "properties": {
         "on": { "$ref": "#/$defs/conditionOn" },
         "op": { "$ref": "#/$defs/conditionOp" },
@@ -56,7 +56,25 @@
         "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
       },
       "required": ["on", "op", "value"],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "description": "season: value is a season, or an array of them for in/not-in.",
+          "properties": { "on": { "const": "season" }, "value": { "oneOf": [ { "$ref": "#/$defs/season" }, { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/season" } } ] } }
+        },
+        {
+          "description": "weather: value is a weather kind, or an array of them for in/not-in.",
+          "properties": { "on": { "const": "weather" }, "value": { "oneOf": [ { "$ref": "#/$defs/weather" }, { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/weather" } } ] } }
+        },
+        {
+          "description": "timeOfDay: value is a phase, or an array of them for in/not-in.",
+          "properties": { "on": { "const": "timeOfDay" }, "value": { "oneOf": [ { "$ref": "#/$defs/phase" }, { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/phase" } } ] } }
+        },
+        {
+          "description": "Every other `on` (a Ledger stock, `simMinutesSinceRain`, or a named actor predicate): value stays open.",
+          "properties": { "on": { "not": { "enum": ["season", "weather", "timeOfDay"] } } }
+        }
+      ]
     },
 
     "preconditions": {

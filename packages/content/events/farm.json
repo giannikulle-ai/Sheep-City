@@ -39,7 +39,7 @@
     {
       "id": "crowsOnTheField",
       "title": "Crows on the field",
-      "comment": "Crows are data here and art in #47; DL's chase is sim work in #48. v2: flockSize.min becomes a ledger.flock condition; new causality, the issue's own example, crows are likelier when the hay is high — the Ledger has no separate hay stock, so this reads ledger.grass (the mean tuft level) as the stand-in, flagged to sim on #40.",
+      "comment": "Crows are data here and art in #47; DL's chase is sim work in #48. v2: flockSize.min becomes a ledger.flock condition; new causality, the issue's own example, crows are likelier when the hay is high — the Ledger has no separate hay stock, so this reads ledger.grass (the mean tuft level) as the stand-in, flagged to sim on #40. Base weight also drops from v1's flat 12 to 8: the new ×2 grass multiplier now carries the busy-hay-day likelihood the old flat number tried to bake in on its own, so the base has to sit lower to keep the same overall frequency once the multiplier can double it.",
       "conditions": [
         { "on": "season", "op": "in", "value": ["summer", "autumn"] },
         { "on": "weather", "op": "eq", "value": "sun" },
@@ -70,7 +70,7 @@
     {
       "id": "lostLamb",
       "title": "Lost lamb",
-      "comment": "Reference event for #40: a lamb wanders off the field at dusk and DL fetches it home. v2: this is the issue's own worked example. The hard gate stays dusk-only, sun or rain, so the storybook line stays true (it always happens near dusk); the three named actor predicates now do the causal work v1 could only fake with a flat weight of 8.",
+      "comment": "Reference event for #40: a lamb wanders off the field at dusk and DL fetches it home. v2: this is the issue's own worked example. The hard gate stays dusk-only, sun or rain, so the storybook line stays true (it always happens near dusk); the three named actor predicates now do the causal work v1 could only fake with a flat weight of 8. `lambFarFromMother` is PROPOSED to sim on #40: today's sim springs every lamb to a fixed point behind its mother every tick with no detachment behaviour, so this predicate cannot yet be true and the card cannot yet fire on it — the multiplier is written for the sim #40 will build, not the one that exists today.",
       "conditions": [
         { "on": "lambPresent", "op": "eq", "value": true },
         { "on": "timeOfDay", "op": "in", "value": ["dusk"] },
@@ -79,7 +79,7 @@
       "weight": {
         "base": 5,
         "multipliers": [
-          { "when": { "on": "lambFarFromMother", "op": "eq", "value": true }, "times": 3, "comment": "This is what \"lost\" means; the strongest driver." },
+          { "when": { "on": "lambFarFromMother", "op": "eq", "value": true }, "times": 3, "comment": "This is what \"lost\" means; the strongest driver, once sim on #40 can produce it (see the card comment: PROPOSED, not true in today's sim)." },
           { "when": { "on": "flockScattered", "op": "eq", "value": true }, "times": 2, "comment": "Nobody was minding the edges." },
           { "when": { "on": "dlFarFromFlock", "op": "eq", "value": true }, "times": 1.5, "comment": "DL was not close enough to notice it slip out." }
         ]

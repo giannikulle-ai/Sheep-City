@@ -23,9 +23,9 @@
       "variables": {
         "cakeFlavour": "honey",
         "ringFormation": "circle",
-        "heartBubbleCount": 6,
-        "comment": "Cosmetic parameters the birthday's own hooks and art read: honey ties loosely to the wildwood's eventual honey economy (plan section 3), a nod not a dependency; ringFormation and heartBubbleCount steer how the flock arranges itself and how many heart bubbles show, values a card has no field for."
+        "heartBubbleCount": 6
       },
+      "variablesComment": "Cosmetic parameters the birthday's own hooks and art read: honey ties loosely to the wildwood's eventual honey economy (plan section 3), a nod not a dependency; ringFormation and heartBubbleCount steer how the flock arranges itself and how many heart bubbles show, values a card has no field for.",
       "priorityOver": ["wellRunsLow", "farmersDayOff", "mood"],
       "durationSimMinutes": 180,
       "hooks": {
@@ -55,14 +55,14 @@
       },
       "variables": {
         "windGustPx": 6,
-        "thunderClaps": 3,
-        "comment": "Cosmetic parameters for the sim's storm rendering: how far the weather layer shakes the scene and how many thunder beats play. Not stocks; nothing here touches the Ledger beyond the mood hooks below."
+        "thunderClaps": 3
       },
+      "variablesComment": "Cosmetic parameters for the sim's storm rendering: how far the weather layer shakes the scene and how many thunder beats play. Not stocks; nothing here touches the Ledger beyond the mood hooks below.",
       "priorityOver": ["fogMorning", "stargazingNight", "nightOfTheFireflies", "weather"],
       "durationSimMinutes": 90,
       "hooks": {
         "start": [
-          { "op": "setVisibility", "value": 0.5, "comment": "Driving rain greys the field; less than fogMorning's 0.35 so the barn stays a clear shape through it." },
+          { "op": "setVisibility", "value": 0.5, "comment": "Driving rain greys the field; higher than fogMorning's 0.35 (clearer, less thick) so the barn stays a clear shape through it." },
           { "op": "flag", "name": "storm", "value": true, "comment": "Sheep crowd into the barn doorway; DL's rain-shepherd priority runs at its hardest." },
           { "op": "mood", "target": "flock", "delta": -2 }
         ],
@@ -87,13 +87,13 @@
           { "on": "season", "op": "eq", "value": "winter" },
           { "on": "weather", "op": "eq", "value": "snow" }
         ],
-        "cooldownSimDays": 80,
-        "comment": "Close to nine sim days short of a full year (four nine-day seasons), so the next time the predicates hold is reliably next winter, not a second flurry this one."
+        "cooldownSimDays": 30,
+        "comment": "Under a full year (four nine-day seasons = 36 sim days), so the predicates can hold again before next winter is due but the cooldown still spans most of a season, keeping this the first snow of the current winter rather than a second flurry days later."
       },
       "variables": {
-        "flakeBurst": 24,
-        "comment": "Extra snowflake sprites the weather layer spawns for this one flurry, more than an ordinary snowy scene gets."
+        "flakeBurst": 24
       },
+      "variablesComment": "Extra snowflake sprites the weather layer spawns for this one flurry, more than an ordinary snowy scene gets.",
       "priorityOver": ["farmersDayOff", "mood"],
       "durationSimMinutes": 120,
       "hooks": {

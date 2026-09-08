@@ -69,7 +69,7 @@
     },
     "variables": {
       "type": "object",
-      "description": "Authored parameters a card does not get (plan section 2): named values this event's own hooks and storybook read, that no other event shares. Deliberately open — unlike the rest of this schema, `additionalProperties` is not false here, because every authored event needs a different bag of them. Documented per event in docs/content/EVENT_DECK.md.",
+      "description": "Authored parameters a card does not get (plan section 2): named values this event's own hooks and storybook read, that no other event shares. Deliberately open — unlike the rest of this schema, `additionalProperties` is not false here, because every authored event needs a different bag of them. Documented per event in docs/content/EVENT_DECK.md. Never put a `comment` key in here: an engine reading `Object.keys(event.variables)` would see it as a phantom parameter. The bag's own explanation belongs in the sibling `variablesComment` property instead.",
       "minProperties": 1
     },
     "priorityOver": {
@@ -86,6 +86,7 @@
         "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
         "trigger": { "$ref": "#/$defs/trigger" },
         "variables": { "$ref": "#/$defs/variables" },
+        "variablesComment": { "$ref": "_defs.schema.json#/$defs/comment", "description": "What the `variables` bag holds and why, for humans. Declared here instead of as a `comment` key inside `variables` so the open bag never carries a phantom parameter." },
         "priorityOver": { "$ref": "#/$defs/priorityOver" },
         "durationSimMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
         "hooks": { "$ref": "events.schema.json#/$defs/hooks" },
@@ -93,7 +94,7 @@
         "moment": { "$ref": "events.schema.json#/$defs/moment" },
         "beat": { "$ref": "events.schema.json#/$defs/beat" }
       },
-      "required": ["id", "title", "comment", "trigger", "variables", "priorityOver", "durationSimMinutes", "hooks", "storybook", "moment", "beat"],
+      "required": ["id", "title", "comment", "trigger", "variables", "variablesComment", "priorityOver", "durationSimMinutes", "hooks", "storybook", "moment", "beat"],
       "additionalProperties": false
     }
   }

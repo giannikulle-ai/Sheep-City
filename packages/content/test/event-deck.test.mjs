@@ -179,13 +179,38 @@ test("card conditions use the sim's vocabulary and are satisfiable", () => {
   }
 });
 
+test("weather condition values, in both files, are from the sim's vocabulary", () => {
+  const weathers = ["sun", "rain", "snow"];
+  const valuesFor = (cond) => (Array.isArray(cond.value) ? cond.value : [cond.value]);
+  for (const c of cards) {
+    for (const cond of allConditions(c)) if (cond.on === "weather") for (const w of valuesFor(cond)) assert.ok(weathers.includes(w), `${c.id}: weather value "${w}"`);
+  }
+  for (const e of authoredEvents) {
+    if (e.trigger.kind !== "predicates") continue;
+    for (const cond of e.trigger.all) if (cond.on === "weather") for (const w of valuesFor(cond)) assert.ok(weathers.includes(w), `${e.id}: weather value "${w}"`);
+  }
+});
+
+test("the schema rejects a season/weather/timeOfDay value outside its enum, in a card condition and in an authored trigger.all predicate", () => {
+  const badCard = { ...deck, events: [{ ...cards[0], conditions: [{ on: "timeOfDay", op: "in", value: ["duskk"] }] }] };
+  const cardErrors = validate(resolve(here, "../schema/events.schema.json"), badCard);
+  assert.ok(cardErrors.length > 0, "a mistyped timeOfDay value (\"duskk\") must fail schema validation");
+
+  const predicateEvent = authoredEvents.find((e) => e.trigger.kind === "predicates");
+  const badAuthored = {
+    ...authored,
+    events: [{ ...predicateEvent, trigger: { ...predicateEvent.trigger, all: [{ on: "weather", op: "eq", value: "snoww" }] } }],
+  };
+  const authoredErrors = validate(resolve(here, "../schema/authored-events.schema.json"), badAuthored);
+  assert.ok(authoredErrors.length > 0, "a mistyped weather value (\"snoww\") in an authored trigger predicate must fail schema validation");
+});
+
 test("timings are in-world and sane for a three-minute day; limits are internally consistent", () => {
   assert.equal(deck.timeScale.realSecondsPerSimDayWatching, balance.outsideRules.clock.periodSec.value);
   assert.equal(authored.timeScale.realSecondsPerSimDayWatching, balance.outsideRules.clock.periodSec.value);
   for (const c of cards) {
     const realSec = c.durationSimMinutes / deck.timeScale.simMinutesPerDay * deck.timeScale.realSecondsPerSimDayWatching;
     assert.ok(realSec >= 3 && realSec <= 90, `${c.id}: ${realSec}s real is outside 3..90 s`);
-    assert.ok(c.limits.cooldownSimHours * 60 >= 0, `${c.id}: cooldown must not be negative`);
     assert.ok(c.limits.minGapSimMinutes >= c.durationSimMinutes, `${c.id}: minGapSimMinutes shorter than the card's own duration`);
     assert.equal(c.limits.minGapSimMinutes, c.durationSimMinutes + c.limits.cooldownSimHours * 60, `${c.id}: minGapSimMinutes should be duration + cooldown, start to start`);
   }

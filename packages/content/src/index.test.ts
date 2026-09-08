@@ -75,9 +75,11 @@ describe('the farm authored events (v2)', () => {
     expect(() => authoredEvent('dlBirthdya')).toThrow(/no authored event/);
   });
 
-  it('gives every event at least one variable and one priorityOver entry', () => {
+  it('gives every event at least one real variable (not just a comment) and one priorityOver entry', () => {
     for (const event of FARM_AUTHORED_EVENTS.events) {
+      expect(event.variables).not.toHaveProperty('comment');
       expect(Object.keys(event.variables).length).toBeGreaterThan(0);
+      expect(event.variablesComment.length).toBeGreaterThan(0);
       expect(event.priorityOver.length).toBeGreaterThan(0);
     }
   });

@@ -66,7 +66,7 @@ grass parched — could not move the odds, only gate them on or off. v2 replaces
 | `ledger.grass` | The mean tuft level across the field, 0 to 1. The Ledger has no separate "hay" stock, so cards that talk about the hay bale (`crowsOnTheField`) or a dry spell (`wellRunsLow`, `cliffStorm`'s trigger) read this instead. | number, 0 to 1 |
 | `ledger.coins` | Coins banked. | number |
 | `ledger.flock` | Sheep plus lambs on the field (`ledgerFlock` in the sim) — v2's replacement for v1's `flockSize.min`/`max`. | integer, 0 to the flock cap |
-| `lambFarFromMother` | True when a lamb has wandered a real distance from the ewe it trails. This *is* what "a lost lamb" means. | boolean |
+| `lambFarFromMother` | True when a lamb has wandered a real distance from the ewe it trails. This *is* what "a lost lamb" means. **PROPOSED to sim on #40**, same as `simMinutesSinceRain` and the `simDate` trigger's day-of-season: today's sim springs every lamb to a fixed point behind its mother every tick with no detachment behaviour, so this cannot yet be true. | boolean |
 | `dlFarFromFlock` | True when Digital Luna is a real distance from the flock's centre. | boolean |
 | `flockScattered` | True when the sheep are spread out rather than settled together — the opposite of a calm, grazing-together field. | boolean |
 | `merchantPresent` | True while the merchant is on the field, from his entrance to his exit. | boolean |
@@ -112,7 +112,7 @@ Three crows have noticed the hay. They land on the bale and around it, black and
 
 At dusk a lamb that should know better slips out through the gate. Its mother stands up and calls after it. This is the card DL was born for: she goes out, she finds it, and she walks it home slowly, right behind it, the way she was taught. (One of the four reference events the engine implements in code, #40. The issue's own worked example for v2's causality.)
 
-**When.** Dusk, when there is a lamb on the farm, in sun or rain but not snow. Not more than once in two days — the hard gate stays dusk-only so the storybook line stays true. **Far likelier** when `lambFarFromMother` is true (×3, the strongest driver — this is what "lost" means), when `flockScattered` is true (×2, nobody was minding the edges), and when `dlFarFromFlock` is true (×1.5, she was not close enough to notice it slip out). The base weight alone (5) is deliberately low: without these, a dusk lamb almost never wanders.
+**When.** Dusk, when there is a lamb on the farm, in sun or rain but not snow. Not more than once in two days — the hard gate stays dusk-only so the storybook line stays true. **Far likelier** when `lambFarFromMother` is true (×3, the strongest driver once sim on #40 can produce it — see below, PROPOSED — this is what "lost" means), when `flockScattered` is true (×2, nobody was minding the edges), and when `dlFarFromFlock` is true (×1.5, she was not close enough to notice it slip out). The base weight alone (5) is deliberately low: without these, a dusk lamb almost never wanders.
 
 **You see.** A lamb goes out the gate and the ewe bleats after it. Up to 120 sim minutes (fifteen real seconds) later DL brings it back through the gate at walking pace, and the ewe comes to meet them.
 
@@ -297,7 +297,9 @@ festival, a storm, DL's birthday. Where a card is drawn under a pacing target, a
 authored event becomes eligible only when its own `trigger` fires, and while it runs it
 outranks anything named in `priorityOver` — a card id, or a bare parameter name such as
 `mood`, meaning no other card's mood hook applies until it ends. Each carries
-`variables`, a bag of authored parameters no card gets, specific to that one event.
+`variables`, a bag of authored parameters no card gets, specific to that one event, plus
+its own sibling `variablesComment` explaining the bag — `comment` is never a key inside
+`variables` itself, so an engine reading its keys never sees a phantom parameter.
 
 v1's `dlBirthday` and `firstSnow` were random-draw cards, made rare only by a low weight
 and a long cooldown. The plan itself frames DL's birthday as one of the examples of
@@ -352,8 +354,8 @@ also tries to change the weather mid-storm).
 doorway at once. It lasts 90 sim minutes (about eleven real seconds). The rain eases to
 a drip off the eave and the flock spreads back out, drenched but calm.
 
-**The ledger.** Visibility drops to a half (less than `fogMorning`'s third, so the barn
-stays a clear shape through it) and returns to full. A `storm` flag while it lasts; the
+**The ledger.** Visibility drops to a half (higher — clearer — than `fogMorning`'s
+third, so the barn stays a clear shape through it) and returns to full. A `storm` flag while it lasts; the
 flock's mood dips two at the start and comes back one, plus DL gets one, at the end —
 wet, but the grass will be glad of it.
 
@@ -367,18 +369,22 @@ looks up at the same moment. The lambs bounce. DL leaps at a flake, misses, and 
 again. Then everybody goes back to grazing with white on their backs, as if nothing
 happened.
 
-**Trigger.** `predicates`: season is winter and weather is snow, with an 80-sim-day
-cooldown — close to nine sim days short of a full year (four nine-day seasons), so the
-next time the predicates hold is reliably next winter, not a second flurry this one. v1's
-card made this rare only with a 720-hour cooldown and said so was a proxy for a real
-"first"; the authored trigger's own cooldown is that fix.
+**Trigger.** `predicates`: season is winter and weather is snow, with a 30-sim-day
+cooldown — under a full year (four nine-day seasons = 36 sim days), long enough to span
+most of a season so the predicates holding again the next snowy moment doesn't retrigger
+it, but short enough that the next winter's first snow isn't skipped. v1's card made this
+rare only with a 720-hour cooldown and said so was a proxy for a real "first"; the
+authored trigger's own cooldown is that fix.
 
 **Variables.** `flakeBurst` (24) — extra snowflake sprites for this one flurry, more
 than an ordinary snowy scene gets.
 
-**Priority.** Outranks `farmersDayOff` (the only card with no weather or season gate, so
-the only one that could otherwise land on the same winter dawn) and the bare parameter
-`mood`.
+**Priority.** Outranks `farmersDayOff` (no weather or season gate, so it could otherwise
+land on the same winter dawn) and the bare parameter `mood`. `farmersDayOff` is not the
+only card without a weather or season gate — `merchantCaravan` has none either, and
+`farmerMeetsMerchant` has no clock gate at all — but only `farmersDayOff` fires at dawn,
+the same phase a winter morning's first snow lands on, so it is the one worth naming
+here.
 
 **You see.** Every sheep stops and looks up at the same moment; DL leaps at a flake. It
 lasts 120 sim minutes (fifteen real seconds). The flock goes back to grazing with white
@@ -395,7 +401,7 @@ in her mouth.* (notability 0.85)
 ## What the deck does not do yet
 
 - **No cross-district cards.** The harbour and the wildwood arrive in Phase 3 with the deck at fifty.
-- **`simMinutesSinceRain` and the `simDate` trigger's day-of-season are proposed, not confirmed.** Both are flagged to sim on #40 in the schema and in this page, the same way v1 flagged `recentWeather`. The sim has a running `dayCount` and a season cycle but no explicit "day within the season" concept yet; `simDate` assumes `clock.dayCount mod 9` is a reasonable reading of it.
+- **`simMinutesSinceRain`, the `simDate` trigger's day-of-season, and `lambFarFromMother` are proposed, not confirmed.** All three are flagged to sim on #40 in the schema and in this page, the same way v1 flagged `recentWeather`. The sim has a running `dayCount` and a season cycle but no explicit "day within the season" concept yet; `simDate` assumes `clock.dayCount mod 9` is a reasonable reading of it. `lambFarFromMother` is structurally always false in today's sim: every lamb is sprung to a fixed point behind its mother each tick, with no detachment behaviour yet — `lostLamb`'s strongest multiplier is written for the sim #40 will build, not the one that exists today.
 - **No chained cards.** The farmer's day off leaves the flock woolly, which makes the next shearing day bigger; that is the Ledger doing the chaining (via `ledger.wool`, now a real condition), not the deck. A `recentEvents` predicate would let a card follow another on purpose.
 - **Weights are a first guess, doubly so now.** Both `base` and every multiplier's `times` are the sim's pacing curve and the qa lane's event coverage (#49) to tune. Every number sits in the JSON with a comment for a reason.
 - **Authored `variables` are open by design**, unlike every other closed shape in these two schemas (`additionalProperties: false` holds everywhere else). Each of the three events needs a different bag of named values; nothing enforces what's inside one beyond "at least one". Worth an owner's eye if that looseness turns out to matter before more authored events are written.

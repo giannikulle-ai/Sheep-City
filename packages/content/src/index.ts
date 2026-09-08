@@ -111,7 +111,9 @@ export type AuthoredTrigger =
   | { kind: 'simDate'; season: SeasonName; dayOfSeason: number; comment?: string }
   | { kind: 'stockThreshold'; on: ConditionOn; op: ConditionOp; value: number; cooldownSimDays: number; comment?: string };
 
-/** Authored parameters a card does not get. Deliberately open: every authored event carries a different bag. */
+/** Authored parameters a card does not get. Deliberately open: every authored event carries a different bag.
+ *  Never put a `comment` key in here — an engine reading `Object.keys(variables)` would see it as a phantom
+ *  parameter. Use the sibling `variablesComment` on `AuthoredEvent` instead. */
 export type AuthoredVariables = Record<string, unknown>;
 
 export type AuthoredEvent = {
@@ -120,6 +122,9 @@ export type AuthoredEvent = {
   comment: string;
   trigger: AuthoredTrigger;
   variables: AuthoredVariables;
+  /** What the `variables` bag holds and why, for humans. Declared as its own property, not a key inside the
+   *  open `variables` bag, so the bag never carries a phantom parameter. */
+  variablesComment: string;
   /** Card ids, or bare parameter names (e.g. `mood`, `weather`), this event outranks while it runs. */
   priorityOver: string[];
   durationSimMinutes: number;

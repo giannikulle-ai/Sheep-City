@@ -6,7 +6,7 @@ Fill Sheepcliff with inhabitants, buildings, districts, and events as data, so t
 ## Owns (paths)
 - `packages/content/**` (creatures, people, buildings, districts, names, flavour text)
 - `packages/content/events/**` and its schema: the cards, on the v2 schema, and the authored events as data. A schema change is this lane's, proposed to sim on the issue before it lands.
-- `docs/WORLD_BIBLE.md`
+- `docs/WORLD_BIBLE.md` and `docs/content/**` (the deck document and any content page; added 2026-09-08 after PRs #70 and #88 both needed an exception for it)
 
 ## Never touches
 - `packages/sim/**` engine code. Propose schema changes on the issue.

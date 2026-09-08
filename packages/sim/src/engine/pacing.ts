@@ -70,6 +70,32 @@ export const PACING = {
    * Round 1's measured ~117 ms and consistent with the `farmerMarketWalk` attribution above. Delta
    * branch-on vs. trunk: +109.2 ms, still over budget on 1 of 4 runs.
    *
+   * **Round 3, re-measured on this head: three interleaved matrices, one box, one install.** Trunk
+   * (`origin/claude/sheepcliff-civilization-framework-bkgla5`) was extracted with `git archive`
+   * into a scratch tree sharing this worktree's `node_modules`; the bench file is byte-identical in
+   * every tree; "off" is this same build with the bench district built `{ events: false }`; "no
+   * walk" is this same build with `farmerMarketWalk` removed from `CATEGORY_ACTIONS`.
+   *
+   *   A (5 runs each): trunk 920.0 ms MET 5/5 | branch 973.5 ms MET 4/5 | off 897.1 ms MET 5/5.
+   *     Engine's own share, same build: +76.4 ms (+8.5%). Branch vs trunk: +53.5 ms.
+   *   B (4 runs each): branch 1024.0 ms MET 0/4 | no walk 961.9 ms MET 4/4. Walk: +62.1 ms.
+   *   C (4 runs each): trunk 897.6 MET 4/4 | branch 965.4 MET 3/4 | off 922.3 MET 4/4 | no walk
+   *     952.9 MET 4/4. Engine's own share: +43.1 ms. Walk: +12.5 ms. Branch vs trunk: +67.8 ms.
+   *
+   * Read that honestly, in both directions. The engine costs something real — roughly 5 to 8 % of
+   * a line that sits near 900-950 ms on this box for every config — and the branch went over
+   * 1,000 ms on 6 of its 13 runs where trunk went over on none of 9 (trunk's worst run here:
+   * 960.6 ms). But the run-to-run spread is as wide as the effect: the *same* measurement of the
+   * market walk's own cost came out +62.1 ms in matrix B and +12.5 ms in matrix C. So this box is
+   * consistent with round 2's and the round-3 verifier's attribution of most of the engine's share
+   * to `farmerMarketWalk`, and it is not proof of it; the +57 ms figure quoted above is theirs, not
+   * re-derived here. The live budget — the one that decides whether a phone can draw a frame — is
+   * 0.034 to 0.048 ms against a 2 ms limit on every run of every config, forty times inside it.
+   *
+   * The Foreman's round-3 ruling: the catch-up line is **advisory until #78 lands**. The walk is a
+   * feature the owner asked for and is not traded for the bench. Nothing here claims the branch is
+   * under budget on this box, and nothing here claims it broke a budget this box can resolve.
+   *
    * Round 2 also tried the obvious next lever — `evalEverySimMinutes: 4` — for the bench. Round 3
    * re-measured its *density* cost on this head (the round-2 comment's figures rested on a run that
    * did not reproduce, round-3 verifier finding B) and it is still not a trade worth making:

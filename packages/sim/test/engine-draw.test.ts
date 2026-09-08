@@ -31,12 +31,14 @@ describe('the pacing numbers are data', () => {
     // the owner asked for, not a bug. `evaluate`'s own share is cut by the `couldStartSomething`
     // early-out in `engine/engine.ts` (RNG-neutral, checked directly).
     //
-    // Round 3's bench, four runs each on one box and one install, is in `engine/pacing.ts`'s own
-    // comment and the PR note; the short version is that this box cannot resolve the charter's
-    // 1,000 ms line for either build — trunk's own worst run is inside 1 % of it — and the Foreman
-    // has ruled the line **advisory until #78 lands**. The engine's own share is about +69 ms, of
-    // which about +57 ms is the farmer's market walk. Nothing here claims the branch is under
-    // budget, and nothing here claims it broke one.
+    // Round 3 re-ran that bench: three interleaved matrices, one box, one install, full numbers in
+    // `engine/pacing.ts`'s own comment. The short version: the engine's own share (this build with
+    // the bench district's engine forced off, against the same build shipped) measured +76.4 ms in
+    // one matrix and +43.1 ms in another; the branch went over the 1,000 ms line on 6 of 13 runs
+    // and trunk on none of 9 (trunk's worst here 960.6 ms); and the market walk's own share came
+    // out +62.1 ms in one matrix and +12.5 ms in another, so this box does not resolve the
+    // attribution either. The Foreman has ruled the catch-up line **advisory until #78 lands**.
+    // Nothing here claims the branch is under budget, and nothing here claims it broke one.
     //
     // The density figures this comment used to carry (a median of 2 starts with 2 of 30 seeds
     // drawing no card) did not reproduce and are gone; what the current head actually measures is
@@ -329,12 +331,14 @@ describe('five unattended minutes', () => {
   // 3,000 ticks, two independent rulers agreeing seed for seed (new entries in `events.running`,
   // and non-"ended" card/authored chronicle lines): **median 2 starts, range 1 to 2, mean 1.90**;
   // **26 of 30** seeds show two distinct moment kinds; **0 of 30** show three; **0 of 30** go
-  // without a card. Sweeping the levers does not rescue three kinds either — `minGapSimMinutes`
-  // 800 -> 600 gives 1 of 30, -> 300 gives 6 of 30, `weightForCertainDraw` 12000 -> 4000 gives 3 of
-  // 30, and gap 600 with weight 9000 together gives 9 of 30 while pushing the mean to 2.37, past
-  // the owner's "about three moments per five minutes". Three kinds in five minutes and the owner's
-  // pacing are in genuine tension once the birthday is not free, and which one gives is the owner's
-  // call, not this lane's: see the PR's "Owner decision needed?".
+  // without a card. Sweeping the levers in-process (mutating `PACING`, then restoring it; the
+  // control run reproduces the shipped row exactly) does not rescue three kinds either:
+  // `minGapSimMinutes` 800 -> 600 gives 1 of 30, -> 300 gives 6 of 30; `weightForCertainDraw`
+  // 12000 -> 4000 gives 3 of 30; gap 600 with `quietStretchSimMinutes` 620 and weight 9000 all at
+  // once gives 9 of 30, and pushes the mean to 2.37 starts, past the owner's "about three moments
+  // per five minutes" once the farmer's walk is counted. Three distinct kinds in five minutes and
+  // the owner's own pacing are in genuine tension now that the birthday is not free, and which one
+  // gives is the owner's call, not this lane's: see the PR's "Owner decision needed?".
   //
   // So the population test below pins what is true — that a five-minute watch is not one thing
   // happening once — at a floor with margin, and the seed-9 test is the readable demonstration on

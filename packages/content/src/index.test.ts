@@ -34,7 +34,9 @@ describe('the farm event deck (v2)', () => {
       expect(card.storybook.notability).toBeLessThanOrEqual(1);
       for (const p of storybookPlaceholders(card.storybook.line)) expect(known.has(p)).toBe(true);
     }
-    expect(storybookPlaceholders(eventCard('windfall').storybook.line)).toEqual(['dl', 'coins']);
+    // Decision 12 (2026-09-08, plan section 11): no transaction happens on the farm, so windfall no
+    // longer pays coins and its line no longer carries the {coins} placeholder.
+    expect(storybookPlaceholders(eventCard('windfall').storybook.line)).toEqual(['dl']);
   });
 
   it('looks cards up by id and throws on a typo', () => {

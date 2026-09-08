@@ -71,8 +71,14 @@ test("ids are unique across both files", () => {
 
 test("every hook is from the allowed list, in both files", () => {
   for (const c of [...cards, ...authoredEvents]) for (const h of allHooks(c)) assert.ok(ALLOWED_HOOKS.includes(h.op), `${c.id}: hook ${h.op}`);
+  // `coins` is deliberately unexercised: decision 12 (2026-09-08, plan section 11) retired every
+  // farm-coin transaction from the deck (windfall's dug-up purse was the only card that used it).
+  // The op stays in the schema's vocabulary — the engine still implements it, and a future
+  // settlement-stock card may use it again — but no card in this deck writes to it today.
   const used = new Set(cards.flatMap((c) => allHooks(c).map((h) => h.op)));
-  assert.deepEqual([...used].sort(), [...ALLOWED_HOOKS].sort(), "every allowed hook is exercised by at least one card");
+  const exercised = ALLOWED_HOOKS.filter((op) => op !== "coins");
+  assert.deepEqual([...used].sort(), [...exercised].sort(), "every allowed hook but `coins` is exercised by at least one card");
+  assert.ok(!used.has("coins"), "no card hands the farm coins any more (decision 12): the `coins` hook is unused, not just unlisted");
 });
 
 test("every predicate name, in a card's conditions and every weight multiplier's `when`, is in the allowed list", () => {

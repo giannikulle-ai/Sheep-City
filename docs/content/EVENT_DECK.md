@@ -371,7 +371,7 @@ happened.
 
 **Trigger.** `predicates`: season is winter and weather is snow, with a 30-sim-day
 cooldown — under a full year (four nine-day seasons = 36 sim days), long enough to span
-most of a season so the predicates holding again the next snowy moment doesn't retrigger
+most of a year so the predicates holding again the next snowy moment doesn't retrigger
 it, but short enough that the next winter's first snow isn't skipped. v1's card made this
 rare only with a 720-hour cooldown and said so was a proxy for a real "first"; the
 authored trigger's own cooldown is that fix.
@@ -382,9 +382,9 @@ than an ordinary snowy scene gets.
 **Priority.** Outranks `farmersDayOff` (no weather or season gate, so it could otherwise
 land on the same winter dawn) and the bare parameter `mood`. `farmersDayOff` is not the
 only card without a weather or season gate — `merchantCaravan` has none either, and
-`farmerMeetsMerchant` has no clock gate at all — but only `farmersDayOff` fires at dawn,
-the same phase a winter morning's first snow lands on, so it is the one worth naming
-here.
+`farmerMeetsMerchant` has no clock gate at all — but of those three only `farmersDayOff`
+fires at dawn, the same phase a winter morning's first snow lands on, so it is the one
+worth naming here.
 
 **You see.** Every sheep stops and looks up at the same moment; DL leaps at a flake. It
 lasts 120 sim minutes (fifteen real seconds). The flock goes back to grazing with white

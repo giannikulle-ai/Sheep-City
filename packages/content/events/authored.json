@@ -88,7 +88,7 @@
           { "on": "weather", "op": "eq", "value": "snow" }
         ],
         "cooldownSimDays": 30,
-        "comment": "Under a full year (four nine-day seasons = 36 sim days), so the predicates can hold again before next winter is due but the cooldown still spans most of a season, keeping this the first snow of the current winter rather than a second flurry days later."
+        "comment": "Under a full year (four nine-day seasons = 36 sim days), so the predicates can hold again before next winter is due but the cooldown still spans most of a year, keeping this the first snow of the current winter rather than a second flurry days later."
       },
       "variables": {
         "flakeBurst": 24

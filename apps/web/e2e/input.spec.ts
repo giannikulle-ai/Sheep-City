@@ -173,13 +173,32 @@ test.describe('portrait phone', () => {
 
   test('tray verbs: one sheep, one task; the sky reaches the sim', async ({ page }) => {
     await open(page);
+    // Pin the world on the QA virtual clock (#55): only `qa.step` moves time from here, so every
+    // assertion below reads the tick the test itself ran, never a race against the real clock.
+    // This test failed once on PR #53 polling `luna.anim` for 'flop' against the wall clock and
+    // caught 'sit' instead — flop is short-lived, so a real-time poll can land after it has
+    // already passed. One tick right after the intent is queued removes that race entirely.
+    // `qa.seed` replays the same boot intents `open`'s URL gave the page (seed 1, sun, manual
+    // weather), so the reset world is bit-for-bit what was already on screen — nothing further
+    // to pin, and no extra intents land in the log the assertion below reads.
+    await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.seed(1));
+    const tick = () => page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.step(6));
+
     await page.locator('#who button[data-who="sheep-2"]').click();
     await page.locator('#verbs button[data-verb="rest"]').click();
     await expect(page.locator('#say')).not.toHaveClass(/waiting/);
-    // Biscuit lay down in the sim (by day a resting sheep gets up again on a roll, so look at once)
-    await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().sheep[2]?.resting)).toBe(true);
+    await tick();
+    // Biscuit lay down in the sim, on the tick the test just ran (by day a resting sheep gets up
+    // again on a roll, so this has to be read right after the one tick that applied the intent)
+    expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().sheep[2]?.resting)).toBe(true);
     await page.locator('#who button[data-who="luna"]').click();
     await page.locator('#verbs button[data-verb="flop"]').click();
+    await tick();
+    // Read flop on the tick it landed, before rain (below) gets a tick of its own: once it rains
+    // the sim's rain-shepherd behaviour claims `anim` for the run to shelter every tick after,
+    // manual hold or not — correctly so, but it means this assertion has to come first, not
+    // whenever a poll happens to catch it (the wall-clock race PR #53 hit).
+    expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().luna.anim)).toBe('flop');
     await page.locator('#who button[data-who="farm"]').click();
     await page.locator('#verbs button[data-verb="bird"]').click();
     await expect(page.locator('#say')).toHaveClass(/waiting/);
@@ -192,11 +211,10 @@ test.describe('portrait phone', () => {
       { type: 'farmAction', action: 'bird', sim: false },
       { type: 'setWeather', weather: 'rain', sim: true },
     ]);
-    await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().luna.anim)).toBe('flop');
-    await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.view().weather)).toBe('rain');
-    await expect
-      .poll(() => page.evaluate(() => (window as unknown as WithMoments).__moments.some((m) => m.kind === 'weather' && m.detail === 'rain')))
-      .toBe(true);
+    await tick();
+    expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.view().weather)).toBe('rain');
+    const moments = await page.evaluate(() => (window as unknown as WithMoments).__moments.map((m) => `${m.kind}:${m.detail}`));
+    expect(moments).toContain('weather:rain');
   });
 
   test('one pin: freeze, number, coordinates, and the text modal', async ({ page }) => {
@@ -258,7 +276,9 @@ test.describe('landscape phone', () => {
     expect(closed && closed.x >= LANDSCAPE.width).toBe(true);
     await page.locator('#trayToggle').click();
     await expect(page.locator('#who button[data-who="luna"]')).toBeVisible();
-    // the drawer slides in over 0.2 s; wait for it to settle inside the viewport
+    // the drawer slides in over 0.2 s: a CSS transition on the tray's own transform, not a sim
+    // effect, so the wall clock is the right one to poll here (#55) — there is no sim tick to
+    // step that would move it.
     const right = async () => {
       const b = await page.locator('#tray').boundingBox();
       return b ? b.x + b.width : Infinity;
@@ -268,13 +288,19 @@ test.describe('landscape phone', () => {
     if (!open_) throw new Error('no tray');
     expect(open_.x).toBeGreaterThan(LANDSCAPE.width / 3);
     expect(open_.width).toBeLessThanOrEqual(400);
+    // pin the world for the tap (#55): the drawer's slide is done, so from here the QA clock
+    // decides when the pet lands, not a poll against the real one. `qa.seed` replays `open`'s own
+    // boot intents (seed 1, sun), so the reset world matches what was already on screen and the
+    // log below still starts at the tap.
+    await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.seed(1));
     // taps still land on the scene beside the tray: pet DL wherever she sits
     const luna = await page.evaluate(() => {
       const l = (window as unknown as WithApp).sheepcliff.view().luna;
       return { x: l.x + 22, y: l.y + 20 };
     });
     await tapWorld(page, luna.x, luna.y);
+    await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.step(6));
     expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.intents[0]?.intent)).toMatchObject({ type: 'tap' });
-    await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().luna.icon)).toBe('heart');
+    expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().luna.icon)).toBe('heart');
   });
 });

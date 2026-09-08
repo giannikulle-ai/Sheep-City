@@ -51,13 +51,16 @@ describe('the actor tick is untouched (#39 is a new path)', () => {
   // had either. The worlds are built with the engine off — `events: false`, see `preEngine` — since
   // a v4 build had no engine to run: with it on, the world these hashes describe is a different
   // world, not a differently-shaped one. test/engine-parity.test.ts is where that is pinned.)
+  // Moved again in #63 for the three 40-sheep worlds only: hay2's disposition eases grass regrow
+  // once bought, and those worlds bank enough coins in 6,000 ticks to buy it. See
+  // test/hot-path-parity.test.ts's header for the detail; the two 5-sheep worlds never reach it.
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
     { seed: 6, sheep: 5, hash: 'e85cbb53bef79387' },
-    { seed: 6, sheep: 40, hash: '681d0cbae2eace49' },
+    { seed: 6, sheep: 40, hash: '24b66cca5ee22c60' },
     { seed: 7, sheep: 5, hash: 'bf1769cf3184be53' },
-    { seed: 7, sheep: 40, hash: '1591607e60b10a89' },
+    { seed: 7, sheep: 40, hash: 'e9c4f334e6f9edf0' },
     { seed: 11, sheep: 5, hash: 'a5735abd6b19878b' },
-    { seed: 11, sheep: 40, hash: '71769756e8746076' },
+    { seed: 11, sheep: 40, hash: '256f5c47c7888f0c' },
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #39 on the v4 view`, () => {
@@ -328,6 +331,44 @@ describe('advanceLedger: the rules', () => {
     for (const g of M.grass) {
       expect(g).toBeGreaterThan(0.9);
       expect(g).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("hay2's disposition (#63): owned, tuftRegrowPerSec eases up by hay2.tuftRegrowBonusFrac; not owned, or any other upgrade owned, the rate is plain", () => {
+    // No sheep, so `bites` is 0 regardless of grazing: this isolates the regrow term. A short
+    // span (well under LEDGER_STEP_MS) keeps the regrown amount off the [0, 1] clamp.
+    const SPAN_MS = 1000;
+    const bare = pinned(7, 'sun', 0);
+    bare.grass = bare.grass.map(() => 0);
+    const dt = SPAN_MS / 1000;
+    const plain = advanceLedger(bare, SPAN_MS, createRng(1));
+    for (const g of plain.grass) expect(g).toBeCloseTo(dt * RULES.tuftRegrowPerSec, 12);
+
+    const withHay2 = advanceLedger({ ...bare, banks: { ...bare.banks, owned: ['hay2'] } }, SPAN_MS, createRng(1));
+    for (const g of withHay2.grass) expect(g).toBeCloseTo(dt * RULES.tuftRegrowPerSec * (1 + RULES.hay2.tuftRegrowBonusFrac), 12);
+    expect(withHay2.grass[0]).toBeGreaterThan(plain.grass[0] as number);
+
+    // Owning something else does nothing to this rate: the bonus is hay2's alone.
+    const withOthers = advanceLedger({ ...bare, banks: { ...bare.banks, owned: ['flowerbed', 'scarecrow'] } }, SPAN_MS, createRng(1));
+    expect(withOthers.grass).toEqual(plain.grass);
+  });
+
+  it("hay2's regrow bonus is the same number and the same rule on the actor tick (tick.ts) as on the Ledger (advanceLedger): the parity #63 asks for", () => {
+    // Zero sheep on both sides, so nothing bites a tuft and the tick's regrow line is isolated,
+    // the same way the Ledger test above isolates advanceLedger's.
+    const fresh = () => {
+      const s = createInitialState(7, { sheep: 0, events: false });
+      s.tufts = s.tufts.map((t) => ({ ...t, level: 0 }));
+      return s;
+    };
+    const plain = advance(fresh(), 1);
+    const withHay2 = advance({ ...fresh(), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, 1);
+    const ledgerPlain = advanceLedger(summarise(fresh()), TICK_MS, createRng(1));
+    const ledgerHay2 = advanceLedger({ ...summarise(fresh()), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, TICK_MS, createRng(1));
+    for (let i = 0; i < plain.tufts.length; i++) {
+      expect(plain.tufts[i]!.level).toBeCloseTo(ledgerPlain.grass[i] as number, 12);
+      expect(withHay2.tufts[i]!.level).toBeCloseTo(ledgerHay2.grass[i] as number, 12);
+      expect(withHay2.tufts[i]!.level).toBeGreaterThan(plain.tufts[i]!.level);
     }
   });
 

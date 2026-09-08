@@ -170,9 +170,15 @@
           "type": "object",
           "properties": { "initial": { "$ref": "#/$defs/int" } },
           "required": ["initial"], "additionalProperties": false
+        },
+        "hay2": {
+          "type": "object",
+          "description": "New for #63: hay2's disposition (docs/content/FARM_BUILDS.md). Not in the prototype, so it lives here rather than in `rules` (rules is asserted exactly against the prototype literal).",
+          "properties": { "tuftRegrowBonusFrac": { "$ref": "#/$defs/unit" } },
+          "required": ["tuftRegrowBonusFrac"], "additionalProperties": false
         }
       },
-      "required": ["clock", "seasons", "merchant", "flock"], "additionalProperties": false
+      "required": ["clock", "seasons", "merchant", "flock", "hay2"], "additionalProperties": false
     }
   },
   "required": ["source", "rules", "outsideRules"],

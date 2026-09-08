@@ -48,6 +48,14 @@ export const RULES = {
 
   petTagMs: b.petTagMs.value,
 
+  /**
+   * hay2's disposition (issue #63, docs/content/FARM_BUILDS.md): the prototype's second hay bale
+   * drew and changed nothing. New for #63, not in the prototype, so it lives in outsideRules
+   * rather than rules (test/rules-parity.test.ts asserts `rules` against the prototype literal
+   * exactly). See `hay2RegrowMult` below for where it applies.
+   */
+  hay2: { tuftRegrowBonusFrac: o.hay2.tuftRegrowBonusFrac.value },
+
   /** The prototype's clock: `{ t: .18, period: 180 }` and the `phaseOf` boundaries. One sim-day is 180 sim-seconds. */
   clock: { startT: o.clock.startT.value, periodSec: o.clock.periodSec.value, phases: o.clock.phases.value },
   /** SEASON_TEMP and SEASON_ODDS from the prototype. The season order is `SEASONS` in clock.ts. */
@@ -121,3 +129,12 @@ export const RULES = {
 } as const;
 
 export type Rules = typeof RULES;
+
+/**
+ * hay2's Ledger effect (issue #63): while owned, tuft regrow is eased up by `hay2.tuftRegrowBonusFrac`.
+ * One function so `tick.ts` (actor resolution) and `ledger/advance.ts` (offline catch-up) apply the
+ * same number the same way; test/ledger.test.ts pins both against each other.
+ */
+export function hay2RegrowMult(owned: readonly string[]): number {
+  return owned.includes('hay2') ? 1 + RULES.hay2.tuftRegrowBonusFrac : 1;
+}

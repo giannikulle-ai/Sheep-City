@@ -24,6 +24,12 @@
 // view — `events` stripped, version back to 6 — to the values this file carried before #40, which
 // is what proves the tick itself did not move. The engine-on worlds are pinned there too.
 //
+// They moved a fifth time in #63: hay2's disposition eases `tuftRegrowPerSec` up by a fraction
+// once owned (rules.ts's `hay2RegrowMult`), and the 40-sheep worlds bank enough coins inside 6,000
+// ticks to buy it (flowerbed at 12, hay2 at 30 more), so grass — and everything downstream of it —
+// runs differently for them from the moment it is bought. The two 5-sheep worlds never reach 42
+// coins in this window and are untouched; only the three 40-sheep hashes below moved.
+//
 // If a hash here moves, some sheep, DL, or NPC took a different path or drew a different die.
 // That is a parity break, not a number to update: find the behaviour change first, and if it is a
 // deliberate new draw, say so in the PR.
@@ -38,11 +44,11 @@ const TICKS = 6000;
 
 const BEFORE: readonly { seed: number; sheep: number; hash: string }[] = [
   { seed: 6, sheep: 5, hash: '0791cd39c7e2aab8' },
-  { seed: 6, sheep: 40, hash: '205b7d4de17aaf10' },
+  { seed: 6, sheep: 40, hash: '4d4282b7e4bc683c' }, // moved in #63: hay2 bought, grass regrow eased up
   { seed: 7, sheep: 5, hash: '0ed2243395f4d7e2' },
-  { seed: 7, sheep: 40, hash: 'bc20b20c5bffac4b' },
+  { seed: 7, sheep: 40, hash: '4e8d44807f5111f9' }, // moved in #63: hay2 bought, grass regrow eased up
   { seed: 11, sheep: 5, hash: '0e4a4606aab31838' },
-  { seed: 11, sheep: 40, hash: '391c982b6e6dec4f' },
+  { seed: 11, sheep: 40, hash: 'eb6b8440b3803fd8' }, // moved in #63: hay2 bought, grass regrow eased up
 ];
 
 describe('hot path parity (#27)', () => {

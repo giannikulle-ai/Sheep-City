@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { SEASONS, SEASON_ODDS, SEASON_TEMP, phaseOf } from '../src/clock';
 import { NAMES, COLORS, createInitialState } from '../src/state';
-import { RULES } from '../src/rules';
+import { hay2RegrowMult, RULES } from '../src/rules';
 
 const repo = fileURLToPath(new URL('../../..', import.meta.url));
 const src = readFileSync(`${repo}/prototype/luna-farm/src/sim_template.html`, 'utf8');
@@ -109,6 +109,16 @@ describe('constants the prototype keeps outside RULES', () => {
     expectInSource(`nameIdx = ${RULES.flock.initial};`);
     expect([...NAMES]).toEqual(literal('NAMES'));
     expect([...COLORS]).toEqual(literal('COLORS'));
+  });
+});
+
+describe("hay2's disposition (#63): new, not in the prototype (its hay2 drew and changed nothing)", () => {
+  it('hay2RegrowMult is 1 without hay2, and 1 + tuftRegrowBonusFrac with it, for any other owned set', () => {
+    expect(RULES.hay2.tuftRegrowBonusFrac).toBeGreaterThan(0);
+    expect(hay2RegrowMult([])).toBe(1);
+    expect(hay2RegrowMult(['flowerbed', 'scarecrow'])).toBe(1);
+    expect(hay2RegrowMult(['hay2'])).toBe(1 + RULES.hay2.tuftRegrowBonusFrac);
+    expect(hay2RegrowMult(['flowerbed', 'hay2', 'scarecrow'])).toBe(1 + RULES.hay2.tuftRegrowBonusFrac);
   });
 });
 

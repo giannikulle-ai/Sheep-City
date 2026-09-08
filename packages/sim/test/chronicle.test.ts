@@ -35,13 +35,16 @@ describe('the actor tick is untouched (#60 is a new path)', () => {
   // `events`, added in #40, and the worlds are built with the engine off: a v5 build had no engine,
   // and with one directing these are different worlds, not differently-shaped ones —
   // test/engine-parity.test.ts pins that.)
+  // Moved again in #63 for the three 40-sheep worlds only: hay2's disposition eases grass regrow
+  // once bought, and those worlds bank enough coins in 6,000 ticks to buy it. See
+  // test/hot-path-parity.test.ts's header for the detail; the two 5-sheep worlds never reach it.
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
     { seed: 6, sheep: 5, hash: 'c983956cb0872c74' },
-    { seed: 6, sheep: 40, hash: 'f836d10c0aed5264' },
+    { seed: 6, sheep: 40, hash: '7b315218ba0d0f07' },
     { seed: 7, sheep: 5, hash: '69db4e4556aa8ea2' },
-    { seed: 7, sheep: 40, hash: 'a3b4eea04dd329e6' },
+    { seed: 7, sheep: 40, hash: 'ac0210849a3805ff' },
     { seed: 11, sheep: 5, hash: '9c86b689cdc67c8b' },
-    { seed: 11, sheep: 40, hash: '0e6105a485b187d3' },
+    { seed: 11, sheep: 40, hash: 'b42564c9c400bc62' },
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #60 on the v5 view`, () => {

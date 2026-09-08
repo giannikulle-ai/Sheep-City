@@ -74,6 +74,12 @@
       }
     },
     "merchant": { "firstVisitMs": { "value": 45000, "comment": "Delay from reset to the first merchant visit." } },
-    "flock":    { "initial": { "value": 5, "comment": "Sheep on the field at reset (indices 0..4 of farm/names.json)." } }
+    "flock":    { "initial": { "value": 5, "comment": "Sheep on the field at reset (indices 0..4 of farm/names.json)." } },
+    "hay2": {
+      "tuftRegrowBonusFrac": {
+        "value": 0.15,
+        "comment": "New for #63 (the flowerbed/hay2/scarecrow disposition, docs/content/FARM_BUILDS.md): the prototype's hay2 upgrade drew and changed nothing (an empty draw stub, sim_template.html line 576). Its disposition is 'change a number': while owned, tuftRegrowPerSec is eased up by this fraction, a second bale taking a little pressure off the grazed tufts. Small and farm-only, not part of the world's growth table (plan section 2) — 15% on a rate that is already well under the bite rate, so a grazing sheep still wins locally; the whole field recovers a little faster in the background."
+      }
+    }
   }
 }

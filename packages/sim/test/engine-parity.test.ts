@@ -30,13 +30,16 @@ describe('the pre-engine view (#40 is a new path when the engine is off)', () =>
   // The pins the trunk carried before #40: test/hot-path-parity.test.ts's six worlds at 6,000
   // ticks, and the two scripted days' end-of-day hashes from test/luna-day.test.ts and
   // test/sheep-day.test.ts.
+  // Moved again in #63 for the three 40-sheep worlds only: hay2's disposition eases grass regrow
+  // once bought, and those worlds bank enough coins in 6,000 ticks to buy it. See
+  // test/hot-path-parity.test.ts's header for the detail; the two 5-sheep worlds never reach it.
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
     { seed: 6, sheep: 5, hash: 'ec16cd89f0d97235' },
-    { seed: 6, sheep: 40, hash: '435da071f10e5017' },
+    { seed: 6, sheep: 40, hash: '766ca39d4dd8f66b' },
     { seed: 7, sheep: 5, hash: '092b1cb807636e88' },
-    { seed: 7, sheep: 40, hash: '50bccaa1fd5ce924' },
+    { seed: 7, sheep: 40, hash: '66bef1fdef89b24b' },
     { seed: 11, sheep: 5, hash: 'a70633600f30f95c' },
-    { seed: 11, sheep: 40, hash: 'a68a43c93bd34c39' },
+    { seed: 11, sheep: 40, hash: '9b68cb64b6d37d43' },
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #40 on the v6 view`, () => {

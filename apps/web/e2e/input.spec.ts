@@ -179,8 +179,9 @@ test.describe('portrait phone', () => {
     // caught 'sit' instead — flop is short-lived, so a real-time poll can land after it has
     // already passed. One tick right after the intent is queued removes that race entirely.
     // `qa.seed` replays the same boot intents `open`'s URL gave the page (seed 1, sun, manual
-    // weather), so the reset world is bit-for-bit what was already on screen — nothing further
-    // to pin, and no extra intents land in the log the assertion below reads.
+    // weather) onto a fresh state, so it freezes the world exactly where those boot intents put
+    // it, unaffected by anything that ran before — no extra intents land in the log the
+    // assertion below reads.
     await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.seed(1));
     const tick = () => page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.step(6));
 
@@ -290,8 +291,10 @@ test.describe('landscape phone', () => {
     expect(open_.width).toBeLessThanOrEqual(400);
     // pin the world for the tap (#55): the drawer's slide is done, so from here the QA clock
     // decides when the pet lands, not a poll against the real one. `qa.seed` replays `open`'s own
-    // boot intents (seed 1, sun), so the reset world matches what was already on screen and the
-    // log below still starts at the tap.
+    // boot intents (seed 1, sun) onto a fresh state, freezing the world where those boot intents
+    // put it, unaffected by anything that ran before. The log below still starts at the tap
+    // because nothing had been dispatched yet — the tray toggle above sends no intent — not
+    // because the reset rebased the log.
     await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.seed(1));
     // taps still land on the scene beside the tray: pet DL wherever she sits
     const luna = await page.evaluate(() => {

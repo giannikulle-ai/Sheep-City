@@ -170,4 +170,122 @@ test.describe('deity powers', () => {
     expect(Math.abs((luna.target?.y ?? -1000) - 300)).toBeLessThan(2);
     expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.view().luna.ringUntil ?? 0)).toBeGreaterThan(0);
   });
+
+  // --- fix round 1 (after the Verifier's review of PR #90) --------------------------------------
+  // The chip's `.on` state now reads `sim().weather` fresh every frame (tray.ts's `syncWeather`)
+  // instead of remembering the last tap, so it can never fall out of step with a hold that expired
+  // on its own or a `foggy` flag the tray didn't set itself. Both tests below run the QA clock far
+  // enough to prove it — no `waitForTimeout`, per the ticket (#55).
+
+  test("a hold that hands back on its own un-lights its chip, so the next tap asks for the kind again instead of clearing it (Verifier's blocker; also the owner's 3-world-hour hand-back, 2026-09-08)", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.seed(1));
+    const tick = () => page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.step(6));
+
+    await page.locator('#who button[data-who="sky"]').click();
+    await page.locator('#verbs button[data-verb="rain"]').click();
+    await tick();
+    expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().weather.mode)).toBe('manual');
+    await expect(page.locator('#verbs button[data-verb="rain"]')).toHaveClass(/\bon\b/);
+
+    // Run well past the hold — 3 world-hours at the default 180 s day is 22.5 real seconds
+    // (`deityWeatherHoldMinutes`, actions.ts) — purely on the QA clock (qa.step), never a wall wait.
+    await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.step(1500));
+    expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().weather.mode)).toBe('season');
+    // The Verifier's blocker: the old `activeWeather` memory kept the chip lit here, so the next tap
+    // on it sent `clear` instead of `rain` and the player saw nothing happen. It must read unlit now.
+    await expect(page.locator('#verbs button[data-verb="rain"]')).not.toHaveClass(/\bon\b/);
+
+    await page.locator('#verbs button[data-verb="rain"]').click();
+    await tick();
+    const rained = await page.evaluate(() => {
+      const w = (window as unknown as WithApp).sheepcliff.sim().weather;
+      return { kind: w.kind, mode: w.mode };
+    });
+    expect(rained).toEqual({ kind: 'rain', mode: 'manual' }); // a fresh hold, not a no-op `clear`
+    await expect(page.locator('#verbs button[data-verb="rain"]')).toHaveClass(/\bon\b/);
+  });
+
+  test("fog is its own lit chip, independent of the kind chip underneath it, and the status line says so too (Verifier's other blocker)", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.seed(1));
+    const tick = () => page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.step(6));
+
+    await page.locator('#who button[data-who="sky"]').click();
+
+    await page.locator('#verbs button[data-verb="fog"]').click();
+    await tick();
+    expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().weather.foggy)).toBe(true);
+    await expect(page.locator('#verbs button[data-verb="fog"]')).toHaveClass(/\bon\b/);
+    // fog leaves `kind` untouched (still the boot's `sun`), and that also puts `sun` in the same
+    // deity hold as `fog` — the sim has no field that tells the two taps apart (`applyWeather`,
+    // packages/sim/intents.ts), so, per the ticket's own rule, the tray correctly reads both as lit.
+    await expect(page.locator('#verbs button[data-verb="sun"]')).toHaveClass(/\bon\b/);
+
+    // `snow` never touches `foggy` (packages/sim's `applyWeather`): the world is still fogged, and
+    // now the tray must show both — not five mutually-exclusive chips, a kind plus an independent flag.
+    await page.locator('#verbs button[data-verb="snow"]').click();
+    await tick();
+    const afterSnow = await page.evaluate(() => {
+      const w = (window as unknown as WithApp).sheepcliff.sim().weather;
+      return { kind: w.kind, foggy: w.foggy };
+    });
+    expect(afterSnow).toEqual({ kind: 'snow', foggy: true });
+    await expect(page.locator('#verbs button[data-verb="fog"]')).toHaveClass(/\bon\b/);
+    await expect(page.locator('#verbs button[data-verb="snow"]')).toHaveClass(/\bon\b/);
+    await expect(page.locator('#verbs button[data-verb="sun"]')).not.toHaveClass(/\bon\b/);
+    await expect(page.locator('#status')).toContainText('foggy');
+
+    // Tapping the lit fog chip must un-fog. The sim has no fog-only "off" yet (issue #43 sim ask,
+    // see the PR note), so this falls back to the same full `clear` any other lit chip sends — which
+    // also drops the sun hold, a known and documented trade-off, not a silent surprise.
+    await page.locator('#verbs button[data-verb="fog"]').click();
+    await tick();
+    const afterClear = await page.evaluate(() => {
+      const w = (window as unknown as WithApp).sheepcliff.sim().weather;
+      return { kind: w.kind, foggy: w.foggy };
+    });
+    expect(afterClear).toEqual({ kind: 'sun', foggy: false });
+    await expect(page.locator('#verbs button[data-verb="fog"]')).not.toHaveClass(/\bon\b/);
+    await expect(page.locator('#status')).not.toContainText('foggy');
+  });
+
+  test('a pending `call` clears when the tray selection changes, instead of resolving on the newly-selected creature (fix round 1 on #44)', async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.seed(1));
+
+    await page.locator('#who button[data-who="sheep-1"]').click();
+    await page.locator('#verbs button[data-verb="call"]').click();
+    await expect(page.locator('#stage')).toHaveClass(/awaiting-call/);
+    await expect(page.locator('#say')).toHaveClass(/waiting/);
+
+    await page.locator('#who button[data-who="luna"]').click();
+    await expect(page.locator('#stage')).not.toHaveClass(/awaiting-call/);
+    await expect(page.locator('#say')).not.toHaveClass(/waiting/);
+
+    // the same chip re-selecting itself (a lamb growing up rebuilds the flock chips, tray.ts's
+    // `setWhos`) must not interrupt a call still pending on it
+    await page.locator('#verbs button[data-verb="call"]').click();
+    await expect(page.locator('#stage')).toHaveClass(/awaiting-call/);
+    await page.locator('#who button[data-who="luna"]').click();
+    await expect(page.locator('#stage')).toHaveClass(/awaiting-call/);
+  });
+});
+
+test.describe('deity powers, landscape', () => {
+  const LANDSCAPE = { width: 844, height: 390 };
+  test.use({ viewport: LANDSCAPE, deviceScaleFactor: 1 });
+
+  test('a pending `call` clears when the tray closes (fix round 1 on #44)', async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.seed(1));
+
+    await page.locator('#trayToggle').click(); // open the landscape drawer
+    await page.locator('#who button[data-who="sheep-1"]').click();
+    await page.locator('#verbs button[data-verb="call"]').click();
+    await expect(page.locator('#stage')).toHaveClass(/awaiting-call/);
+
+    await page.locator('#trayToggle').click(); // close it
+    await expect(page.locator('#stage')).not.toHaveClass(/awaiting-call/);
+  });
 });

@@ -1,7 +1,7 @@
 // The prototype's ACTIONS list, regrouped per creature so the owner can tell one creature to do
 // one thing. Every prototype id is here (actions.test.ts checks), as an intent rather than a
 // function: the sim runs it, the client only asks.
-import { ACT_VERBS, DEITY_WEATHER_KINDS, type ActVerb, type DeityWeatherKind } from '@sheepcliff/sim';
+import { ACT_VERBS, DEITY_WEATHER_KINDS, RULES, type ActVerb, type DeityWeatherKind } from '@sheepcliff/sim';
 import { DL_ACTIONS, sheepId, type ClientIntent, type SheepId, type Target } from './intents';
 import { JUMP_T } from './jump';
 
@@ -50,8 +50,32 @@ const WEATHER_LABELS: Record<DeityWeatherKind, string> = {
   clear: '✕ clear',
 };
 
-/** The tray's default hold for a deity weather tap, in sim-minutes (`applyWeather`'s unit). */
-export const DEITY_WEATHER_HOLD_MIN = 3;
+/**
+ * The sky tray's default hold, in **world-hours** — owner decision, 2026-09-08, fix round 1 on
+ * issue #44: three hours of the farm's own day, not three minutes of the player's clock.
+ *
+ * `applyWeather` (`packages/sim/src/intents.ts`) treats its `holdSimMinutes` field as minutes of
+ * real, unpaused time on `clock.nowMs` — never scaled by day length (the Verifier's finding on
+ * PR #90). A fixed number of those minutes therefore meant a different fraction of the world's day
+ * depending on which day-length chip was last pressed: the old `DEITY_WEATHER_HOLD_MIN = 3` was a
+ * full in-world day at the 3-minute default, three days at the 1-minute length, and a third of one
+ * at the 10-minute length. Converting from world-hours to the field's real-minute unit at send
+ * time (`deityWeatherHoldMinutes` below) keeps the tap's *meaning* — "the sky stays this way for
+ * three hours of farm-watching" — the same across every day length instead.
+ */
+export const DEITY_WEATHER_HOLD_WORLD_HOURS = 3;
+
+/**
+ * `holdSimMinutes` for a `weather` intent sent at the given day length (`periodSec`, sim-real
+ * seconds per full day-night cycle): `periodSec` real seconds is one world-day, so
+ * `periodSec * (hours / 24)` real seconds is that many world-hours, and `applyWeather` wants the
+ * field in real minutes. See `DEITY_WEATHER_HOLD_WORLD_HOURS`'s comment for why. E.g. at the
+ * default 180-second day this is 22.5 real seconds (0.375 min); 7.5 s at the 1-minute day; 75 s at
+ * the 10-minute day.
+ */
+export function deityWeatherHoldMinutes(periodSec: number): number {
+  return (periodSec * (DEITY_WEATHER_HOLD_WORLD_HOURS / 24)) / 60;
+}
 
 /** Labels for the deity `act` verbs (issue #44), `call` excluded: it needs a point, so it is built
  * separately in `actVerbs` below as a `callTarget` verb, not an `act` one. */
@@ -82,8 +106,12 @@ export function whoList(names: readonly string[], colors: readonly string[]): Wh
   return out;
 }
 
-/** The verbs one chip offers. */
-export function verbsFor(who: WhoId): Verb[] {
+/**
+ * The verbs one chip offers. `periodSec` (the sim's current day length) only matters for `sky`'s
+ * weather chips, whose hold is computed from it (see `deityWeatherHoldMinutes`); it defaults to
+ * the sim's own default day length so every other caller (tests included) can omit it.
+ */
+export function verbsFor(who: WhoId, periodSec: number = RULES.clock.periodSec): Verb[] {
   if (who === 'luna') {
     return [
       { id: 'pet', label: 'pet her', intent: { type: 'pet', target: 'luna' } },
@@ -118,7 +146,7 @@ export function verbsFor(who: WhoId): Verb[] {
       // tray's default hold. A second tap on the same chip is handled by the tray (tray.ts), which
       // sends this list's `clear` entry instead of tapping it a second time itself.
       ...DEITY_WEATHER_KINDS.map(
-        (kind): Verb => ({ id: kind, label: WEATHER_LABELS[kind], intent: { type: 'weather', kind, holdSimMinutes: DEITY_WEATHER_HOLD_MIN } }),
+        (kind): Verb => ({ id: kind, label: WEATHER_LABELS[kind], intent: { type: 'weather', kind, holdSimMinutes: deityWeatherHoldMinutes(periodSec) } }),
       ),
       { id: 'spring', label: 'spring', intent: { type: 'setSeason', season: 'spring' } },
       { id: 'summer', label: 'summer', intent: { type: 'setSeason', season: 'summer' } },

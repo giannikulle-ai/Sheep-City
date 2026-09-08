@@ -42,6 +42,7 @@ async function shot(name, tap) {
 
 const selectSky = () => page.locator('#who button[data-who="sky"]').click();
 const selectLuna = () => page.locator('#who button[data-who="luna"]').click();
+const selectSheep1 = () => page.locator('#who button[data-who="sheep-1"]').click();
 const weatherTap = (kind) => async () => {
   await selectSky();
   await page.locator(`#verbs button[data-verb="${kind}"]`).click();
@@ -56,7 +57,14 @@ await shot('sky-rain', weatherTap('rain'));
 await shot('sky-snow', weatherTap('snow'));
 await shot('sky-fog', weatherTap('fog'));
 await shot('sky-clear', weatherTap('clear'));
-await shot('act-calm', actTap('calm'));
+// `calm` and `treat` on Digital Luna both run the sim's `petLuna` (fix round 1, PR #90's own
+// finding 3): the two shots came out byte-identical. `calm` on a sheep is a genuinely different
+// picture — the sim's `behaviours/sheep.ts` puts it down to rest, no bubble at all — so this one
+// shoots the sheep instead of Luna, matching the Verifier's own suggested fix.
+await shot('act-calm', async () => {
+  await selectSheep1();
+  await page.locator('#verbs button[data-verb="calm"]').click();
+});
 await shot('act-startle', actTap('startle'));
 await shot('act-treat', actTap('treat'));
 await shot('act-call', async () => {

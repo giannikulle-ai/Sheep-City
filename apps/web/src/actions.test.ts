@@ -1,7 +1,7 @@
 import { phaseMix, phaseOf } from '@sheepcliff/render';
 import { describe, expect, it } from 'vitest';
 import { PHASE_T } from '../e2e/lib/app';
-import { JUMP_T, verbsFor, whoList, type WhoId } from './actions';
+import { deityWeatherHoldMinutes, JUMP_T, verbsFor, whoList, type WhoId } from './actions';
 
 /** Every id in the prototype's ACTIONS table (build/farm_sim.html), by group. */
 const PROTOTYPE_ACTIONS: Record<string, string[]> = {
@@ -59,6 +59,22 @@ describe('the action catalogue', () => {
     const byId = new Map(verbsFor('sky').map((v) => [v.id, v.intent]));
     for (const kind of ['sun', 'rain', 'snow', 'fog', 'clear'] as const) {
       expect(byId.get(kind), kind).toEqual({ type: 'weather', kind, holdSimMinutes: expect.any(Number) });
+    }
+  });
+
+  it("holds the sky for three world-hours at any day length, not three fixed real minutes (owner decision, 2026-09-08, fix round 1 on #44)", () => {
+    // 3 world-hours is 1/8 of a day; `applyWeather` (packages/sim) reads its `holdSimMinutes` field
+    // as real minutes on the unscaled `clock.nowMs`, so the value has to grow with the day length
+    // for the hold to keep meaning the same fraction of the world's day everywhere.
+    expect(deityWeatherHoldMinutes(180)).toBeCloseTo(22.5 / 60); // the default 3-minute day
+    expect(deityWeatherHoldMinutes(60)).toBeCloseTo(7.5 / 60); // the 1-minute day
+    expect(deityWeatherHoldMinutes(600)).toBeCloseTo(75 / 60); // the 10-minute day
+
+    // the sky's own verbs pick this up from whatever day length is passed in, not a fixed constant
+    for (const periodSec of [60, 180, 600]) {
+      const byId = new Map(verbsFor('sky', periodSec).map((v) => [v.id, v.intent]));
+      const rain = byId.get('rain');
+      expect(rain?.type === 'weather' ? rain.holdSimMinutes : null, `periodSec ${periodSec}`).toBeCloseTo(deityWeatherHoldMinutes(periodSec));
     }
   });
 

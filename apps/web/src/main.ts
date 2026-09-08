@@ -152,17 +152,37 @@ async function main(): Promise<void> {
   // --- tray -------------------------------------------------------------------------------
   const flockNames = (): string[] => game.sim.sheep.map((s) => s.name);
   const flockColors = (): string[] => game.sim.sheep.map((s) => s.color);
-  const tray = buildTray({ who: byId('who'), verbs: byId('verbs'), say: byId('say') }, flockNames(), flockColors(), (v) => send(v.intent));
+
+  // The deity `call` verb (issue #44): tapped from the tray, it asks the stage for a point rather
+  // than sending anything itself. Set while waiting, cleared by the stage tap that resolves it, by
+  // any other intent going out in the meantime, by the tray selection changing, or by the tray
+  // closing (fix round 1: it used to outlive all three).
+  let awaitingCall: Target | null = null;
+  function clearAwaitingCall(cancelled = false): void {
+    if (awaitingCall === null) return;
+    awaitingCall = null;
+    stage.classList.remove('awaiting-call');
+    // A stage tap resolves it on its own (send() below) and says what happened instead; a selection
+    // change or a closed tray leaves nothing to say that yet, so the status line must stop asking
+    // for a tap it will no longer send anywhere in particular (fix round 1: it used to keep saying
+    // "waiting" for a call that had already been dropped).
+    if (cancelled) tray.say('call cancelled');
+  }
+
+  const tray = buildTray(
+    { who: byId('who'), verbs: byId('verbs'), say: byId('say') },
+    flockNames(),
+    flockColors(),
+    (v) => send(v.intent),
+    () => clearAwaitingCall(true),
+    () => game.sim.clock.periodSec,
+  );
   let trayFlock = game.sim.sheep.length;
   trayToggle.addEventListener('click', () => {
     const open = document.body.classList.toggle('tray-open');
     trayToggle.textContent = open ? 'close' : 'tray';
+    if (!open) clearAwaitingCall(true);
   });
-
-  // The deity `call` verb (issue #44): tapped from the tray, it asks the stage for a point rather
-  // than sending anything itself. Set while waiting, cleared by the stage tap that resolves it or
-  // by any other intent going out in the meantime.
-  let awaitingCall: Target | null = null;
 
   function send(intent: ClientIntent) {
     if (intent.type === 'farmAction' && intent.action === 'reset') {
@@ -181,8 +201,7 @@ async function main(): Promise<void> {
       tray.say(describeIntent(intent, flockNames()), true);
       return rec;
     }
-    awaitingCall = null;
-    stage.classList.remove('awaiting-call');
+    clearAwaitingCall();
     const rec = game.dispatch(intent);
     tray.say(describeIntent(intent, flockNames()) + (rec.sim ? '' : ' · waiting for the sim'), !rec.sim);
     return rec;
@@ -276,8 +295,7 @@ async function main(): Promise<void> {
     // no hit test, the same as a thrown stick aims at the raw tap, not what is under it
     if (awaitingCall) {
       const target = awaitingCall;
-      awaitingCall = null;
-      stage.classList.remove('awaiting-call');
+      clearAwaitingCall();
       send({ type: 'act', target, verb: 'call', x: wx, y: wy });
       return;
     }
@@ -308,7 +326,10 @@ async function main(): Promise<void> {
       trayFlock = game.sim.sheep.length;
       tray.setWhos(flockNames(), flockColors());
     }
-    status.textContent = `${phaseOf(view.clockT)} · ${view.weather} · ${view.season} · seed ${game.seed} · day ${game.sim.clock.dayCount + 1} · ${WORLD_W}×${WORLD_H} native, UI at ${devicePixelRatio}× · ${lastSaveNote}`;
+    // Sky chip highlight (issue #44 fix round 1): read straight from the sim's own weather every
+    // frame, not from whichever chip was tapped last — see tray.ts's `syncWeather` doc comment.
+    tray.syncWeather(game.sim.weather, game.sim.clock.nowMs);
+    status.textContent = `${phaseOf(view.clockT)} · ${view.weather}${view.foggy ? ' · foggy' : ''} · ${view.season} · seed ${game.seed} · day ${game.sim.clock.dayCount + 1} · ${WORLD_W}×${WORLD_H} native, UI at ${devicePixelRatio}× · ${lastSaveNote}`;
   }
 
   // --- frames -----------------------------------------------------------------------------

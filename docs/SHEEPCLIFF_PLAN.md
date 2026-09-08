@@ -47,20 +47,42 @@ The owner said go before answering the open questions, so the plan proceeds on t
 
 ## 2. How to map a civilization without 1:1 physics
 
-The trick is to simulate at three resolutions and let the camera decide which one you see.
+The trick is to simulate at three resolutions and let the camera decide which one you see. What is written here is checked against the tree, not remembered: the Ledger exists (`packages/sim/src/ledger/`, exported from `packages/sim/src/index.ts`, save version 5); the event engine, the chronicle, and the social graph are the next things built, in that order.
 
 ### Layer 1: the Ledger (numbers)
-Every district has a small set of stocks and flows: food, wool, coins, wood, mood, population, shelter, and a few district-specific ones (fish for the harbour, honey for the wildwood). The Ledger ticks once per sim-minute, is pure arithmetic, and runs identically whether the district is on screen or not. It is also what runs during offline catch-up, so a week away costs milliseconds to simulate.
+Every district has a small set of stocks and flows: food, wool, coins, wood, mood, population, shelter, and a few district-specific ones (fish for the harbour, honey for the wildwood). The Ledger ticks once per sim-minute, is pure arithmetic, and runs identically whether the district is on screen or not. It is also what runs during offline catch-up, so a week away costs milliseconds to simulate. The farm's Ledger shipped in PR #57: `summarise` reads the numbers off a running district, `advanceLedger` moves them without actors, `respawn` builds actors back from them with an exact round trip, `diffLedger` says what changed, and `catchUp` is the one policy that decides which resolution a gap runs at.
 
-Growth lives here. A sustained surplus in a stock crosses a threshold and triggers a build (a new cottage, a second trough), and a build raises a cap (population, flock size). This is the SimCity part, reduced to a dozen numbers per district.
+Growth is a settlement's. A settlement (Village Green first, then the harbour and the wood) keeps its own stocks; when a stock stays in surplus long enough the settlement builds something, and a build raises a cap, opens a trade, or lets a new kind of inhabitant arrive. Unlocks arrive the way research does, from the settlement's own stocks over time; nobody shops. The surplus rule runs inside `advanceLedger`, so a week away can build things. A build that changes no number and draws no pixel does not get a row; growth you cannot see did not happen.
+
+The farm is different. Luna Farm is a space between spaces: it has a small Ledger of its own (flock, wool, coins, grass, the farmer's and the merchant's visits) and little growth. Its wool and coins enter the settlement economy as one input among several, not as its source. Farm builds are the owner's, may be purely aesthetic, and live in a separate table from the world's growth table; the three that ship today as no-ops (flowerbed, hay2, scarecrow) each get a disposition: change a number, draw a pixel, or go.
 
 ### Layer 2: the Actors (individuals)
-Only the district on screen runs individuals. Each inhabitant has needs (hunger, rest, warmth, company, play, work), a small set of traits (timid, greedy, curious, loyal), a job or role, and a home. A behaviour registry replaces the prototype's if/else chain: every behaviour is an object with an id, a priority, a condition, and a tick. Each sim-second an actor picks the highest-priority behaviour whose condition holds, with a little weighted randomness so it never looks like a spreadsheet. DL keeps her exact priority order from the prototype (fetch, manual, riding, rain shepherd, dusk and dawn routine, idle play); she is just the first entry in the registry.
+Only the district on screen runs individuals. Each inhabitant has needs (hunger, rest, warmth, company, play, work), traits as data (timid, greedy, curious, loyal, and more as the cast grows), a job or role, a home, one habit you can predict and one secret you can discover. A behaviour registry replaces the prototype's if/else chain: every behaviour is an object with an id, a priority, a condition, and a tick. Each sim-second an actor picks the highest-priority behaviour whose condition holds, with a little weighted randomness so it never looks like a spreadsheet. DL keeps her exact priority order from the prototype (fetch, manual, riding, rain shepherd, dusk and dawn routine, idle play); she is just the first entry in the registry.
 
-Actors read and write the Ledger: a sheep grazing lowers a tuft and later raises wool; a villager working the market converts wool to coins. When a district leaves the screen, its actors are summarised into the Ledger (how many, how fed, how happy) and thrown away. When it returns, actors are re-spawned from the Ledger with plausible positions and states. The player never sees the seam because the transition happens behind a district change.
+Inhabitants are connected. A social graph holds edges between them (family, bond, rivalry, and later apprenticeship and trade), formed by proximity, shared events, and time together, and fading without contact. The graph is what makes a week away mean something no card authored: two lambs that grew up side by side are bonded; a village that went short on grain remembers who shared. Edges are summarised into the Ledger with the actors and respawned with them.
 
-### Layer 3: the Director (events)
-A Director looks at the world every sim-minute and decides whether something should happen. It keeps a pacing curve (quiet, rising, incident, resolution) like a film editor, and draws from an event deck. Each event has conditions (season, weather, stocks, time of day, recent history), a weight, a duration, a visible beat that shows within one second, and a Ledger effect. Examples: a merchant caravan when coins are low, crows when grain is high, a festival after a good harvest, a fog morning in autumn, a lost lamb at dusk, a wolf sighting in winter that DL and the villagers handle together. The Director also runs "while you were gone" by replaying the offline period at Ledger resolution and picking three events to tell you about as a storybook.
+Two kinds of habit sit above the individual. Category actions apply to every inhabitant of a type: sheep grow wool, farmers rise early and walk to the market, sailors toss a coin into the harbour before a voyage. Individual habits and secrets are the inhabitant's own. Both live in the registry; the difference is who they bind to.
+
+Digital Luna cannot be harmed. Not by weather, an event, another inhabitant, or a power, on screen or off. This is an invariant of the sim with a test that never leaves the suite, not a phase rule.
+
+Actors read and write the Ledger: a sheep grazing lowers a tuft and later raises wool; a villager working the market converts wool to coins. When a district leaves the screen, its actors and their edges are summarised into the Ledger and thrown away. When it returns, they are re-spawned with plausible positions and states. The player never sees the seam because the transition happens behind a district change.
+
+### Layer 3: the event engine (events)
+There is no Director as a thing in the code (the word is retired); the engine directs, and events happen in the world. It looks at the world every sim-minute and draws from three sources.
+
+Cards are data, one row each, so adding an event is adding a row. A card (v2, the schema the fifteen farm cards migrate to now, not at fifty) has: `conditions` that read world state, not only the clock and the weather (season, weather, time band, any Ledger stock, any actor predicate such as "a lamb is far from its mother", "DL is far from the flock", "the flock is scattered"); a `weight` that is a live multiplier, a base times factors from those same predicates, so a lost lamb is not "needs a lamb, weight 3" but "needs a lamb, and far likelier when the flock is scattered, DL is far from the lamb, and it is near dusk"; `limits` (never more than N of this card at once, a minimum gap between draws, a cooldown); a duration; hooks (named effects the sim implements); a story line with a notability hint; and a moment kind the watch test counts. The engine draws under a pacing target, never runs more than N cards concurrently, keeps a minimum gap between draws, and relaxes its thresholds when nothing has been drawn for a long while so the world never goes dead.
+
+Authored events are the punctuation: a seasonal festival, a storm, a wolf sighting, DL's birthday. Each has a trigger (parameters, a time, a threshold reached in a stock, a number of inhabitants or coins) and authored variables that a card does not get. When an authored event and a card share parameters, the authored event wins, so a small random card never steps on something with a more interesting result. The owner can trigger and reset world-impacting events from the interface, and can set the pieces for a larger event without dictating its outcome.
+
+Category actions run here too, as scheduled type-wide behaviours (the market walk at dawn, shearing when the fleeces are ready), because they are world rhythm rather than one inhabitant's choice.
+
+### The chronicle and the storybook
+The chronicle is the whole world's log. Every entry is a recorded fact: a sentence in the past tense, a picture key, the inhabitants involved, the district, the sim time, and a notability score. Any system writes to it through one interface, `tell`: cards and authored events, the Ledger diff, the social graph ("Moss and Pip bonded over the winter"), the economy ("the quarry village went short on grain", "a ship of the line was launched at the harbour"). Nothing is ever dropped; the chronicle is the history of a world that ran, not a list of events that were dealt.
+
+The storybook is what you read when you come back. It is a selection over the chronicle for the time away, never new prose: the storybook only tells, and a line without a chronicle entry behind it is a bug. Selection is by notability, not size or recency. A number is notable by deviation from that world's own normal (fourteen wool in a week is a fact; fourteen when you usually get forty is a story) and by firsts (the first lamb of a new ewe, the first snow of the season, the first tall ship). A night is a list of moments; a week is a shape, what changed over it, which is exactly the kind of line the graph and the economy produce and a card cannot. Every page is stored and can be reopened. In Phase 1 nothing dies while you are away; DL's protection is not phase-scoped.
+
+### Places and moving between them
+Each district is a scene the size of the farm, but the region is a system, not a set of scenes: which districts exist, how the camera moves between them, what travels between them and how long it takes, what the player can see of a district they are not standing in, and how a gauge such as the harbour reads from the map. That system is designed before any Village Green content is built, so the village is not built against the assumption that there are two places. The harbour is both a gauge of the settlement economy and a set piece, and it is not the only gauge; it reads "poor" honestly until the economy earns better. The foundation is the interconnectedness, the spontaneity, the charm and the small habits, not any one place as the centre.
 
 ### Time
 Sim time is decoupled from wall time. One sim-day is about three real minutes when watching (the prototype's 180-second clock period), and about one real day when away, with seasons of nine real days as today. The sim advances in fixed 100-millisecond steps with a seeded random generator, so the same seed and inputs give the same world. That determinism is what makes it testable and what makes a future server trivial: the server runs the same package.
@@ -74,7 +96,9 @@ Every power is an intent object (`{type: "bless", target: id, at: tick}`) applie
 | Districts | 2 | 4 to 6 |
 | Actors on screen | 20 to 40 | 60 with pooling |
 | Inhabitants in the Ledger | 100s | 1,000s |
-| Event deck | 25 events | 80 plus |
+| Cards (v2 schema) | 15 | 50 plus |
+| Authored events | 3 | 12 plus |
+| Chronicle entries | unbounded, kept forever | the same |
 | Behaviours | 30 | 80 plus |
 | Frame rate on a mid phone | 60 | 60 |
 
@@ -91,11 +115,12 @@ Sheepcliff is a cliff-top settlement. The farm sits in the lee of the cliff; a l
 | Cliff Harbour | 3 | fisher, gulls, a seal, a lighthouse keeper | jetty, boats, lighthouse, crab pots | boats out at dawn, storm watch, seal on the rocks |
 | Wildwood | 3 | deer, foxes, owls, bees, a hermit | hives, a shrine, a fallen log | fox raid on chickens, DL versus the crows, autumn leaf fall |
 
-Growth links districts: wool from the farm feeds the weaver; bread from the bakery raises farm mood; fish feeds the village in winter; honey unlocks the festival. A player who only ever watches sees the links as caravans and carts moving on the map.
+Growth links districts: wool from the farm feeds the weaver; bread from the bakery raises farm mood; fish feeds the village in winter; honey unlocks the festival. A player who only ever watches sees the links as caravans and carts moving on the map. The farm itself is a space between spaces: it grows little, its builds are the owner's, and the world's growth happens in the settlements.
 
 ### Inhabitant design rules
 - Every inhabitant has one habit you can predict (the baker hums at dawn, the goat climbs the trough) and one secret you discover (the old shepherd was DL's first owner).
 - Nobody dies by default. Neglect makes things grumpy, mossy, and quiet, never tragic. A hardcore toggle can come later.
+- Digital Luna cannot be harmed. Not by weather, events, other inhabitants, or a power. Ever.
 - Ten inhabitants with habits beat fifty with none. The cast grows by phase, not by sprint.
 
 ### Deity powers (v1, in build order)
@@ -127,7 +152,7 @@ Owner's direction (2026-09-02): weather first, and the ability to trigger indivi
 ```
 sheep-city/
   apps/web/            Vite PWA. Renderer, input, tray, deity UX, pin overlay.
-  packages/sim/        Pure TypeScript. Clock, RNG, Ledger, Actors, Director, save/migrations.
+  packages/sim/        Pure TypeScript. Clock, RNG, Ledger, Actors, event engine, chronicle, social graph, save/migrations.
   packages/render/     Canvas 2D sprite drawing, layers, camera. Ports build/farm.js.
   packages/content/    JSON: creatures, people, buildings, districts, events, balance, names.
   tools/art/           The Python pipeline, moved verbatim from prototype/luna-farm/src.
@@ -154,9 +179,9 @@ sheep-city/
 
 ## 6. Phases
 
-Weeks assume the Standard tier (about four lanes active). Each phase has exit criteria you can check at the live URL.
+Each phase has exit criteria you can check at the live URL. There are no calendar estimates: the owner's pins set the pace, and the budget page tracks cost.
 
-### Phase 0 — Foundation (weeks 1 to 2)
+### Phase 0 — Foundation
 Goal: the farm plays identically at a URL on your phone, from a codebase agents can work in.
 - Repo scaffold, CI, deploy to the dev URL on merge (infra).
 - Port the sim to `packages/sim` with the behaviour registry, fixed timestep, seeded RNG; parity tests against the prototype's `RULES` and observed behaviour (sim).
@@ -167,31 +192,37 @@ Goal: the farm plays identically at a URL on your phone, from a codebase agents 
 
 Exit: v31 parity at the live URL, saves survive reload, CI green, watch test passes, you have pinned it once. Owner's rule (2026-09-02): nothing new merges to the live build before this pin, but Phase 1 content work runs in parallel and queues behind it.
 
-### Phase 1 — Alive (weeks 3 to 4)
-Goal: the farm surprises you.
-- Ledger for the farm district; offline catch-up; "while you were gone" storybook (sim, client).
-- Director with a pacing curve and a 15-event farm deck: fog morning, crows, lost lamb, merchant caravan, shearing day, DL's birthday (sim, world).
-- First deity powers: weather, then direct actions on individual inhabitants (client, sim).
-- Flock social behaviours from the backlog: grooming, headbutts, lamb zoomies (sim, art for two new frames each).
-- Crows as the first new creature, DL chases them off (art, world, sim).
+### Phase 1 — Alive
+Goal: the farm surprises you, and the world starts writing its own history.
+- Cards v2 schema and the fifteen farm cards migrated to it (world).
+- The chronicle with the open `tell` interface; the Ledger diff and every card start and end write to it (sim).
+- The event engine: cards v2 runtime, concurrency and gap limits, quiet relaxation, authored events with priority, category actions for sheep and the farmer, the four reference events (sim).
+- The DL invariant test: nothing can harm her, fuzzed and kept in the suite (sim).
+- Social graph v1: traits, edges, and the first three edge-forming behaviours (grooming, headbutts, lamb zoomies), with their frames (sim, then art for the owner's pin).
+- Deity powers: weather first, then direct actions on one inhabitant (sim, then client for the owner's pin).
+- The storybook: whole world, selected by notability, every page kept and reopenable (client, owner's pin).
+- Crows moved by the engine; DL chases them off (sim; the frames are already pinned).
+- Region map navigation designed as a document before any village content (client and sim, owner's pin on the design).
+- Disposition of flowerbed, hay2, scarecrow: change a number, draw a pixel, or go (sim).
 
-Exit: five unattended minutes show three moments; a day away produces a storybook; three powers react within one second; crows pinned and approved.
+Exit: five unattended sim-minutes at seed 9 show three distinct moment kinds; a scripted week away yields a storybook page whose every line traces to a chronicle entry, at least one written by the social graph; three powers react within ten ticks; the map design is pinned.
 
-### Phase 2 — Village (weeks 5 to 8)
+### Phase 2 — Village
 Goal: Sheepcliff is a place, not a field.
-- World map and district switching; Ledger summarise and re-spawn (sim, client).
-- Village Green: background, five villagers, cats and chickens, cottages, well, market (art, world).
-- Economy loop across districts: wool to weaver, bread to farm, coins to buildings; unlock tree with six visible builds (economy).
+- The region map built to the pinned design, before any Village Green content (client, sim).
+- Village Green as a settlement: its own Ledger, its growth table, five villagers with traits and edges on the graph, cats and chickens, cottages, well, market (world, art, sim).
+- The harbour as an economy gauge, reading "poor" first and honestly (economy, world).
+- The farmer rework, shear readability, and DL's animation set (sim, art, client; owner's pins on frames).
 - Bless, drop, summon (client, sim).
-- Households, jobs, and a daily schedule per villager (sim, world).
+- Category actions for villagers; households, jobs, and a daily schedule per villager (sim, world).
 - Sound sketch: four ambient loops, off by default (client).
 
-Exit: two districts linked by visible carts; a build appears from surplus without your help; every villager has a habit you can predict.
+Exit: two districts on the map with visible travel between them; a settlement build appears from surplus with nobody shopping; every villager has a habit you can predict and at least one edge on the graph; the harbour gauge moves when the economy moves.
 
-### Phase 3 — Civilization (weeks 9 to 14)
+### Phase 3 — Civilization
 Goal: growth you can come back to.
 - Cliff Harbour and Wildwood (art, world).
-- Full event deck to 50 with seasonal and cross-district events; festival; wolf incident (world, sim).
+- Cards to 50 on the v2 schema with seasonal and cross-district events; the festival and the wolf as authored events (world, sim).
 - Optional server: always-on world worker, intent queue, state deltas (infra, sim).
 - Actor pooling and culling for 60 on screen (sim, client).
 - Curse, nudge time, and a settings sheet (client).
@@ -208,13 +239,13 @@ Polish passes driven by pins, performance, sharing a read-only view of your worl
 
 | Lane | Phase 0 | Phase 1 | Phase 2 | Phase 3 |
 |---|---|---|---|---|
-| sim | port, registry, RNG, save v1 | Ledger, Director, catch-up, social behaviours | district summarise/respawn, households, schedules | pooling, server worker, wolf logic |
-| world | schemas, farm content extracted | farm event deck, crow brief | village content, unlock tree data | harbour and wildwood content, deck to 50 |
-| art | pipeline move, style guide | crow, social frames, bless sparkles | village background, five villagers, cats, chickens | two backgrounds, harbour and wood cast |
-| economy | balance file for farm | ledger numbers, soak test | cross-district loop, unlock thresholds | seasonal tuning |
-| client | renderer port, portrait frame, pin overlay | storybook, three powers | map, two powers, sound sketch | curse, time, settings, onboarding |
+| sim | port, registry, RNG, save v1 | chronicle, event engine, DL invariant, social graph v1, deity intents | settlement Ledger, map system, category actions for villagers, households, schedules | pooling, server worker, wolf logic |
+| world | schemas, farm content extracted | cards v2 schema, fifteen cards migrated, first authored events | village content, growth table data, harbour gauge data | harbour and wildwood content, cards to 50 |
+| art | pipeline move, style guide | crow (done), social frames, art direction document | village background, five villagers, cats, chickens, farmer rework, DL animation set | two backgrounds, harbour and wood cast |
+| economy | balance file for farm | ledger soak, disposition of farm builds | settlement growth thresholds, harbour gauge | seasonal tuning |
+| client | renderer port, portrait frame, pin overlay | storybook, powers in the tray, map design document | map built, shear readability, two powers, sound sketch | curse, time, settings, onboarding |
 | infra | scaffold, CI, deploy, migrations | palette and ownership checks | preview builds | server deploy |
-| qa | watch test, goldens | event coverage | district switch tests | phone performance suite |
+| qa | watch test, goldens | event coverage against the chronicle | district switch tests | phone performance suite |
 
 Suggested lane activation under Standard: Phase 0 runs infra, sim, client, and art on the port. In parallel, and from day one, world and art may start Phase 1 content that does not touch the port: the farm event deck as data, the crow brief and crow frames, the style guide. That work waits in reviewed pull requests and merges only after the port is pinned. Phase 1 adds qa; Phase 2 adds economy.
 
@@ -272,4 +303,6 @@ Answer in one comment whenever convenient; the defaults are the assumptions in s
 4. Whether you want the two missing Sheepcliff artifacts folded in (attach them like the zip).
 5. Deity powers: weather first, then direct per-inhabitant actions. No pick-up-and-move. Confirmed 2026-09-02.
 6. Daily status note: an artifact page, updated daily, chosen 2026-09-02. A pinned GitHub issue keeps the record.
-7. Phase 0 started 2026-09-02 on the owner's go. Tickets #2 to #11; first three workers spawned.
+7. Phase 0 started 2026-09-02 on the owner's go. Tickets #2 to #11; first three workers spawned. Passed the same day: the owner merged the real sim (PR #34) and flipped the live tile (PR #50).
+8. Event layer and world model, 2026-09-02 23:15 UTC: an engine, not a Director; cards v2 now at fifteen cards; a chronicle any system writes to; a whole-world storybook that keeps every page and only tells; settlements grow and the farm does not; DL unharmable as an invariant. Recorded in section 2; the Phase 1 and 2 lists follow it.
+9. The owner's operating rules (check-in cadence, model choice while a usage window is spent) live in `docs/agents/ROSTER.md`, not here.

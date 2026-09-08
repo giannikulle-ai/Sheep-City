@@ -77,8 +77,8 @@
     "flock":    { "initial": { "value": 5, "comment": "Sheep on the field at reset (indices 0..4 of farm/names.json)." } },
     "hay2": {
       "tuftRegrowBonusFrac": {
-        "value": 0.15,
-        "comment": "New for #63 (the flowerbed/hay2/scarecrow disposition, docs/content/FARM_BUILDS.md): the prototype's hay2 upgrade drew and changed nothing (an empty draw stub, sim_template.html line 576). Its disposition is 'change a number': while owned, tuftRegrowPerSec is eased up by this fraction, a second bale taking a little pressure off the grazed tufts. Small and farm-only, not part of the world's growth table (plan section 2) — 15% on a rate that is already well under the bite rate, so a grazing sheep still wins locally; the whole field recovers a little faster in the background."
+        "value": 2.5,
+        "comment": "New for #63 (the flowerbed/hay2/scarecrow disposition, docs/content/FARM_BUILDS.md): the prototype's hay2 upgrade drew and changed nothing (an empty draw stub, sim_template.html line 576). Its disposition is 'change a number': while owned, tuftRegrowPerSec is eased up by this fraction (a multiplier of 1 + this value), a second bale feeding the field. Raised from 0.15 to 2.5 in the fix round after 2026-09-08's owner decision ('make hay2 visible instead' — a build that changes no number a player can see does not get to keep the number): 0.15 moved the field average about half a percent, which nobody would ever notice; 2.5 moves it more than ten percentage points greener over a sim-day on the 40-sheep world the tests use, while staying under tuftBitePerSec (0.018 * 3.5 = 0.063 < 0.07) so a grazing sheep still wins locally on the tuft it is standing on — only the field's recovery in the background speeds up. Small and farm-only, not part of the world's growth table (plan section 2)."
       }
     }
   }

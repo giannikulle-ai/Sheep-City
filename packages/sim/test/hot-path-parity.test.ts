@@ -27,8 +27,14 @@
 // They moved a fifth time in #63: hay2's disposition eases `tuftRegrowPerSec` up by a fraction
 // once owned (rules.ts's `hay2RegrowMult`), and the 40-sheep worlds bank enough coins inside 6,000
 // ticks to buy it (flowerbed at 12, hay2 at 30 more), so grass — and everything downstream of it —
-// runs differently for them from the moment it is bought. The two 5-sheep worlds never reach 42
+// runs differently for them from the moment it is bought. The three 5-sheep worlds never reach 42
 // coins in this window and are untouched; only the three 40-sheep hashes below moved.
+//
+// They moved a sixth time in #63's fix round (2026-09-08): the owner's disposition on the
+// Verifier's finding that the first cut's bonus (15%) was real but invisible was "make hay2
+// visible instead" — `hay2.tuftRegrowBonusFrac` was raised from 0.15 to 2.5 (see rules.ts and
+// docs/content/FARM_BUILDS.md). Same reasoning as the fifth move applies: only the three 40-sheep
+// worlds buy hay2 inside this window, so only their three hashes move again.
 //
 // If a hash here moves, some sheep, DL, or NPC took a different path or drew a different die.
 // That is a parity break, not a number to update: find the behaviour change first, and if it is a
@@ -44,11 +50,11 @@ const TICKS = 6000;
 
 const BEFORE: readonly { seed: number; sheep: number; hash: string }[] = [
   { seed: 6, sheep: 5, hash: '0791cd39c7e2aab8' },
-  { seed: 6, sheep: 40, hash: '4d4282b7e4bc683c' }, // moved in #63: hay2 bought, grass regrow eased up
+  { seed: 6, sheep: 40, hash: '83fd2e156dd71989' }, // moved in #63's fix round: hay2's bonus raised 0.15 -> 2.5
   { seed: 7, sheep: 5, hash: '0ed2243395f4d7e2' },
-  { seed: 7, sheep: 40, hash: '4e8d44807f5111f9' }, // moved in #63: hay2 bought, grass regrow eased up
+  { seed: 7, sheep: 40, hash: '82af18d6ff6d2a44' }, // moved in #63's fix round: hay2's bonus raised 0.15 -> 2.5
   { seed: 11, sheep: 5, hash: '0e4a4606aab31838' },
-  { seed: 11, sheep: 40, hash: 'eb6b8440b3803fd8' }, // moved in #63: hay2 bought, grass regrow eased up
+  { seed: 11, sheep: 40, hash: '886236e915efdd38' }, // moved in #63's fix round: hay2's bonus raised 0.15 -> 2.5
 ];
 
 describe('hot path parity (#27)', () => {

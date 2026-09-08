@@ -32,14 +32,16 @@ describe('the pre-engine view (#40 is a new path when the engine is off)', () =>
   // test/sheep-day.test.ts.
   // Moved again in #63 for the three 40-sheep worlds only: hay2's disposition eases grass regrow
   // once bought, and those worlds bank enough coins in 6,000 ticks to buy it. See
-  // test/hot-path-parity.test.ts's header for the detail; the two 5-sheep worlds never reach it.
+  // test/hot-path-parity.test.ts's header for the detail; the three 5-sheep worlds never reach it.
+  // Moved a third time in #63's fix round (2026-09-08): hay2's bonus raised 0.15 -> 2.5 (same
+  // header, same worlds — see test/hot-path-parity.test.ts's sixth-move note).
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
     { seed: 6, sheep: 5, hash: 'ec16cd89f0d97235' },
-    { seed: 6, sheep: 40, hash: '766ca39d4dd8f66b' },
+    { seed: 6, sheep: 40, hash: 'cfb7dc2faab8a485' },
     { seed: 7, sheep: 5, hash: '092b1cb807636e88' },
-    { seed: 7, sheep: 40, hash: '66bef1fdef89b24b' },
+    { seed: 7, sheep: 40, hash: 'c4b00db5d3086f26' },
     { seed: 11, sheep: 5, hash: 'a70633600f30f95c' },
-    { seed: 11, sheep: 40, hash: '9b68cb64b6d37d43' },
+    { seed: 11, sheep: 40, hash: '644bd9e3da6372f4' },
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #40 on the v6 view`, () => {

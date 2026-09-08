@@ -53,6 +53,12 @@ export const RULES = {
    * drew and changed nothing. New for #63, not in the prototype, so it lives in outsideRules
    * rather than rules (test/rules-parity.test.ts asserts `rules` against the prototype literal
    * exactly). See `hay2RegrowMult` below for where it applies.
+   *
+   * Fix round (2026-09-08, the owner's decision "make hay2 visible instead" on a Verifier finding
+   * that the first cut's 15% bonus moved the field average about half a percent — invisible):
+   * raised to a multiplier of 1 + 2.5 = 3.5x tuftRegrowPerSec while owned. Still under
+   * tuftBitePerSec (0.018 * 3.5 = 0.063 < 0.07), so a grazing sheep still strips the tuft it is
+   * standing on faster than it grows back — only the field's background recovery speeds up.
    */
   hay2: { tuftRegrowBonusFrac: o.hay2.tuftRegrowBonusFrac.value },
 
@@ -134,6 +140,12 @@ export type Rules = typeof RULES;
  * hay2's Ledger effect (issue #63): while owned, tuft regrow is eased up by `hay2.tuftRegrowBonusFrac`.
  * One function so `tick.ts` (actor resolution) and `ledger/advance.ts` (offline catch-up) apply the
  * same number the same way; test/ledger.test.ts pins both against each other.
+ *
+ * Always >= 1, so this only ever adds to the regrow rate, never subtracts from it: in the Ledger,
+ * where the bite term never reads the current grass level (it is a function of the flock size,
+ * the span, and the weather only, not of `L.grass`), that one fact is enough to prove a tuft owning
+ * hay2 never ends a step below where the same tuft, unowned, would have — test/ledger.test.ts's
+ * "never regrows the field less than an unowned one" case walks that proof with real numbers.
  */
 export function hay2RegrowMult(owned: readonly string[]): number {
   return owned.includes('hay2') ? 1 + RULES.hay2.tuftRegrowBonusFrac : 1;

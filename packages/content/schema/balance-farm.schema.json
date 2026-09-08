@@ -173,8 +173,8 @@
         },
         "hay2": {
           "type": "object",
-          "description": "New for #63: hay2's disposition (docs/content/FARM_BUILDS.md). Not in the prototype, so it lives here rather than in `rules` (rules is asserted exactly against the prototype literal).",
-          "properties": { "tuftRegrowBonusFrac": { "$ref": "#/$defs/unit" } },
+          "description": "New for #63: hay2's disposition (docs/content/FARM_BUILDS.md). Not in the prototype, so it lives here rather than in `rules` (rules is asserted exactly against the prototype literal). `tuftRegrowBonusFrac` is a multiplier's fraction (1 + this value), not itself a 0..1 share, so it uses `num`, not `unit` — the fix round (2026-09-08) raised it past 1 to make the effect visible.",
+          "properties": { "tuftRegrowBonusFrac": { "$ref": "#/$defs/num" } },
           "required": ["tuftRegrowBonusFrac"], "additionalProperties": false
         }
       },

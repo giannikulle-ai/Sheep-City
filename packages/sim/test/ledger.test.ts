@@ -20,7 +20,7 @@ import { RULES, TICK_MS } from '../src/rules';
 import { fromSave, toSave } from '../src/save/serialize';
 import { createInitialState, type SimState } from '../src/state';
 import { step } from '../src/step';
-import { advance } from '../src/tick';
+import { advance, tickInPlace } from '../src/tick';
 import { buildFixtureState } from './save-fixture.test';
 
 const DAY = RULES.clock.periodSec * 1000;
@@ -53,14 +53,16 @@ describe('the actor tick is untouched (#39 is a new path)', () => {
   // world, not a differently-shaped one. test/engine-parity.test.ts is where that is pinned.)
   // Moved again in #63 for the three 40-sheep worlds only: hay2's disposition eases grass regrow
   // once bought, and those worlds bank enough coins in 6,000 ticks to buy it. See
-  // test/hot-path-parity.test.ts's header for the detail; the two 5-sheep worlds never reach it.
+  // test/hot-path-parity.test.ts's header for the detail; the three 5-sheep worlds never reach it.
+  // Moved a third time in #63's fix round (2026-09-08): hay2's bonus raised 0.15 -> 2.5 (same
+  // header, same worlds — see test/hot-path-parity.test.ts's sixth-move note).
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
     { seed: 6, sheep: 5, hash: 'e85cbb53bef79387' },
-    { seed: 6, sheep: 40, hash: '24b66cca5ee22c60' },
+    { seed: 6, sheep: 40, hash: 'f2b31c32e9776c40' }, // moved again in the fix round: hay2's bonus raised 0.15 -> 2.5
     { seed: 7, sheep: 5, hash: 'bf1769cf3184be53' },
-    { seed: 7, sheep: 40, hash: 'e9c4f334e6f9edf0' },
+    { seed: 7, sheep: 40, hash: 'bb4f245c43e9331e' }, // moved again in the fix round: hay2's bonus raised 0.15 -> 2.5
     { seed: 11, sheep: 5, hash: 'a5735abd6b19878b' },
-    { seed: 11, sheep: 40, hash: '256f5c47c7888f0c' },
+    { seed: 11, sheep: 40, hash: '696cd00a165090ab' }, // moved again in the fix round: hay2's bonus raised 0.15 -> 2.5
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #39 on the v4 view`, () => {
@@ -369,6 +371,70 @@ describe('advanceLedger: the rules', () => {
       expect(plain.tufts[i]!.level).toBeCloseTo(ledgerPlain.grass[i] as number, 12);
       expect(withHay2.tufts[i]!.level).toBeCloseTo(ledgerHay2.grass[i] as number, 12);
       expect(withHay2.tufts[i]!.level).toBeGreaterThan(plain.tufts[i]!.level);
+    }
+  });
+
+  it("hay2's regrow bonus agrees between the actor tick and the Ledger to 1e-10, out to 60,000 ticks: the span the parity claim is actually about (a farm caught up from a week away, not one tick of it)", () => {
+    // Same isolation as the test above (zero sheep, tufts start bare), but walked out to the spans
+    // the Verifier's own round-1 probe used, so the pin here is the same claim the PR body makes,
+    // not just its first 100ms.
+    const fresh = () => {
+      const s = createInitialState(7, { sheep: 0, events: false });
+      s.tufts = s.tufts.map((t) => ({ ...t, level: 0 }));
+      return s;
+    };
+    for (const ticks of [1, 10, 100, 400, 6000, 60000]) {
+      const plain = advance(fresh(), ticks);
+      const withHay2 = advance({ ...fresh(), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, ticks);
+      const ledgerPlain = advanceLedger(summarise(fresh()), ticks * TICK_MS, createRng(1));
+      const ledgerHay2 = advanceLedger({ ...summarise(fresh()), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, ticks * TICK_MS, createRng(1));
+      for (let i = 0; i < plain.tufts.length; i++) {
+        expect(Math.abs((plain.tufts[i]!.level as number) - (ledgerPlain.grass[i] as number))).toBeLessThan(1e-10);
+        expect(Math.abs((withHay2.tufts[i]!.level as number) - (ledgerHay2.grass[i] as number))).toBeLessThan(1e-10);
+      }
+      // And the closed form both sides should sit on: min(1, ticks * TICK_SEC * rate).
+      const closedPlain = Math.min(1, ticks * (TICK_MS / 1000) * RULES.tuftRegrowPerSec);
+      const closedHay2 = Math.min(1, ticks * (TICK_MS / 1000) * RULES.tuftRegrowPerSec * (1 + RULES.hay2.tuftRegrowBonusFrac));
+      expect(Math.abs((plain.tufts[0]!.level as number) - closedPlain)).toBeLessThan(1e-9);
+      expect(Math.abs((withHay2.tufts[0]!.level as number) - closedHay2)).toBeLessThan(1e-9);
+    }
+  });
+
+  it('hay2 never regrows the field to less than an unowned field would hold: the Ledger never reads grass to decide a bite, so the same rng seed drives the same event schedule and the same bites on both sides, and hay2RegrowMult >= 1 is the only difference — the owned trajectory can only sit at or above the unowned one, tuft for tuft, for as long as they run', () => {
+    for (const seed of [6, 7, 11]) {
+      for (const sheep of [RULES.flock.initial, 40]) {
+        const base = summarise(createInitialState(seed, { sheep, events: false }));
+        // A long catch-up, well past a week (LEDGER_STEP_MS chunks), and re-checked at several
+        // points along the way, not just at the end.
+        for (const days of [1, 3, 7, 30]) {
+          const spanMs = days * DAY;
+          const off = advanceLedger({ ...base, banks: { ...base.banks, owned: [] } }, spanMs, createRng(seed * 1000 + days));
+          const on = advanceLedger({ ...base, banks: { ...base.banks, owned: ['hay2'] } }, spanMs, createRng(seed * 1000 + days));
+          for (let i = 0; i < off.grass.length; i++) {
+            expect(on.grass[i] as number).toBeGreaterThanOrEqual((off.grass[i] as number) - 1e-9);
+          }
+        }
+      }
+    }
+  });
+
+  it("hay2 is visible: the field's average tuft fullness over one sim-day is at least 10 percentage points greener with it owned, on the 40-sheep scripted world the hot-path tests use (seeds 6, 7, 11 — the same worlds test/hot-path-parity.test.ts pins)", () => {
+    /** Mean tuft level over `ticks` actor ticks (a sim-day is `RULES.clock.periodSec` sim-seconds = 1,800 ticks of 100ms), averaged both across the field and across the day. */
+    const averageFullnessOverDay = (seed: number, sheep: number, owned: string[]): number => {
+      const s = createInitialState(seed, { sheep, events: false });
+      s.banks.owned = owned;
+      const dayTicks = DAY / TICK_MS;
+      let sum = 0;
+      for (let i = 0; i < dayTicks; i++) {
+        tickInPlace(s);
+        sum += s.tufts.reduce((a, t) => a + t.level, 0) / s.tufts.length;
+      }
+      return sum / dayTicks;
+    };
+    for (const seed of [6, 7, 11]) {
+      const off = averageFullnessOverDay(seed, 40, []);
+      const on = averageFullnessOverDay(seed, 40, ['hay2']);
+      expect(on - off).toBeGreaterThanOrEqual(0.1);
     }
   });
 

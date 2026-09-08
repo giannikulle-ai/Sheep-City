@@ -24,7 +24,12 @@ function bench(seed = 1): SimState {
 
 describe('the pacing numbers are data', () => {
   it('every one of them is on PACING, with the sim-minute conversion the deck files declare', () => {
-    expect(PACING.evalEverySimMinutes).toBe(1);
+    // Round 1 verifier finding 2 (#82): every-sim-minute evaluation cost +66.8 ms on the charter's
+    // catch-up bench (897.3 ms trunk -> 964.1 ms engine-on, three runs each, same box), pushing it
+    // from three-of-three MET to one-of-three NOT MET against the 1,000 ms budget; every-two-minutes
+    // costs +23.7 ms (921.0 ms), back under budget, for 65 events/sim-hour against 68 at every
+    // minute. See the constant's own comment in `engine/pacing.ts`.
+    expect(PACING.evalEverySimMinutes).toBe(2);
     expect(PACING.concurrentCap).toBeGreaterThan(0);
     expect(PACING.minGapSimMinutes).toBeGreaterThan(0);
     expect(PACING.quietStretchSimMinutes).toBeGreaterThan(PACING.minGapSimMinutes);
@@ -37,10 +42,59 @@ describe('the pacing numbers are data', () => {
   });
 
   it('a draw chance is the eligible weight over the certainty weight, capped', () => {
+    // Each attempt now covers `evalEverySimMinutes` sim-minutes at once (finding 2), so the raw
+    // chance scales by that too — see `drawChance`'s own formula in `engine/pacing.ts`.
+    const perEval = PACING.evalEverySimMinutes;
     expect(drawChance(0, 1)).toBe(0);
-    expect(drawChance(10, 1)).toBeCloseTo(10 / PACING.weightForCertainDraw, 12);
-    expect(drawChance(10, PACING.quietWeightBoost)).toBeCloseTo(40 / PACING.weightForCertainDraw, 12);
+    expect(drawChance(10, 1)).toBeCloseTo((10 * perEval) / PACING.weightForCertainDraw, 12);
+    expect(drawChance(10, PACING.quietWeightBoost)).toBeCloseTo(
+      (10 * PACING.quietWeightBoost * perEval) / PACING.weightForCertainDraw,
+      12,
+    );
     expect(drawChance(1e9, 1)).toBe(PACING.maxDrawChance);
+  });
+});
+
+describe('the warm-up holds card draws back at the start of a fresh world (owner note, Round 1, #82)', () => {
+  it('no card draws inside warmupSimMinutes, however certain the draw would otherwise be', () => {
+    // A card that is always eligible, at a weight the cap on `maxDrawChance` still lets through
+    // comfortably every attempt: if the warm-up did not hold it back, this would draw almost at once.
+    const deck = stubDeck([{ id: 'a', base: 1e9 }]);
+    const s = bench(30);
+    for (let i = 0; i * PACING.evalEverySimMinutes < PACING.warmupSimMinutes; i++) {
+      atMs(s, minutes(i * PACING.evalEverySimMinutes));
+      evaluate(s, deck);
+    }
+    expect(s.clock.nowMs).toBeLessThan(minutes(PACING.warmupSimMinutes));
+    expect(s.events.running).toEqual([]);
+    expect(s.events.lastDrawMs).toBe(-1); // no attempt was even burned from the generator
+
+    // Past the warm-up, the same certain-draw card lands within a handful of attempts (the draw
+    // itself is still a capped-chance roll per attempt, `PACING.maxDrawChance`, not a guarantee on
+    // the very first one).
+    for (let i = 0; i < 50 && s.events.running.length === 0; i++) {
+      atMs(s, minutes(PACING.warmupSimMinutes + i * PACING.evalEverySimMinutes));
+      evaluate(s, deck);
+    }
+    expect(s.events.running.map((r) => r.id)).toEqual(['a']);
+  });
+
+  it('does not gate authored triggers or category actions, only the card draw', () => {
+    // An authored event with an always-true predicate trigger and no cooldown: nothing about it is
+    // held back by the card warm-up, because `attemptDraw` is the only place that checks it.
+    const deck = stubDeck([], [{ id: 'always', trigger: { kind: 'predicates', all: [], cooldownSimDays: 0 } }]);
+    const s = bench(31);
+    atMs(s, 0); // well inside warmupSimMinutes
+    evaluate(s, deck);
+    expect(s.events.running.map((r) => r.id)).toEqual(['always']);
+
+    // The farmer's dawn market walk (a scheduled category action, not a draw) also runs unaffected —
+    // `runScheduledCategoryActions` is called before the warm-up check even exists in `attemptDraw`.
+    const s2 = createInitialState(32);
+    s2.clock = { ...s2.clock, t: 0.95 }; // dawn (`RULES.clock.phases.dawn` is .92)
+    expect(msToSimMinutes(s2.clock.nowMs, s2.clock.periodSec)).toBeLessThan(PACING.warmupSimMinutes);
+    evaluate(s2, FARM_DECK);
+    expect(s2.npcs.farmer).not.toBeNull();
   });
 });
 
@@ -170,13 +224,14 @@ describe('the quiet relaxation fires after the configured stretch and only then'
   });
 
   it('a draw held back by the ordinary gap is let through once the stretch has passed, and not one minute earlier', () => {
-    // The last draw is 100 sim-minutes back — inside the ordinary 240-minute gap, outside the
-    // relaxed 60-minute one. So the only thing that can change the answer is the quiet stretch.
+    // The last draw is 300 sim-minutes back — inside the ordinary gap (`PACING.minGapSimMinutes`,
+    // 800 sim-minutes after Round 1's retune), outside the relaxed one (a quarter of that, 200). So
+    // the only thing that can change the answer is the quiet stretch.
     const deck = stubDeck([{ id: 'a', momentKind: 'bubble' }]);
     const s = bench(11);
     const quietFor = (simMinutes: number): boolean => {
       atMs(s, minutes(100_000));
-      s.events.lastDrawMs = s.clock.nowMs - minutes(100);
+      s.events.lastDrawMs = s.clock.nowMs - minutes(300);
       s.events.lastStartMs = s.clock.nowMs - minutes(simMinutes);
       return drawAllowed(s);
     };
@@ -190,7 +245,7 @@ describe('the quiet relaxation fires after the configured stretch and only then'
       let started = 0;
       for (let i = 0; i < 500; i++) {
         atMs(w, minutes(100_000 + i));
-        w.events.lastDrawMs = w.clock.nowMs - minutes(100);
+        w.events.lastDrawMs = w.clock.nowMs - minutes(300);
         w.events.lastStartMs = w.clock.nowMs - minutes(simMinutes);
         const before = w.events.running.length;
         evaluate(w, deck);

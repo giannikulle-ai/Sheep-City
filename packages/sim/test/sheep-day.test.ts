@@ -119,17 +119,23 @@ const EXPECTED = [
 /** Weather, visitors, DL's barn entry, and the bird on the same day, for the shape of the story. */
 const EVENTS = [
   // The merchant's arrival and the two dawn lines are the event engine's (#40), not the sheep's:
-  // his visit is the `merchantCaravan` card now instead of the prototype's 45-second timer (drawn
-  // at tick 15 on this seed, gone by 416), and the farmer walks past to the market at dawn (tick
-  // 1333 to 1470) as a category action. Every other line, and every sheep transition above, is
-  // exactly what this day was before the engine existed.
-  '15 merchant true',
+  // his visit is the `merchantCaravan` card now instead of the prototype's 45-second timer, and the
+  // farmer walks past to the market at dawn (tick 1333 to 1470) as a category action. The merchant's
+  // own tick moved twice since #40 first landed: 15/416 originally, 30/431 in Round 1's finding 2
+  // (`evalEverySimMinutes` 1 -> 2, shifting when a draw is attempted), 483/884 after Round 1's
+  // density retune (finding 2's follow-up, the owner's "about three per five real minutes": the
+  // global gap and weight both went up, so the whole deck — the merchant included — draws later and
+  // less often; see `PACING.minGapSimMinutes` and `PACING.weightForCertainDraw` in
+  // `engine/pacing.ts`, and "the shape of the day" test below for what that costs some seeds
+  // entirely). Every other line, and every sheep transition above, is exactly what this day was
+  // before the engine existed.
   '165 bird lands',
   '225 bird leaves',
   '361 farmer true',
-  '416 merchant false',
+  '483 merchant true',
   '596 bird lands',
   '666 bird leaves',
+  '884 merchant false',
   '1103 bird lands',
   '1170 bird leaves',
   '1226 farmer false',
@@ -140,8 +146,8 @@ const EVENTS = [
   '1781 luna in',
 ];
 
-function scriptedDay(seed: number): { transitions: string[]; events: string[]; state: SimState } {
-  let s = createInitialState(seed);
+function scriptedDay(seed: number, options: { events?: boolean } = {}): { transitions: string[]; events: string[]; state: SimState } {
+  let s = createInitialState(seed, options);
   const transitions: string[] = [];
   const events: string[] = [];
   const last: string[] = [];
@@ -214,11 +220,26 @@ describe('scripted sheep day', () => {
     const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('341bc0061cce3681');
+    expect(hashState(a.state)).toBe('14c453a177ba4c24');
+  });
+
+  // Round 1 verifier finding 4 (#82): the PR claims "the sheep's 91 transitions at seed 71 are
+  // unchanged with the engine directing". `scriptedDay` above already runs with the engine ON by
+  // default (`createInitialState`'s own default), so `EXPECTED` is already that engine-on list; this
+  // pins the claim itself as an equality, not just each side separately matching a hand-written
+  // list. The *events* list is not part of the claim — the merchant's draw and the dawn walk are the
+  // engine's own lines, and are expected to differ (see EVENTS's own comment above).
+  it('the engine directing changes nothing about the sheep: seed 71’s transitions are identical on and off', () => {
+    const off = scriptedDay(71, { events: false }).transitions;
+    const on = scriptedDay(71, { events: true }).transitions;
+    expect(on).toEqual(EXPECTED);
+    expect(off).toEqual(on);
   });
 
   it('the shape of the day holds for other seeds: needs by day, rest by night, in the barn in rain', () => {
-    for (const seed of [1, 2, 3, 4, 8, 10]) {
+    let seedsWithMerchant = 0;
+    const seeds = [1, 2, 3, 4, 8, 10];
+    for (const seed of seeds) {
       const { transitions, events, state } = scriptedDay(seed);
       const text = transitions.join('\n');
       expect(text, `seed ${seed}`).toMatch(/^\d+ \w+ (toTuft|toHay|toTrough)$/m);
@@ -233,11 +254,23 @@ describe('scripted sheep day', () => {
       if (events.some((e) => /rain true/.test(e))) expect(text, `seed ${seed}`).toMatch(/^\d+ \w+ toBarn/m);
       expect(events, `seed ${seed}`).toContain('361 farmer true');
       // The merchant's arrival is a card draw now (#40), not a stopwatch: it lands on a different
-      // tick on every seed, so the shape to hold is "he came at all", not "he came at 451".
-      expect(events.filter((e) => /merchant true/.test(e)), `seed ${seed}`).not.toEqual([]);
+      // tick on every seed (or, since Round 1's density retune on #82, not at all on some of them —
+      // see below), so the shape to hold is "he came at all", not "he came at 451".
+      if (events.some((e) => /merchant true/.test(e))) seedsWithMerchant++;
       // Prints only ever lie on snowy ground, and the flock walking in from a shower leaves mud.
       if (state.weather.kind !== 'snow') expect(state.ground.prints, `seed ${seed}`).toEqual([]);
     }
+    // Before Round 1's retune (#82 finding 2, owner note), a full sim-day (three real minutes) drew
+    // often enough that the merchant showed up on every one of these six seeds. The retune cut the
+    // draw rate roughly in half to hit the ticket's "about three per five real minutes"; measured
+    // over a wider sample (60 seeds) that leaves him showing up on about half of days, not all of
+    // them (seed 3 here is the miss). That is a real change in the farm's economy — no visit, no
+    // chance to sell wool that day — worth the owner's or the world lane's own look, not something
+    // this fix hides: this asserts what is actually true now (most days, not every day) rather than
+    // silently loosening back to "he came at all".
+    expect(seedsWithMerchant, `merchant seen on ${seedsWithMerchant}/${seeds.length} seeds`).toBeGreaterThanOrEqual(
+      Math.ceil(seeds.length / 2),
+    );
   });
 });
 

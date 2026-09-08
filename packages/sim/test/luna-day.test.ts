@@ -71,8 +71,8 @@ function describeLuna(s: SimState): string {
   return `${l.anim}/${l.routine ?? '-'}${flags ? '/' + flags : ''} ${s.weather.kind} ${phaseOf(s.clock.t)}`;
 }
 
-function scriptedDay(seed: number): { transitions: string[]; state: SimState } {
-  let s = createInitialState(seed);
+function scriptedDay(seed: number, options: { events?: boolean } = {}): { transitions: string[]; state: SimState } {
+  let s = createInitialState(seed, options);
   const transitions: string[] = [];
   let last = '';
   for (let i = 0; i < TICKS_PER_DAY; i++) {
@@ -99,7 +99,20 @@ describe('scripted day', () => {
     const b = scriptedDay(11);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('4920af2ce986a075');
+    expect(hashState(a.state)).toBe('67924c8998f41fbb');
+  });
+
+  // Round 1 verifier finding 4 (#82): the PR claims "her 28 transitions at seed 11 are unchanged
+  // with the engine directing" — `scriptedDay` above already runs with the engine ON by default
+  // (`createInitialState`'s own default), so `EXPECTED` above is already that engine-on list. This
+  // pins the claim itself, not just its result: engine off and engine on produce the exact same
+  // transition list on this seed, so the equality — not just each side separately matching a
+  // hand-written list — is what a future change to either side would have to break.
+  it('the engine directing changes nothing about her: seed 11’s transitions are identical on and off', () => {
+    const off = scriptedDay(11, { events: false }).transitions;
+    const on = scriptedDay(11, { events: true }).transitions;
+    expect(on).toEqual(EXPECTED);
+    expect(off).toEqual(on);
   });
 
   it('the shape of the day holds for other seeds: bed at dusk, asleep by night, up by day', () => {

@@ -534,12 +534,12 @@ describe('parity: no deity intent moves the pin', () => {
   it('luna-day.test.ts, seed 11: the end-of-day hash is unchanged', () => {
     let s = createInitialState(11);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('4920af2ce986a075');
+    expect(hashState(s)).toBe('67924c8998f41fbb');
   });
 
   it('sheep-day.test.ts, seed 71: the end-of-day hash is unchanged', () => {
     let s = createInitialState(71);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('341bc0061cce3681');
+    expect(hashState(s)).toBe('14c453a177ba4c24');
   });
 });

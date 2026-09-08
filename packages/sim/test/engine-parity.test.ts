@@ -35,13 +35,16 @@ describe('the pre-engine view (#40 is a new path when the engine is off)', () =>
   // test/hot-path-parity.test.ts's header for the detail; the three 5-sheep worlds never reach it.
   // Moved a third time in #63's fix round (2026-09-08): hay2's bonus raised 0.15 -> 2.5 (same
   // header, same worlds — see test/hot-path-parity.test.ts's sixth-move note).
+  // Moved a fourth time in #63's fix round 2 (2026-09-08, same day): hay2's bonus lowered
+  // 2.5 -> 1.9 to keep grazing visible (same worlds — see test/hot-path-parity.test.ts's
+  // seventh-move note).
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
     { seed: 6, sheep: 5, hash: 'ec16cd89f0d97235' },
-    { seed: 6, sheep: 40, hash: 'cfb7dc2faab8a485' },
+    { seed: 6, sheep: 40, hash: '146212a4ade8cea1' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
     { seed: 7, sheep: 5, hash: '092b1cb807636e88' },
-    { seed: 7, sheep: 40, hash: 'c4b00db5d3086f26' },
+    { seed: 7, sheep: 40, hash: 'cf5dc67f12ea0812' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
     { seed: 11, sheep: 5, hash: 'a70633600f30f95c' },
-    { seed: 11, sheep: 40, hash: '644bd9e3da6372f4' },
+    { seed: 11, sheep: 40, hash: '0a8c9f7ce39d4b7f' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #40 on the v6 view`, () => {

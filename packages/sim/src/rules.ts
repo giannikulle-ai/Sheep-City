@@ -59,6 +59,18 @@ export const RULES = {
    * raised to a multiplier of 1 + 2.5 = 3.5x tuftRegrowPerSec while owned. Still under
    * tuftBitePerSec (0.018 * 3.5 = 0.063 < 0.07), so a grazing sheep still strips the tuft it is
    * standing on faster than it grows back — only the field's background recovery speeds up.
+   *
+   * Fix round 2 (2026-09-08): 3.5x turned out to (mostly) erase the other thing "growth you can
+   * see" is about — a grazing sheep visibly winning the tuft it stands on. Measured over a sim-day
+   * on the 40-sheep world, real grazing bouts (`eating` start to end): unowned, 45-86% of bouts
+   * move the rendered grass frame (`packages/render/src/scene.ts`'s 4-frame quantisation) and
+   * 27-51% strip a tuft bare; at 3.5x that fell to 0-16% frame-moved and 0% ever stripped — the
+   * bare frame never drew. Lowered to a multiplier of 1 + 1.9 = 2.9x, the largest value at which
+   * at least half the unowned frame-moving rate survives (46-51% vs the 39-43% half-line) and
+   * tufts still strip sometimes (5-7%), while still clearing the +10pp field-average target with
+   * margin (+13.2 to +17.4pp on the 40-sheep world; +2.1 to +3.3pp on the default 5-sheep flock).
+   * Still comfortably under tuftBitePerSec (0.018 * 2.9 = 0.0522 < 0.07). See
+   * docs/content/FARM_BUILDS.md and test/ledger.test.ts's grazing-visibility test for the numbers.
    */
   hay2: { tuftRegrowBonusFrac: o.hay2.tuftRegrowBonusFrac.value },
 

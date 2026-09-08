@@ -2,7 +2,7 @@
 // suite forever and is never skipped, loosened, or moved (docs/agents/charters/sim.md). "Harm" is
 // defined once, as data, in dl-harm.ts; every check below shares that one predicate.
 //
-// Three parts:
+// Four parts:
 //   1. A fuzz: seeds 1 to 50, a scripted day each (1,800 ticks, the luna-day.test.ts convention),
 //      every intent type the sim accepts, weather cycling, and both NPCs the sim can place — and
 //      the harm predicate never holds on any tick.
@@ -11,15 +11,29 @@
 //      dynamically instead, as the issue allows: her object runs a real day under a write-tracking
 //      Proxy, once through the sheep phase alone (which, read in full, never names `luna`) and once
 //      per intent handler (where her player-facing command surface may write to her, but only
-//      within the same harm predicate the fuzz uses).
-//   3. This file exists and carries no skip or only modifier, so the suite above can never be
-//      narrowed or dropped without the change showing up here too.
+//      within the same harm predicate the fuzz uses). Two Proxies, not one: `state` itself is
+//      wrapped too, so replacing `state.luna` wholesale is caught, and a before/after deep
+//      snapshot of her fields catches a write through a nested field (`s.luna.target.x = …`) that
+//      neither Proxy's `set` trap can see (Round 2, review finding 1 — see the guard's own doc
+//      comment below for the reproduction that motivated this).
+//   3. Off-screen: `harmIn(respawn(ledger))` over a few ledgers, so the "on screen or off" half of
+//      the non-negotiable is covered too (Round 2, review finding 5) — the Ledger runs the world
+//      with no actors while a district is off-screen (docs/agents/charters/sim.md), and `respawn`
+//      is the only other place that writes her `anim` and position.
+//   4. This file exists and carries no skip or only modifier, so the suite above can never be
+//      narrowed or dropped without the change showing up here too. That claim used to be checked
+//      by this file alone — Round 2, review finding 3 moved the actual scan to a separate,
+//      suite-wide file (no-skips.test.ts) that this file cannot defeat by being skipped itself.
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { advanceClock, advanceSeason, SEASONS } from '../../src/clock';
 import { tickSheep } from '../../src/behaviours/sheep';
 import { applyIntent, FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type Intent } from '../../src/intents';
+import { advanceLedger } from '../../src/ledger/advance';
+import { summarise } from '../../src/ledger/ledger';
+import { respawn } from '../../src/ledger/respawn';
+import { createRng } from '../../src/rng';
 import { RULES, TICK_MS, TICK_SEC } from '../../src/rules';
 import { cloneState, createInitialState, type Luna, type SimState } from '../../src/state';
 import { step } from '../../src/step';
@@ -27,6 +41,7 @@ import { tickWeather } from '../../src/weather';
 import { harmIn } from './dl-harm';
 
 const TICKS_PER_DAY = 1800;
+const DAY_MS = RULES.clock.periodSec * 1000;
 
 /**
  * Cards and the event engine (#40) do not exist yet, and neither does a crow in the sim: the crow
@@ -95,6 +110,46 @@ function writeTrackingProxy<T extends object>(target: T, writes: string[]): T {
   });
 }
 
+/**
+ * Wrap `state` itself so replacing `state.luna` wholesale — not a set on her own object, a set on
+ * `state` — is recorded too, under the reserved key `'luna (replaced)'`.
+ *
+ * Round 2, review finding 1: without this, `writeTrackingProxy` alone is defeated by one line
+ * inside `tickSheep` — reproduced against the pre-fix guard and confirmed to slip through clean:
+ *
+ *   s.luna = { ...s.luna, riding: s.sheep[0]!.id, rideUntilMs: Infinity, anim: 'sleep',
+ *              manual: 'sleep', manualUntilMs: Infinity };
+ *
+ * That is a *set on `state`*, not a set on the tracked `luna` object, so the old guard's trap never
+ * fired — and once `state.luna` is replaced, the tracked proxy is gone from the state entirely, so
+ * every later write goes unrecorded too. This proxy closes that hole: the replacement itself is
+ * now a recorded write, on the object the write-guard tests actually assign into (`state`/`s`), so
+ * the assertion below catches it directly.
+ */
+function stateReplaceGuard(state: SimState, writes: string[]): SimState {
+  return new Proxy(state, {
+    set(t, prop, value) {
+      if (prop === 'luna') writes.push('luna (replaced)');
+      return Reflect.set(t, prop, value);
+    },
+  });
+}
+
+/**
+ * A plain-data deep clone of every field on Luna, for a before/after diff that catches what no
+ * `set` trap can see: a nested write (`s.luna.target.x = …`, `s.luna.stick.x = …`) is a *get* of
+ * `target`/`stick` — passed straight through by `writeTrackingProxy`, untouched — followed by a set
+ * on that inner object. That is not a set on Luna and not a set on `state`, so neither
+ * `writeTrackingProxy` nor `stateReplaceGuard` traps it; a before/after deep-equality check does,
+ * because whatever path the write took, her final fields no longer match the snapshot. Luna is
+ * plain JSON-safe data (points, strings, numbers, nulls); a JSON round-trip is a faithful, fully
+ * independent snapshot, and — unlike `structuredClone` — reads straight through a Proxy instead of
+ * throwing on one, which matters here since `l` may itself be `writeTrackingProxy`'s Proxy.
+ */
+function snapshotLuna(l: Luna): unknown {
+  return JSON.parse(JSON.stringify(l));
+}
+
 describe('the intent list below covers every intent type the sim accepts', () => {
   it('src/intents.ts and this file name the same set', () => {
     const types = new Set(scriptedIntents(createInitialState(1)).map((i) => i.type));
@@ -136,15 +191,21 @@ describe('static guard: nothing outside her own chain writes to Digital Luna', (
     // Confirmed by reading src/behaviours/sheep.ts: no sheep behaviour, in a condition or a tick,
     // names `luna` at all (the file's only match for the word is this fact, in a comment). This
     // proves the same thing dynamically, so a later change that breaks it fails a test and not just
-    // a reading of the source: replace her object with a Proxy that records every property set, run
-    // the real tick pipeline up to and including `tickSheep` — clock, season, weather, tuft growth,
-    // every sheep chain — for a full day on a few seeds, and show the record stays empty.
-    // `tickLuna`, `tickNpcs`, and the life tick are deliberately not called here: this isolates the
-    // one phase that must never touch her from the ones that legitimately do (see the next test).
+    // a reading of the source: replace her object with a Proxy that records every property set
+    // (and `state` with one that records a wholesale replacement of `state.luna`), run the real
+    // tick pipeline up to and including `tickSheep` — clock, season, weather, tuft growth, every
+    // sheep chain — for a full day on a few seeds, and show both the write record and a before/after
+    // deep snapshot of her fields stay empty/unchanged. `tickLuna`, `tickNpcs`, and the life tick
+    // are deliberately not called here: this isolates the one phase that must never touch her from
+    // the ones that legitimately do (see the next test).
     for (const seed of [3, 11, 23]) {
-      const s = createInitialState(seed);
+      const s0: SimState = createInitialState(seed);
+      const before = snapshotLuna(s0.luna);
       const writes: string[] = [];
-      s.luna = writeTrackingProxy(s.luna, writes);
+      // Wrap her object directly on s0 first (not through the state proxy below, or the setup
+      // assignment itself would be recorded as a "replacement").
+      s0.luna = writeTrackingProxy(s0.luna, writes);
+      const s = stateReplaceGuard(s0, writes);
       for (let i = 0; i < TICKS_PER_DAY; i++) {
         s.clock = advanceClock(s.clock, TICK_MS);
         s.season = advanceSeason(s.season, TICK_MS);
@@ -153,6 +214,7 @@ describe('static guard: nothing outside her own chain writes to Digital Luna', (
         tickSheep(s);
       }
       expect(writes, `seed ${seed}`).toEqual([]);
+      expect(snapshotLuna(s0.luna), `seed ${seed}: her fields changed with no write recorded`).toEqual(before);
     }
   });
 
@@ -163,16 +225,41 @@ describe('static guard: nothing outside her own chain writes to Digital Luna', (
     for (const seed of [1, 4, 9]) {
       const base = createInitialState(seed);
       for (const intent of scriptedIntents(base)) {
-        const s = cloneState(base);
+        const s0 = cloneState(base);
+        const before = snapshotLuna(s0.luna);
         const writes: string[] = [];
-        s.luna = writeTrackingProxy(s.luna, writes) as Luna;
+        s0.luna = writeTrackingProxy(s0.luna, writes) as Luna;
+        const s = stateReplaceGuard(s0, writes);
         applyIntent(s, intent);
+        const nestedWrite = JSON.stringify(snapshotLuna(s0.luna)) !== JSON.stringify(before);
         if (!mayTouchLuna(intent)) {
           expect(writes, `seed ${seed} ${JSON.stringify(intent)}`).toEqual([]);
-        } else if (writes.length) {
-          const reasons = harmIn(s);
+          expect(nestedWrite, `seed ${seed} ${JSON.stringify(intent)}: her fields changed with no write recorded`).toBe(false);
+        } else if (writes.length || nestedWrite) {
+          const reasons = harmIn(s0);
           expect(reasons, `seed ${seed} ${JSON.stringify(intent)}: ${reasons.join('; ')}`).toEqual([]);
         }
+      }
+    }
+  });
+});
+
+describe('off-screen: a respawned state never harms Digital Luna either (CLAUDE.md: "on screen or off")', () => {
+  it('harmIn(respawn(ledger)) is [] across several seeds and away-times, day and night, sun and rain', () => {
+    // respawn() (src/ledger/respawn.ts) is the only other place that writes her `anim` and
+    // position: the Ledger runs a district with no actors while it is off-screen
+    // (docs/agents/charters/sim.md), and respawn is how it hands a world back to the actor tick.
+    // It special-cases night (asleep in the barn) and reads the ledger's own weather for the
+    // flock, so seeds and away-times are chosen to reach both a day and a night ledger, and both
+    // sun and rain, without hand-picking exact numbers.
+    for (const seed of [2, 5, 13]) {
+      const rng = createRng(seed + 500);
+      let ledger = summarise(createInitialState(seed));
+      for (const awayMs of [0, Math.floor(DAY_MS * 0.3), Math.floor(DAY_MS * 0.7), 3 * DAY_MS, 9 * DAY_MS + 1234]) {
+        ledger = advanceLedger(ledger, awayMs, rng);
+        const respawned = respawn(ledger);
+        const reasons = harmIn(respawned);
+        expect(reasons, `seed ${seed} away ${awayMs}ms: ${reasons.join('; ')}`).toEqual([]);
       }
     }
   });
@@ -190,7 +277,10 @@ describe('this file is the DL invariant: it exists and is never skipped or narro
   it('carries no skip or only modifier', () => {
     // The two patterns are built from parts so this assertion, and this comment, do not themselves
     // contain the literal text they are checking for — the same trick no-random.test.ts uses so the
-    // guard cannot trip over its own source.
+    // guard cannot trip over its own source. This is also checked, on this file by name, from
+    // outside this file: no-skips.test.ts (Round 2, review finding 3) — a self-check inside the
+    // file it guards can only run if the file already ran, so it cannot catch every describe above
+    // being skipped at once. Kept here too as a fast, specific first check.
     const skip = new RegExp('\\.' + 'skip' + '\\b');
     const only = new RegExp('\\.' + 'only' + '\\b');
     const text = readFileSync(self, 'utf8');

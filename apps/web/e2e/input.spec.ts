@@ -171,7 +171,7 @@ test.describe('portrait phone', () => {
     expect(moments).not.toContain('dl-trick:fetch');
   });
 
-  test('tray verbs: one sheep, one task; the sky reaches the sim', async ({ page }) => {
+  test('tray verbs: one sheep, one task; the sky sends a deity weather intent', async ({ page }) => {
     await open(page);
     // Pin the world on the QA virtual clock (#55): only `qa.step` moves time from here, so every
     // assertion below reads the tick the test itself ran, never a race against the real clock.
@@ -210,7 +210,7 @@ test.describe('portrait phone', () => {
       { type: 'sheepAction', action: 'rest', target: 'sheep-2', sim: true },
       { type: 'dlAction', action: 'flop', sim: true },
       { type: 'farmAction', action: 'bird', sim: false },
-      { type: 'setWeather', weather: 'rain', sim: true },
+      { type: 'weather', kind: 'rain', holdSimMinutes: expect.any(Number), sim: true },
     ]);
     await tick();
     expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.view().weather)).toBe('rain');

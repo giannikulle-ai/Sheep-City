@@ -22,10 +22,18 @@ export interface SimScalars {
   weather: Weather;
   season: Season;
   temp: number;
+  /** the deity `weather` intent's `fog` flag (issue #44) */
+  foggy: boolean;
 }
 
 export function simScalars(sim: SimState): SimScalars {
-  return { t: sim.clock.t, weather: sim.weather.kind, season: currentSeason(sim.season), temp: sim.weather.temp };
+  return {
+    t: sim.clock.t,
+    weather: sim.weather.kind,
+    season: currentSeason(sim.season),
+    temp: sim.weather.temp,
+    foggy: sim.weather.foggy === true,
+  };
 }
 
 /** The render clock: sim time plus the part of the next tick already owed. Continuous across frames. */
@@ -134,6 +142,7 @@ export function simView(prev: SimState | null, sim: SimState, alpha: number, liv
     temp: s.temp,
     season: s.season,
     liveWeather,
+    foggy: s.foggy,
     sheep,
     luna,
     rabbit,

@@ -24,9 +24,10 @@ summary by kind, `report.json`, `final.png`, and a screenshot at the first
 occurrence of every distinct moment (`moment-NN-<kind>_<detail>.png`, capped at 16).
 
 What counts. A moment is `kind:detail`; the gate counts distinct keys among the
-five kinds from the charter: `bubble`, `npc-arrival`, `weather`, `dl-trick`,
-`lamb`. Other kinds (`phase`, `bird`, `rabbit`) are logged for context only:
-clock phases are guaranteed by the clock and small life is easy to miss.
+six kinds from the charter: `bubble`, `npc-arrival`, `weather`, `dl-trick`,
+`lamb`, `deity` (issue #44: a player-driven weather or act power). Other kinds
+(`phase`, `bird`, `rabbit`) are logged for context only: clock phases are
+guaranteed by the clock and small life is easy to miss.
 
 Liveness. The world canvas is hashed every five seconds; a hash that never
 changes fails the run even when moments were reported.
@@ -52,9 +53,9 @@ Dispatch on `window`, once per noticeable moment, as soon as it becomes visible:
 ```ts
 window.dispatchEvent(new CustomEvent('moment', {
   detail: {
-    kind: 'bubble' | 'npc-arrival' | 'weather' | 'dl-trick' | 'lamb' | 'phase' | 'bird' | 'rabbit',
-    actor?: string,   // who: 'Digital Luna', a sheep name, 'farmer', 'merchant', 'sky', 'flock'
-    detail?: string,  // what: bubble icon ('heart' | 'shears' | 'coin'), trick name, weather ('sun' | 'rain' | 'snow'), 'born' | 'grown'
+    kind: 'bubble' | 'npc-arrival' | 'weather' | 'dl-trick' | 'lamb' | 'phase' | 'bird' | 'rabbit' | 'deity',
+    actor?: string,   // who: 'Digital Luna', a sheep name, 'farmer', 'merchant', 'sky', 'flock', or a target id for 'deity'
+    detail?: string,  // what: bubble icon ('heart' | 'shears' | 'coin'), trick name, weather ('sun' | 'rain' | 'snow'), 'born' | 'grown', or a deity weather kind / act verb
     t?: number,       // clock fraction 0..1 at the moment, for the log
   },
 }));
@@ -69,6 +70,7 @@ Guidance on what qualifies (the prototype probe follows this):
 | `weather` | the weather changes | new weather |
 | `dl-trick` | DL starts an idle play or a command: `flop`, `stick`, `nibble`, `stretch`, `ride`, `rabbit-chase`, `fetch` | the trick |
 | `lamb` | a lamb is born, or grows into a sheep | `born` / `grown` |
+| `deity` | the player sends a deity `weather` or `act` intent (issue #44) | the weather kind, or the act verb |
 | `phase` | the clock crosses into dawn, day, dusk, night (logged, not counted) | the phase |
 | `bird`, `rabbit` | small life arrives (logged, not counted) | `land` / `cross` |
 

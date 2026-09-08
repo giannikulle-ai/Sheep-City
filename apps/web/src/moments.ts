@@ -2,8 +2,9 @@
 // QA watch test counts these (contract: tools/qa/README.md); the client emits them on transitions
 // only, and detects the same things the QA lane's prototype probe does, from the same fields.
 import { phaseOf, type SimState } from '@sheepcliff/sim';
+import type { ClientIntent } from './intents';
 
-export type MomentKind = 'bubble' | 'npc-arrival' | 'weather' | 'dl-trick' | 'lamb' | 'phase' | 'bird' | 'rabbit';
+export type MomentKind = 'bubble' | 'npc-arrival' | 'weather' | 'dl-trick' | 'lamb' | 'phase' | 'bird' | 'rabbit' | 'deity';
 
 export interface Moment {
   kind: MomentKind;
@@ -75,6 +76,18 @@ export function diffMoments(prev: SimState | null, next: SimState): Moment[] {
   if (birdSit && prev.life.bird?.state !== 'sit') out.push({ kind: 'bird', actor: 'bird', detail: 'land', t });
   if (next.life.rabbit && !prev.life.rabbit && !l.chasing) out.push({ kind: 'rabbit', actor: 'rabbit', detail: 'cross', t });
   return out;
+}
+
+/**
+ * A deity power request, its own moment kind (issue #44) so the watch test's counter can see a
+ * player-driven reaction distinct from the sim's own weather rolls and bubbles. Unlike the rest of
+ * this file, this reads the intent the player sent, not a state diff: the ask is what should
+ * count, even for `calm` on a sheep, which changes no icon the sim state diff would notice.
+ */
+export function deityMoment(intent: ClientIntent, t: number): Moment | null {
+  if (intent.type === 'weather') return { kind: 'deity', actor: 'sky', detail: intent.kind, t };
+  if (intent.type === 'act') return { kind: 'deity', actor: intent.target, detail: intent.verb, t };
+  return null;
 }
 
 /** Dispatch on document with bubbling, so listeners on document and on window both hear it. */

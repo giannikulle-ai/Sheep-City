@@ -9,12 +9,13 @@ describe('simView', () => {
     applyIntent(sim, { type: 'setWeather', weather: 'snow' });
     applyIntent(sim, { type: 'setSeason', season: 'winter' });
     sim.banks = { wool: 4, coins: 12, owned: ['flowerbed'] };
-    expect(simScalars(sim)).toEqual({ t: 0.7, weather: 'snow', season: 'winter', temp: sim.weather.temp });
+    expect(simScalars(sim)).toEqual({ t: 0.7, weather: 'snow', season: 'winter', temp: sim.weather.temp, foggy: false });
     const v = simView(null, sim, 0, false);
     expect(v.clockT).toBe(0.7);
     expect(v.weather).toBe('snow');
     expect(v.season).toBe('winter');
     expect(v.temp).toBe(sim.weather.temp);
+    expect(v.foggy).toBe(false);
     expect(v.woolBank).toBe(4);
     expect(v.coins).toBe(12);
     expect(v.owned).toEqual(['flowerbed']);

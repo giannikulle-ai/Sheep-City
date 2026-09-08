@@ -28,7 +28,9 @@ export const PROTOTYPE_URL = pathToFileURL(path.join(repoRoot, 'prototype/luna-f
 
 // Kinds that count toward the gate. Anything else is logged as context only:
 // clock phases are guaranteed by the clock, and small life is easy to miss.
-export const COUNTED_KINDS = new Set(['bubble', 'npc-arrival', 'weather', 'dl-trick', 'lamb']);
+// `deity` (issue #44): a player-driven weather or act power, counted so the log shows a deity
+// reaction is distinct from the world's own moments, not folded into `weather` or `bubble`.
+export const COUNTED_KINDS = new Set(['bubble', 'npc-arrival', 'weather', 'dl-trick', 'lamb', 'deity']);
 
 export function parseArgs(argv) {
   const opts = {

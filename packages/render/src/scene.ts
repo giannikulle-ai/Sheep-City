@@ -7,8 +7,10 @@
 //   4. name tags                                                          (ui)
 //   5. phase / rain tint multiplied onto the sprites, rain wash on the world
 //   6. sprites composited onto the world
-//   7. weather: rain streaks, snowflakes, cold breath, season wash, fireflies
-//   8. HUD                                                                (ui)
+//   7. weather: rain streaks, snowflakes, fog dim, cold breath, season wash, fireflies
+//   8. deity flourishes: a ring at an acted-on creature, a ripple in the sky (issue #44)
+//   9. HUD                                                                (ui)
+import { drawRing, drawSkyRipple } from './flourish';
 import { backgroundKey, isSnowy, phaseMix, tintAt, type BackgroundKey } from './phase';
 import type { Sheet } from './sheet';
 import { ICON, woolLevel, type FarmView, type SheepView } from './state';
@@ -18,6 +20,7 @@ import {
   RAIN_WASH,
   drawBreath,
   drawFireflies,
+  drawFogDim,
   drawRain,
   drawSeasonWash,
   drawSnow,
@@ -235,6 +238,7 @@ export class FarmRenderer {
             }
           }
           if (showIcon) drawIcon(showIcon, s.x + SW / 2, s.y - 2);
+          if (s.ringUntil && now < s.ringUntil) drawRing(sc, s.x + SW / 2, s.y + SH - 4, now, s.ringUntil);
         },
       });
       if (now < s.tagUntil) tags.push([s.name, s.x + SW / 2, s.y + 4 - (showIcon ? 14 : 0), s.color]);
@@ -261,6 +265,7 @@ export class FarmRenderer {
             }
           }
           if (luna.icon) drawIcon(luna.icon, luna.x + LW / 2, luna.y - 2);
+          if (luna.ringUntil && now < luna.ringUntil) drawRing(sc, luna.x + LW / 2, luna.y + LH - 4, now, luna.ringUntil);
         },
       });
       if (now < luna.tagUntil) tags.push(['Digital Luna', luna.x + LW / 2, luna.y + 2 - (luna.icon ? 14 : 0), '#d33a2f']);
@@ -328,6 +333,7 @@ export class FarmRenderer {
     wc.drawImage(this.spr, 0, 0);
 
     // 7. weather and atmosphere
+    if (view.foggy) drawFogDim(wc, W, H);
     if (rain) drawRain(wc, W, H, now);
     if (view.weather === 'snow') drawSnow(wc, W, H, now);
     if (view.temp < 3) drawBreath(wc, view, now, SW, LW);
@@ -335,7 +341,11 @@ export class FarmRenderer {
     if (wash) drawSeasonWash(wc, W, H, wash);
     if ((night || phase === 'dusk') && !rain) drawFireflies(wc, view, night);
 
-    // 8. HUD
+    // 8. deity flourish: the sky ripple from a `weather` tap (a ring at the target draws with the
+    // actor in step 3, so it tints and fades with everything else there)
+    if (view.skyRippleUntil && now < view.skyRippleUntil) drawSkyRipple(wc, W, now, view.skyRippleUntil);
+
+    // 9. HUD
     if (uc) drawHud(uc, view, phase, k);
   }
 }

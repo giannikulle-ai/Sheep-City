@@ -24,9 +24,9 @@ import { buildFixtureState } from './save-fixture.test';
 
 const DAY = RULES.clock.periodSec * 1000;
 
-/** The state as a v4 build would hash it: no snapshot, no stamp, version 4. */
+/** The state as a v4 build would hash it: no ledger snapshot, no chronicle, version 4. */
 function v4View(s: SimState): Record<string, unknown> {
-  return { ...s, version: 4, ledger: undefined, lastLedgerAt: undefined };
+  return { ...s, version: 4, ledger: undefined, lastLedgerAt: undefined, chronicle: undefined };
 }
 
 /** A fresh ledger with the weather pinned (manual mode never rolls), so a rule can be read alone. */
@@ -41,6 +41,7 @@ describe('the actor tick is untouched (#39 is a new path)', () => {
   // The pins the trunk carried before #39, from test/hot-path-parity.test.ts, test/luna-day.test.ts,
   // and test/sheep-day.test.ts. They moved there only because the state now carries `ledger` and
   // `lastLedgerAt` and the version is 5; on the v4 view of the same worlds they hold as they were.
+  // (`v4View` also strips `chronicle`, added in #60: a v4 build never had one either.)
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
     { seed: 6, sheep: 5, hash: 'e85cbb53bef79387' },
     { seed: 6, sheep: 40, hash: '681d0cbae2eace49' },

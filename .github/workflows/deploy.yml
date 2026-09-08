@@ -273,3 +273,38 @@ jobs:
           name: live-${{ matrix.tile }}-${{ github.sha }}
           path: live-${{ matrix.tile }}.png
           retention-days: 14
+
+  # A red deploy used to be silent: the tiles just kept serving whatever build last
+  # passed, with nothing pointing at the failing run (issue #91). This posts one
+  # comment naming the failed step on the PR that merged the failing commit, or
+  # opens an issue when there is no PR (e.g. a direct push to trunk).
+  notify-on-failure:
+    name: Report a red deploy
+    needs: [build, deploy]
+    if: always() && (needs.build.result == 'failure' || needs.deploy.result == 'failure')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Post the failure where it will be seen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # Name the exact step(s) that failed, not just the job.
+          failed=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" --paginate \
+            --jq '[.jobs[] | select(.conclusion=="failure") | "\(.name) > \([.steps[]? | select(.conclusion=="failure") | .name][0] // "unknown step")"] | join("; ")')
+          [ -n "$failed" ] || failed="a job in this run"
+          body="Deploy failed on ${GITHUB_SHA::8}: **${failed}**. Live tiles still serve the last build that passed. ${run_url}"
+
+          pr=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '[.[] | select(.merged_at != null)] | .[0].number // empty')
+          if [ -n "$pr" ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/issues/${pr}/comments" -f body="$body"
+            echo "Commented on PR #${pr}."
+          else
+            gh api "repos/${GITHUB_REPOSITORY}/issues" -f title="Red deploy on ${GITHUB_SHA::8}" -f body="$body"
+            echo "No merged PR found for ${GITHUB_SHA}; opened an issue instead."
+          fi

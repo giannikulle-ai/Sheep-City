@@ -2,6 +2,7 @@
 // Everything here is plain data: no class instances, no object references between actors (tufts
 // are claimed by actor id, not by pointer), so the state can be cloned, hashed, saved, and diffed.
 
+import { cloneChronicle, createChronicle, type Chronicle } from './chronicle/store';
 import { createClock, createSeason, type Clock, type Season } from './clock';
 import { FLOWERS, inBarn, LFOOT, randomDir, randomFoot, SFOOT, type Point } from './geometry';
 import type { ActCmd, Intent } from './intents';
@@ -18,7 +19,8 @@ import { createWeather, type Weather } from './weather';
  * `nameIdx` and the NPC job-plan fields (`wp`, `outside`, `entering`, `job`, `shearing`, `cart`,
  * `icon`, `iconUntilMs`); v4 (#33) adds `ground` (snow footprints, mud patches, `wasSnowy`) and the
  * per-walker stamp fields `lastStamp` and `stampSide` on each sheep and on Digital Luna; v5 (#39)
- * adds `ledger` (the district's numbers as the Ledger path last wrote them) and `lastLedgerAt`.
+ * adds `ledger` (the district's numbers as the Ledger path last wrote them) and `lastLedgerAt`; v6
+ * (#60) adds `chronicle` (the whole world's log; see chronicle/store.ts).
  *
  * PR #43 (deity intents) adds `actCmd` to `Sheep` and `Luna`, and `holdUntilMs` / `foggy` to
  * `Weather`, all as optional fields with no stored default: absent means what it always meant
@@ -26,7 +28,7 @@ import { createWeather, type Weather } from './weather';
  * this pattern for a field that needs a real default; it works here only because "absent" was
  * already the correct old behaviour.
  */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 /** Stable actor ids. Sheep are `sheep-<n>`; Digital Luna is `luna`. */
 export type ActorId = string;
@@ -254,6 +256,8 @@ export interface SimState {
   ledger: Ledger;
   /** Sim time (`clock.nowMs`) `ledger` was taken. */
   lastLedgerAt: number;
+  /** The whole world's log: append-only, and any system's only way in is `tell` (chronicle/store.ts). */
+  chronicle: Chronicle;
 }
 
 export const NAMES = ['Clover', 'Daisy', 'Biscuit', 'Pepper', 'Maple', 'Willow', 'Poppy', 'Hazel', 'Juniper'] as const;
@@ -406,6 +410,7 @@ export function createInitialState(seed: number, options: InitialStateOptions = 
     pendingIntents: [],
     ledger: null as unknown as Ledger,
     lastLedgerAt: 0,
+    chronicle: createChronicle(),
   };
   state.ledger = summarise(state);
   return state;
@@ -454,6 +459,7 @@ export function cloneState(state: SimState): SimState {
     },
     pendingIntents: state.pendingIntents.slice(),
     ledger: cloneLedger(state.ledger),
+    chronicle: cloneChronicle(state.chronicle),
   };
 }
 

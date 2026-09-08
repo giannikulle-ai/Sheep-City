@@ -4,6 +4,7 @@
 // through the remainder. Deterministic for a given state and gap: the ledger draws from the
 // state's generator, and the respawn seed is its next draw.
 
+import { tellLedgerDiff } from '../chronicle/ledger-diff';
 import { cloneRng, nextU32 } from '../rng';
 import type { SimState } from '../state';
 import { step } from '../step';
@@ -48,7 +49,10 @@ export interface CatchUp {
  * - `awayMs < dayMs(state)`: `step(state, [], awayMs)`, actors all the way.
  * - otherwise: `summarise`, `advanceLedger` for the whole days, `respawn` from the result, then
  *   `step` for the remainder. Queued intents carry over to the respawned world and land on its
- *   first tick. The result's `ledger` snapshot and `lastLedgerAt` are taken at the end.
+ *   first tick. The result's `ledger` snapshot and `lastLedgerAt` are taken at the end. `respawn` is
+ *   handed `state`'s own chronicle, so the respawned world carries it forward rather than starting
+ *   fresh, and `tellLedgerDiff` (chronicle/ledger-diff.ts) tells this gap's diff onto it — the one
+ *   span the Ledger runs with no actors in the room to tell it themselves.
  *
  * Pure: `state` is never modified.
  */
@@ -57,21 +61,26 @@ export function catchUp(state: SimState, awayMs: number, options: CatchUpOptions
   const gap = Number.isFinite(awayMs) && awayMs > 0 ? awayMs : 0;
   const before = summarise(state);
   const day = dayMs(state);
-  const result = (s: SimState, mode: CatchUpMode, ledgerDays: number, ledgerMs: number, actorMs: number): CatchUp => {
-    const after = mode === 'none' ? before : summarise(s);
-    return { state: s, mode, awayMs: gap, ranMs: ledgerMs + actorMs, ledgerDays, ledgerMs, actorMs, before, after, diff: diffLedger(before, after) };
-  };
-  if (gap < minMs) return result(state, 'none', 0, 0, 0);
-  if (gap < day) return result(step(state, [], gap), 'actors', 0, 0, gap);
+  if (gap < minMs) {
+    return { state, mode: 'none', awayMs: gap, ranMs: 0, ledgerDays: 0, ledgerMs: 0, actorMs: 0, before, after: before, diff: diffLedger(before, before) };
+  }
+  if (gap < day) {
+    const s = step(state, [], gap);
+    const after = summarise(s);
+    return { state: s, mode: 'actors', awayMs: gap, ranMs: gap, ledgerDays: 0, ledgerMs: 0, actorMs: gap, before, after, diff: diffLedger(before, after) };
+  }
 
   const ledgerDays = Math.floor(gap / day);
   const ledgerMs = ledgerDays * day;
   const actorMs = gap - ledgerMs;
   const rng = cloneRng(state.rng);
   const ledger = advanceLedger(before, ledgerMs, rng);
-  let s = respawn(ledger, nextU32(rng));
+  let s = respawn(ledger, state.chronicle, nextU32(rng));
   s.pendingIntents = state.pendingIntents.slice();
   s = step(s, [], actorMs);
   s = { ...s, ledger: summarise(s), lastLedgerAt: s.clock.nowMs };
-  return result(s, 'ledger', ledgerDays, ledgerMs, actorMs);
+  const after = summarise(s);
+  const diff = diffLedger(before, after);
+  tellLedgerDiff(s, diff);
+  return { state: s, mode: 'ledger', awayMs: gap, ranMs: ledgerMs + actorMs, ledgerDays, ledgerMs, actorMs, before, after, diff };
 }

@@ -8,7 +8,9 @@ import { V2_LUNA_DEFAULTS, v2LunaFetchFields } from '../src/save/migrations/v2-l
 import { v3FlockAndNpcFields, v3NameIdxDefault, v3NpcDefaults } from '../src/save/migrations/v3-flock-and-npc-fields';
 import { V4_STAMP_DEFAULTS, v4GroundAndStamps, v4GroundDefault } from '../src/save/migrations/v4-ground-and-stamps';
 import { v5LedgerDefault, v5LedgerSnapshot } from '../src/save/migrations/v5-ledger-snapshot';
+import { v6Chronicle } from '../src/save/migrations/v6-chronicle';
 import { summarise } from '../src/ledger/ledger';
+import { createChronicle } from '../src/chronicle/store';
 import { applyIntent } from '../src/intents';
 import { makeNpc } from '../src/npcs';
 import { createRng } from '../src/rng';
@@ -329,7 +331,7 @@ describe('v4 to v5', () => {
     expect(lastLedgerAt).toBe((v4.world['clock'] as { nowMs: number }).nowMs);
     // The snapshot is the loaded world's own summary: the migration and `summarise` agree.
     expect(ledger).toEqual(summarise(fromSave(v4)));
-    expect(migrateSave(v4)).toEqual(migrated);
+    expect(migrateSave(v4, MIGRATIONS.slice(0, 5), 5)).toEqual(migrated);
   });
 
   it('keeps a snapshot and a stamp that are already present', () => {
@@ -360,5 +362,57 @@ describe('v4 to v5', () => {
     expect(after.ledger).toEqual(loaded.ledger);
     expect(after.lastLedgerAt).toBe(loaded.lastLedgerAt);
     expect(summarise(after)).not.toEqual(after.ledger);
+  });
+});
+
+describe('v5 to v6', () => {
+  type Doc = { version: number; world: Record<string, unknown> };
+
+  it('the default chronicle is what a fresh state carries: empty', () => {
+    const fresh = createInitialState(1);
+    expect(fresh.chronicle).toEqual(createChronicle());
+  });
+
+  it('fills chronicle on a v5 world with a fresh, empty log, and touches nothing else', () => {
+    const v5 = fixture('save-v5.json') as Doc;
+    expect(v5.version).toBe(5);
+    expect(v5.world).not.toHaveProperty('chronicle');
+    const before = hashValue(v5);
+    const migrated = v6Chronicle.up(v5 as unknown as UnknownSaveDoc) as unknown as Doc;
+    expect(migrated.version).toBe(6);
+    expect(hashValue(v5)).toBe(before);
+    const { chronicle, ...rest } = migrated.world;
+    expect(rest).toEqual(v5.world);
+    expect(chronicle).toEqual(createChronicle());
+    expect(migrateSave(v5, MIGRATIONS.slice(0, 6), 6)).toEqual(migrated);
+  });
+
+  it('keeps a chronicle that is already present', () => {
+    const v5 = fixture('save-v5.json') as Doc;
+    const chronicle = { entries: [{ id: 'c0', atMs: 1, district: 'farm', line: 'x', picture: 'p', actors: [], source: 'authored', notability: 0, first: false, facts: {} }], nextId: 1, stats: { facts: {}, seenFacts: {}, seenFactActors: {} } };
+    const doc = { ...v5, world: { ...v5.world, chronicle } };
+    const migrated = v6Chronicle.up(doc as unknown as UnknownSaveDoc) as unknown as Doc;
+    expect(migrated.world['chronicle']).toBe(chronicle);
+  });
+
+  it('bumps the version and leaves a malformed world for validation to refuse', () => {
+    expect(v6Chronicle.up({ version: 5, world: 'nope' })).toEqual({ version: 6, world: 'nope' });
+    expect(v6Chronicle.up({ version: 5, world: { luna: null } })).toEqual({ version: 6, world: { luna: null, chronicle: createChronicle() } });
+    expect(code(() => fromSave({ format: SAVE_FORMAT, version: 5, world: { luna: null } }))).toBe('invalid-world');
+  });
+
+  it('a loaded v5 world is complete, steps, and can tell into its fresh chronicle', () => {
+    const loaded = fromSave(fixture('save-v5.json'));
+    expect(loaded.chronicle).toEqual(createChronicle());
+    const after = advance(loaded, 100);
+    expect(after.chronicle).toEqual(createChronicle());
+    expect(fromSave(toSave(loaded))).toEqual(loaded);
+  });
+
+  it('a v0 save still walks the whole chain, ending with an empty chronicle', () => {
+    const v0 = fixture('save-v0.json') as UnknownSaveDoc;
+    const loaded = fromSave(v0);
+    expect(loaded.version).toBe(SAVE_VERSION);
+    expect(loaded.chronicle).toEqual(createChronicle());
   });
 });

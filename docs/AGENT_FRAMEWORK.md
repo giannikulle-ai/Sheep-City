@@ -32,7 +32,16 @@ The framework is written for this project, but the shape is generic: a small num
 | Verifier | Claude Code session per review | Minutes to an hour | Adversarial review of medium-risk PRs, runs the checks, blocks or approves |
 | Scout | Optional session, any model | Hours | Research and idea generation that produces a document, never code |
 
-Model choice per role. Foreman and Verifier run on the strongest model available because judgement is what they sell. Workers run on the strongest model for sim and art lanes and a faster model for mechanical lanes such as infra and content data entry. GPT keys are useful for Scouts and for bulk content drafting (villager names, event flavour text, dialogue) where a second voice helps, and never for merging code.
+Model choice per role, set by the owner on 2026-09-08 after the first Sonnet sprint (seven tickets built on Sonnet, reviewed on Opus, six merged in five hours, no Fable spent on the work):
+
+1. **Fable: the Foreman only.** Never a worker, never a Verifier. If Fable is still too heavy, the Foreman runs on Opus; coordination does not need Fable.
+2. **Opus: every Verifier, every round.** Verification is where quality is enforced. Opus also builds the few High-gate sim tickets that touch Digital Luna's chain, the save schema, or the engine's core loop; everything else it only reviews.
+3. **Sonnet: every other build worker and every fix round.** Content, docs, tests, client, art tooling, Medium-gate sim work.
+4. **Round cap.** Two Sonnet fix rounds per PR. A third goes to Opus. If Opus cannot clear it, it goes to the owner as a blocker, never to Fable.
+5. **Pre-push check.** Before pushing, the worker checks every claim in its PR body against its own diff; an over-claim costs an Opus round.
+6. **Concurrency.** At most five Sonnet workers and two Opus Verifiers at once.
+
+GPT keys are useful for Scouts and for bulk content drafting (villager names, event flavour text, dialogue) where a second voice helps, and never for merging code.
 
 ---
 

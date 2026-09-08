@@ -7,6 +7,8 @@
 // save taken mid-frame resumes exactly where it stopped.
 
 import { SEASONS } from '../clock';
+import { freezeChronicleEntry } from '../chronicle/store';
+import { CHRONICLE_SOURCES } from '../chronicle/types';
 import { ACT_VERBS, DEITY_WEATHER_KINDS, FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type IntentType } from '../intents';
 import { cloneState, SAVE_VERSION, type SimState } from '../state';
 import { isPlainObject, SAVE_FORMAT, SaveError, type SaveDoc, type SaveWorld } from './doc';
@@ -31,7 +33,15 @@ export function fromSave(doc: unknown): SimState {
   }
   const world = current['world'];
   validateWorld(world);
-  return cloneState({ ...world, version: SAVE_VERSION });
+  // `world` (and its `chronicle.entries`) are plain objects `migrateSave` read out of the caller's
+  // document — JSON.parse output, unfrozen, and shared by reference with whatever `doc` it came
+  // from. `cloneState` below copies everything else a level deeper, but `cloneChronicle` only
+  // slices the entries array (see chronicle/store.ts): it trusts every entry it shares by reference
+  // is one `tell` froze, which a loaded entry never was. Freeze each one into a fresh, detached copy
+  // here, once per load, so that trust holds for a loaded world too and the module's contract above
+  // (the state and the document never share objects) is actually true for the chronicle.
+  const chronicle = { ...world.chronicle, entries: world.chronicle.entries.map(freezeChronicleEntry) };
+  return cloneState({ ...world, chronicle, version: SAVE_VERSION });
 }
 
 /** `toSave` as text, for localStorage and the export-as-text fallback. Two-space indent, trailing newline. */
@@ -281,6 +291,8 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
 
   ledgerShape(w['ledger'], 'world.ledger');
   nonNegative(w['lastLedgerAt'], 'world.lastLedgerAt');
+
+  chronicleShape(w['chronicle'], 'world.chronicle');
 }
 
 function level(value: unknown, path: string): number {
@@ -361,6 +373,51 @@ export function ledgerShape(value: unknown, path: string): void {
   const nameIdx = nonNegative(l['nameIdx'], `${path}.nameIdx`);
   if (!Number.isInteger(nameIdx)) fail(`${path}.nameIdx`, 'an integer', nameIdx);
   level(l['mood'], `${path}.mood`);
+}
+
+/** The chronicle: an append-only list of entries plus the rolling stats `tell` reads and writes to
+ * judge a fact's notability. Every entry's shape, and every fact stat's, is checked in full; the
+ * two seen-sets are checked only as objects, since their point is which keys they hold, not a
+ * shape on the values (always `true`). */
+export function chronicleShape(value: unknown, path: string): void {
+  const c = obj(value, path);
+  const nextId = nonNegative(c['nextId'], `${path}.nextId`);
+  if (!Number.isInteger(nextId)) fail(`${path}.nextId`, 'an integer', nextId);
+
+  const ids = new Set<string>();
+  arr(c['entries'], `${path}.entries`).forEach((entry, i) => {
+    const p = `${path}.entries[${i}]`;
+    const e = obj(entry, p);
+    const id = str(e['id'], `${p}.id`);
+    if (ids.has(id)) fail(`${p}.id`, 'a unique entry id', id);
+    ids.add(id);
+    nonNegative(e['atMs'], `${p}.atMs`);
+    str(e['district'], `${p}.district`);
+    str(e['line'], `${p}.line`);
+    str(e['picture'], `${p}.picture`);
+    arr(e['actors'], `${p}.actors`).forEach((a, j) => str(a, `${p}.actors[${j}]`));
+    oneOf(e['source'], `${p}.source`, CHRONICLE_SOURCES);
+    const notability = num(e['notability'], `${p}.notability`);
+    if (notability < 0 || notability > 1) fail(`${p}.notability`, 'a number in [0, 1]', notability);
+    bool(e['first'], `${p}.first`);
+    const facts = obj(e['facts'], `${p}.facts`);
+    for (const [k, v] of Object.entries(facts)) {
+      if (typeof v !== 'number' && typeof v !== 'string') fail(`${p}.facts.${k}`, 'a number or a string', v);
+    }
+  });
+
+  const stats = obj(c['stats'], `${path}.stats`);
+  const facts = obj(stats['facts'], `${path}.stats.facts`);
+  for (const [key, stat] of Object.entries(facts)) {
+    const fp = `${path}.stats.facts.${key}`;
+    const fs = obj(stat, fp);
+    const n = nonNegative(fs['n'], `${fp}.n`);
+    if (!Number.isInteger(n)) fail(`${fp}.n`, 'an integer', n);
+    num(fs['mean'], `${fp}.mean`);
+    nonNegative(fs['variance'], `${fp}.variance`);
+  }
+  obj(stats['seenFacts'], `${path}.stats.seenFacts`);
+  obj(stats['seenFactActors'], `${path}.stats.seenFactActors`);
 }
 
 /** A pet target: `luna`, `flock`, or a sheep id. Ids are not checked against the flock: a stale one is a no-op when applied. */

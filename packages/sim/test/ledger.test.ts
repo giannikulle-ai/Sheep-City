@@ -14,6 +14,7 @@ import { catchUp } from '../src/ledger/catch-up';
 import { diffLedger } from '../src/ledger/diff';
 import { cloneLedger, dayMs, LEDGER_STEP_MS, ledgerFlock, meanOf, moodOf, summarise, type Ledger } from '../src/ledger/ledger';
 import { respawn } from '../src/ledger/respawn';
+import { createChronicle } from '../src/chronicle/store';
 import { createRng } from '../src/rng';
 import { RULES, TICK_MS } from '../src/rules';
 import { fromSave, toSave } from '../src/save/serialize';
@@ -24,9 +25,9 @@ import { buildFixtureState } from './save-fixture.test';
 
 const DAY = RULES.clock.periodSec * 1000;
 
-/** The state as a v4 build would hash it: no snapshot, no stamp, version 4. */
+/** The state as a v4 build would hash it: no ledger snapshot, no chronicle, version 4. */
 function v4View(s: SimState): Record<string, unknown> {
-  return { ...s, version: 4, ledger: undefined, lastLedgerAt: undefined };
+  return { ...s, version: 4, ledger: undefined, lastLedgerAt: undefined, chronicle: undefined };
 }
 
 /** A fresh ledger with the weather pinned (manual mode never rolls), so a rule can be read alone. */
@@ -41,6 +42,7 @@ describe('the actor tick is untouched (#39 is a new path)', () => {
   // The pins the trunk carried before #39, from test/hot-path-parity.test.ts, test/luna-day.test.ts,
   // and test/sheep-day.test.ts. They moved there only because the state now carries `ledger` and
   // `lastLedgerAt` and the version is 5; on the v4 view of the same worlds they hold as they were.
+  // (`v4View` also strips `chronicle`, added in #60: a v4 build never had one either.)
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
     { seed: 6, sheep: 5, hash: 'e85cbb53bef79387' },
     { seed: 6, sheep: 40, hash: '681d0cbae2eace49' },
@@ -133,7 +135,7 @@ describe('respawn: the round trip is exact', () => {
   for (const [name, build] of worlds) {
     it(`summarise(respawn(summarise(s))) equals summarise(s): ${name}`, () => {
       const L = summarise(build());
-      const again = summarise(respawn(L));
+      const again = summarise(respawn(L, createChronicle()));
       expect(again).toEqual(L);
       expect(hashState(again)).toBe(hashState(L));
     });
@@ -141,27 +143,27 @@ describe('respawn: the round trip is exact', () => {
 
   it('holds after the ledger has run, and with a seed that is not the district\'s', () => {
     const L = advanceLedger(summarise(createInitialState(7)), 30 * DAY, createRng(1));
-    expect(summarise(respawn(L))).toEqual(L);
-    expect(summarise(respawn(L, 99))).toEqual(L);
-    expect(summarise(respawn(L, 0))).toEqual(L);
+    expect(summarise(respawn(L, createChronicle()))).toEqual(L);
+    expect(summarise(respawn(L, createChronicle(), 99))).toEqual(L);
+    expect(summarise(respawn(L, createChronicle(), 0))).toEqual(L);
   });
 
   it('holds for a ledger with more or fewer tufts than the seed lays out', () => {
     const L = summarise(createInitialState(7));
     const more = { ...L, grass: [...L.grass, 0.25, 0.5] };
     more.mood = moodOf(more);
-    expect(summarise(respawn(more))).toEqual(more);
+    expect(summarise(respawn(more, createChronicle()))).toEqual(more);
     const fewer = { ...L, grass: L.grass.slice(0, 3) };
     fewer.mood = moodOf(fewer);
-    expect(summarise(respawn(fewer))).toEqual(fewer);
+    expect(summarise(respawn(fewer, createChronicle()))).toEqual(fewer);
   });
 
   it('builds a world that saves, loads, and ticks; the same ledger and seed give the same world', () => {
     const L = advanceLedger(summarise(buildFixtureState()), 3 * DAY, createRng(2));
-    const a = respawn(L, 5);
-    const b = respawn(L, 5);
+    const a = respawn(L, createChronicle(), 5);
+    const b = respawn(L, createChronicle(), 5);
     expect(hashState(a)).toBe(hashState(b));
-    expect(hashState(respawn(L, 6))).not.toBe(hashState(a));
+    expect(hashState(respawn(L, createChronicle(), 6))).not.toBe(hashState(a));
     expect(a.ledger).toEqual(L);
     expect(a.lastLedgerAt).toBe(L.clock.nowMs);
     expect(a.npcs.farmer).toBeNull();
@@ -176,14 +178,14 @@ describe('respawn: the round trip is exact', () => {
     const base = summarise(createInitialState(7));
     const night = { ...base, clock: { ...base.clock, t: 0.7 } };
     expect(phaseOf(night.clock.t)).toBe('night');
-    const n = respawn(night);
+    const n = respawn(night, createChronicle());
     expect(n.sheep.every((q) => q.resting)).toBe(true);
     expect(n.luna.routine).toBe('asleep');
     expect(n.luna.anim).toBe('sleep');
     const rain = { ...base, weather: { ...base.weather, kind: 'rain' as const, rain: true, mode: 'manual' as const } };
-    const r = respawn(rain);
+    const r = respawn(rain, createChronicle());
     expect(r.sheep.every((q) => q.inBarn && q.shelter)).toBe(true);
-    const day = respawn(base);
+    const day = respawn(base, createChronicle());
     expect(day.sheep.some((q) => q.resting || q.inBarn)).toBe(false);
     expect(day.luna.anim).toBe('sit');
   });
@@ -285,8 +287,8 @@ describe('advanceLedger: the rules', () => {
     expect(grown.wool).toHaveLength(n + 1);
     expect(grown.wool[n]).toBeCloseTo(RULES.sheep.shornWool + 1 / RULES.woolGrowSec, 9);
     expect(grown.nameIdx).toBe(n + 1);
-    expect(summarise(respawn(grown)).nameIdx).toBe(n + 1);
-    expect(respawn(grown).sheep[n]!.name).toBe('Juniper');
+    expect(summarise(respawn(grown, createChronicle())).nameIdx).toBe(n + 1);
+    expect(respawn(grown, createChronicle()).sheep[n]!.name).toBe('Juniper');
   });
 
   it('a lamb waits for the rain to stop before it grows up, as the actors\' lambs chain does', () => {
@@ -376,7 +378,7 @@ describe('soak: 30 sim-days at ledger resolution stay inside the balance bounds'
     expect(L.weather.temp, `${label}: temp`).toBeLessThan(40);
     expect(L.merchantAtMs + WALK_IN_MS, `${label}: merchant due`).toBeGreaterThanOrEqual(L.clock.nowMs);
     // The snapshot round-trips through a save.
-    expect(fromSave(toSave(respawn(L))).ledger).toEqual(L);
+    expect(fromSave(toSave(respawn(L, createChronicle()))).ledger).toEqual(L);
   }
 
   for (const seed of [1, 7, 42]) {

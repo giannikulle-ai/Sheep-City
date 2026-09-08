@@ -11,6 +11,11 @@
 // and is v5, and the hash covers the whole state. test/ledger.test.ts pins the same six worlds on
 // their v4 view (those two fields and the version taken off) to the hashes from before #39.
 //
+// They moved a third time in #60, for the schema only again: the state now carries `chronicle`
+// (empty on every one of these worlds; nothing here calls `tell`) and is v6. test/chronicle.test.ts
+// pins the same six worlds on their v5 view (`chronicle` taken off, version put back to 5) to the
+// hashes from before #60.
+//
 // If a hash here moves, some sheep, DL, or NPC took a different path or drew a different die.
 // That is a parity break, not a number to update: find the behaviour change first, and if it is a
 // deliberate new draw, say so in the PR.
@@ -24,12 +29,12 @@ import { advance } from '../src/tick';
 const TICKS = 6000;
 
 const BEFORE: readonly { seed: number; sheep: number; hash: string }[] = [
-  { seed: 6, sheep: 5, hash: 'c983956cb0872c74' },
-  { seed: 6, sheep: 40, hash: 'f836d10c0aed5264' },
-  { seed: 7, sheep: 5, hash: '69db4e4556aa8ea2' },
-  { seed: 7, sheep: 40, hash: 'a3b4eea04dd329e6' },
-  { seed: 11, sheep: 5, hash: '9c86b689cdc67c8b' },
-  { seed: 11, sheep: 40, hash: '0e6105a485b187d3' },
+  { seed: 6, sheep: 5, hash: 'ec16cd89f0d97235' },
+  { seed: 6, sheep: 40, hash: '435da071f10e5017' },
+  { seed: 7, sheep: 5, hash: '092b1cb807636e88' },
+  { seed: 7, sheep: 40, hash: '50bccaa1fd5ce924' },
+  { seed: 11, sheep: 5, hash: 'a70633600f30f95c' },
+  { seed: 11, sheep: 40, hash: 'a68a43c93bd34c39' },
 ];
 
 describe('hot path parity (#27)', () => {

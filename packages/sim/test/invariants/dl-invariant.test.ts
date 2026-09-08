@@ -43,10 +43,11 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { LUNA_ID } from '../../src/actors';
 import { advanceClock, advanceSeason, phaseOf, SEASONS } from '../../src/clock';
 import { tickSheep } from '../../src/behaviours/sheep';
-import { LUNA_ID } from '../../src/actors';
 import { ACT_VERBS, applyIntent, DEITY_WEATHER_KINDS, FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type Intent } from '../../src/intents';
+import { createChronicle } from '../../src/chronicle/store';
 import { advanceLedger } from '../../src/ledger/advance';
 import { summarise } from '../../src/ledger/ledger';
 import { respawn } from '../../src/ledger/respawn';
@@ -321,7 +322,7 @@ describe('off-screen: a respawned state never harms Digital Luna either (CLAUDE.
       let sawRain = false;
       for (let i = 0; i < AWAY_STEPS; i++) {
         ledger = advanceLedger(ledger, AWAY_STEP_MS, rng);
-        const respawned = respawn(ledger);
+        const respawned = respawn(ledger, createChronicle());
         const reasons = harmIn(respawned);
         expect(reasons, `seed ${seed} step ${i} (away ${(i + 1) * AWAY_STEP_MS}ms): ${reasons.join('; ')}`).toEqual([]);
         if (phaseOf(ledger.clock.t) === 'night') sawNight = true;

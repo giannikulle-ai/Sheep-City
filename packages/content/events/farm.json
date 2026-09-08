@@ -13,13 +13,13 @@
     {
       "id": "fogMorning",
       "title": "Fog morning",
-      "comment": "The reference visibility event for #40. The flock huddles; DL counts them by ear. v2: conditions ported 1:1 from v1's preconditions; no multiplier, a fog roll is weather, not an actor state. #86 coverage: base weight raised 10 -> 22 — dawn had only this and farmersDayOff as reliable kinds (weather and dl-trick), and this is the one that gives a watch a weather-kind moment before the day's first draw of anything else.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Fog morning\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["autumn", "winter", "spring"] },
         { "on": "weather", "op": "eq", "value": "sun" },
         { "on": "timeOfDay", "op": "in", "value": ["dawn"] }
       ],
-      "weight": { "base": 22, "multipliers": [] },
+      "weight": { "base": 16, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 3120, "cooldownSimHours": 48 },
       "durationSimMinutes": 240,
       "hooks": {
@@ -39,7 +39,7 @@
     {
       "id": "crowsOnTheField",
       "title": "Crows on the field",
-      "comment": "Crows are data here and art in #47; DL's chase is sim work in #48. v2: flockSize.min becomes a ledger.flock condition; new causality, the issue's own example, crows are likelier when the hay is high — the Ledger has no separate hay stock, so this reads ledger.grass (the mean tuft level) as the stand-in, flagged to sim on #40. Base weight also drops from v1's flat 12 to 8: the new ×2 grass multiplier now carries the busy-hay-day likelihood the old flat number tried to bake in on its own, so the base has to sit lower to keep the same overall frequency once the multiplier can double it. #86 coverage: season widened to include spring (the bale reads on ledger.grass year-round, not only after a summer/autumn cut), and base raised 8 -> 18 alongside the deck's other daytime cards so a spring watch has real competition for merchantCaravan at midday instead of a near-default draw.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Crows on the field\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["spring", "summer", "autumn"] },
         { "on": "weather", "op": "eq", "value": "sun" },
@@ -47,7 +47,7 @@
         { "on": "ledger.flock", "op": "gte", "value": 1 }
       ],
       "weight": {
-        "base": 18,
+        "base": 14,
         "multipliers": [
           { "when": { "on": "ledger.grass", "op": "gte", "value": 0.6 }, "times": 2, "comment": "Plenty of grazing left standing reads as hay worth stealing." }
         ]
@@ -70,14 +70,14 @@
     {
       "id": "lostLamb",
       "title": "Lost lamb",
-      "comment": "Reference event for #40: a lamb wanders off the field at dusk and DL fetches it home. v2: this is the issue's own worked example. The hard gate stays dusk-only, sun or rain, so the storybook line stays true (it always happens near dusk); the three named actor predicates now do the causal work v1 could only fake with a flat weight of 8. `lambFarFromMother` is PROPOSED to sim on #40: today's sim springs every lamb to a fixed point behind its mother every tick with no detachment behaviour, so this predicate cannot yet be true and the card cannot yet fire on it — the multiplier is written for the sim #40 will build, not the one that exists today.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Lost lamb\". `lambFarFromMother` is PROPOSED to sim on #40.",
       "conditions": [
         { "on": "lambPresent", "op": "eq", "value": true },
         { "on": "timeOfDay", "op": "in", "value": ["dusk"] },
         { "on": "weather", "op": "in", "value": ["sun", "rain"] }
       ],
       "weight": {
-        "base": 5,
+        "base": 4,
         "multipliers": [
           { "when": { "on": "lambFarFromMother", "op": "eq", "value": true }, "times": 3, "comment": "This is what \"lost\" means; the strongest driver, once sim on #40 can produce it (see the card comment: PROPOSED, not true in today's sim)." },
           { "when": { "on": "flockScattered", "op": "eq", "value": true }, "times": 2, "comment": "Nobody was minding the edges." },
@@ -104,12 +104,12 @@
     {
       "id": "merchantCaravan",
       "title": "Merchant caravan",
-      "comment": "Owner's decision 12 (2026-09-08, plan section 11): the economy is not the farm's, no transaction happens on the farm. The caravan is now a road event, a passer-by, not a sale: any season, daytime, a decent gap, replacing the old `merchantPresent`+`[day,dusk]` trade-visit reading. Cooldown and duration are unchanged from the prototype's merchant cadence (balance merchant.everyMs / stayMs) so the gap stays a decent one, even though it is no longer measuring a trade cycle. Data stays honest: no coins hook here, same as before; base weight also drops 14 -> 10 now that other daytime cards carry more of the deck's weight (#86 coverage), so this card no longer wins the great majority of daytime draws by default. KNOWN GAP for the sim half of #86: this id is one of the four reference cards with code behind it (`packages/sim/src/engine/hooks.ts` REFERENCE_EFFECTS.merchantCaravan.start still calls `summonMerchant` unconditionally, whose job plan in `packages/sim/src/npcs.ts` still runs a `trade` job that silently sells the whole wool bank for coins and buys upgrades on every draw of this card). That code path is packages/sim, out of this lane's reach; retiring it, and moving the sale to the farmer's dawn market walk per the issue, is the sim half of #86. Until it lands, drawing this card still empties the wool bank in the running sim even though nothing below asks for that.",
+      "comment": "Write-up and the KNOWN GAP (three code paths still sell wool on this card): docs/content/EVENT_DECK.md, \"Merchant caravan\". Owner's decision 12: no transaction on the farm; data has no coins/wool hook.",
       "conditions": [
         { "on": "merchantPresent", "op": "eq", "value": false },
         { "on": "timeOfDay", "op": "in", "value": ["day"], "comment": "Daytime only now (was day or dusk): a road event has no reason to keep the old trade window, and 'daytime' is the issue's own word for it." }
       ],
-      "weight": { "base": 10, "multipliers": [] },
+      "weight": { "base": 8, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 2160, "cooldownSimHours": 32 },
       "durationSimMinutes": 240,
       "hooks": {
@@ -125,7 +125,7 @@
     {
       "id": "shearingDay",
       "title": "Shearing day",
-      "comment": "Reference event for #40: the sim tops every fleece up to ready and summons the farmer, who shears the lot. v2: flockSize.min becomes ledger.flock; new ledger.wool condition and multiplier so shearing day is triggered by a flock that is genuinely close to ready, not only by season and a coin flip.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Shearing day\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["spring", "summer"] },
         { "on": "weather", "op": "eq", "value": "sun" },
@@ -134,7 +134,7 @@
         { "on": "ledger.wool", "op": "gte", "value": 0.5, "comment": "The flock's mean fleece is already more than half grown; this is a day whose time has come, not a random draw." }
       ],
       "weight": {
-        "base": 6,
+        "base": 4,
         "multipliers": [
           { "when": { "on": "ledger.wool", "op": "gte", "value": 0.75 }, "times": 2, "comment": "The fuller the flock already is, the readier the day." }
         ]
@@ -158,13 +158,13 @@
     {
       "id": "rainbowAfterRain",
       "title": "Rainbow after rain",
-      "comment": "v1 proposed a bespoke `recentWeather` precondition beyond the issue's list; v2 carries the same idea forward as an ordinary predicate, `simMinutesSinceRain`, so it fits the ordinary {on, op, value} shape instead of a one-off object. Still PROPOSED to sim on #40, same as v1 flagged it. #86 coverage: base raised 12 -> 24 so a rain patch reliably resolves into this weather-kind moment rather than being outweighed by the day/dusk cards that do not need rain to fire.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Rainbow after rain\". `simMinutesSinceRain` is PROPOSED to sim on #40.",
       "conditions": [
         { "on": "weather", "op": "eq", "value": "sun" },
         { "on": "simMinutesSinceRain", "op": "lte", "value": 20 },
         { "on": "timeOfDay", "op": "in", "value": ["day", "dusk"] }
       ],
-      "weight": { "base": 24, "multipliers": [] },
+      "weight": { "base": 18, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 1530, "cooldownSimHours": 24 },
       "durationSimMinutes": 90,
       "hooks": {
@@ -183,13 +183,13 @@
     {
       "id": "strayCatVisits",
       "title": "A stray cat visits",
-      "comment": "The cat is a new creature: data here, art and behaviour in their own tickets (High gate). v2: new flockScattered multiplier, a calm settled flock reads as safer for a cat to approach. #86 coverage: weather widened from sun-only to sun or rain (still no snow — a cat has better sense). Every other dusk/night card either needs a lamb, needs rain specifically (flockHuddle), or is rare by design (farmerMeetsMerchant), so a rain stretch at dusk or night otherwise leaves nothing eligible at all. Base weight is unchanged: this card was already one of the two that dominated every measured population, and raising it further crowded out the very variety #86 is asking for (measured: it costs three-kind seeds rather than buying them), so wider weather is this card's whole contribution here.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"A stray cat visits\". Cat is a new creature (High gate for art/behaviour).",
       "conditions": [
         { "on": "weather", "op": "in", "value": ["sun", "rain"] },
         { "on": "timeOfDay", "op": "in", "value": ["dusk", "night"] }
       ],
       "weight": {
-        "base": 7,
+        "base": 5,
         "multipliers": [
           { "when": { "on": "flockScattered", "op": "eq", "value": false }, "times": 1.3, "comment": "A settled flock is a quieter field for a cautious visitor." }
         ]
@@ -209,12 +209,12 @@
     {
       "id": "farmersDayOff",
       "title": "The farmer's day off",
-      "comment": "Fires at dawn so both of the farmer's visits (farmer.visitsAt) are skipped. DL walks the farmer's rounds instead. v2: adds a farmerPresent condition — he cannot take the day off if he is already on the field. #86 coverage: base raised 6 -> 14 — dawn's other reliable card (fogMorning) needs sun and excludes summer, so this is the one dawn moment that holds up whatever the weather and the season.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"The farmer's day off\".",
       "conditions": [
         { "on": "timeOfDay", "op": "in", "value": ["dawn"] },
         { "on": "farmerPresent", "op": "eq", "value": false }
       ],
-      "weight": { "base": 14, "multipliers": [] },
+      "weight": { "base": 10, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 6480, "cooldownSimHours": 96 },
       "durationSimMinutes": 720,
       "hooks": {
@@ -234,14 +234,14 @@
     {
       "id": "nightOfTheFireflies",
       "title": "Night of the fireflies",
-      "comment": "Fireflies exist as small life from #33; this card brings a swarm. DL snaps at them and catches none. v2: new flockScattered multiplier, the swarm is easier to notice, and DL freer to chase it, on a settled night. #86 coverage: season widened from summer-only to spring, summer and autumn (warm-enough nights either side of summer — winter stays excluded, no fireflies in the snow), and base raised 10 -> 26 alongside stargazingNight so a clear night has two competing dl-trick/weather options instead of one — measured (packages/content/src/deck-coverage.test.ts) as the single biggest lever on the three-distinct-kinds population, since a night in spring previously had only strayCatVisits to draw.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Night of the fireflies\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["spring", "summer", "autumn"] },
         { "on": "weather", "op": "eq", "value": "sun" },
         { "on": "timeOfDay", "op": "in", "value": ["night"] }
       ],
       "weight": {
-        "base": 26,
+        "base": 20,
         "multipliers": [
           { "when": { "on": "flockScattered", "op": "eq", "value": false }, "times": 1.2, "comment": "A settled flock means DL is free to bounce after lights instead of minding sheep." }
         ]
@@ -264,14 +264,14 @@
     {
       "id": "lambZoomiesHour",
       "title": "Lamb zoomies hour",
-      "comment": "Short and daft. Every lamb runs rings round the trough; the ewes do not move. v2: new flockScattered multiplier, a lamb only feels safe enough to bolt for fun when the flock is not on edge. #86 coverage: timeOfDay widened to include dawn (a lamb fresh off a night's sleep is at least as likely to bolt as one in the afternoon sun). Base raised 12 -> 16, a smaller lift than most of this pass's: measured (deck-coverage.test.ts), pushing it much higher crowded out other day/dusk cards' kinds on the same seeds it was meant to help — a lamb that already draws often does not need to draw even more often to be seen.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Lamb zoomies hour\".",
       "conditions": [
         { "on": "lambPresent", "op": "eq", "value": true },
         { "on": "weather", "op": "eq", "value": "sun" },
         { "on": "timeOfDay", "op": "in", "value": ["dawn", "day", "dusk"] }
       ],
       "weight": {
-        "base": 16,
+        "base": 12,
         "multipliers": [
           { "when": { "on": "flockScattered", "op": "eq", "value": false }, "times": 1.5, "comment": "A calm flock, not a stressed one, is when a lamb plays." }
         ]
@@ -294,7 +294,7 @@
     {
       "id": "wellRunsLow",
       "title": "The well runs low",
-      "comment": "A hot dry spell. The trough is drawn low and the sheep queue at it until the farmer comes with buckets. Drop bubble is an art ask. v2: flockSize.min becomes ledger.flock; new ledger.grass condition so this is a genuine dry spell, not any sunny summer day, plus a farmerPresent multiplier — it worsens fastest with nobody around to catch it early.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"The well runs low\". Drop bubble is an art ask.",
       "conditions": [
         { "on": "season", "op": "in", "value": ["summer"] },
         { "on": "weather", "op": "eq", "value": "sun" },
@@ -303,7 +303,7 @@
         { "on": "ledger.grass", "op": "lte", "value": 0.3, "comment": "The mean tuft level reads parched, not just dry-ish." }
       ],
       "weight": {
-        "base": 7,
+        "base": 5,
         "multipliers": [
           { "when": { "on": "farmerPresent", "op": "eq", "value": false }, "times": 1.4, "comment": "Nobody around yet to top it up before it gets bad." }
         ]
@@ -328,12 +328,12 @@
     {
       "id": "windfall",
       "title": "A windfall",
-      "comment": "Owner's decision 12 (2026-09-08, plan section 11): no transaction happens on the farm, and this is the card the decision names by name (\"the windfall, the dug-up purse\"). No settlement stock exists yet to route the coins to (checked: neither the schema's conditionOn/hook vocabulary nor the sim's state carry one, only ledger.coins, the farm's own bank), so per the decision's own fallback this becomes a moment with no stock change rather than a purse of coins: DL still digs something up, it is just never coins any more. The old ledger.coins<=40 condition (\"a find lands better on a lean bank\") went with the coins hook it justified; nothing here reads the farm's coin bank any more. Kept the title and id (both otherwise pinned in packages/sim/test/engine-events.test.ts's eviction-line text, a sim-owned pin this lane does not move) even though the find itself no longer pays out. #86 coverage: timeOfDay widened to include dawn, and base raised 5 -> 14, so dawn keeps a bubble-kind option alongside fogMorning's weather and farmersDayOff's dl-trick.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"A windfall\". Owner's decision 12: no transaction on the farm, so no coins hook.",
       "conditions": [
         { "on": "weather", "op": "in", "value": ["sun", "rain"] },
         { "on": "timeOfDay", "op": "in", "value": ["dawn", "day"] }
       ],
-      "weight": { "base": 14, "multipliers": [] },
+      "weight": { "base": 10, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 4350, "cooldownSimHours": 72 },
       "durationSimMinutes": 30,
       "hooks": {
@@ -349,14 +349,14 @@
     {
       "id": "stargazingNight",
       "title": "Stargazing night",
-      "comment": "A clear night. Everybody lies down and looks up; the sky layer brightens its stars. v2: new flockScattered multiplier, a settled flock is what lies down together. #86 coverage: season widened from summer/autumn to all four — a clear night happens in any season, and this was the only card that could give spring and winter nights a second kind alongside strayCatVisits. Base raised 8 -> 26 alongside nightOfTheFireflies, together the single biggest lever measured (deck-coverage.test.ts) on the three-distinct-kinds population. Moment kind moved from dl-trick to weather: nobody does anything here (DL only sits and watches, same as the sky itself brightening), which is the fogMorning/rainbowAfterRain shape, not the crow-chase/cat-standoff one, and it is what turns a spring or winter night into a weather-kind moment instead of another dl-trick.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Stargazing night\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["spring", "summer", "autumn", "winter"] },
         { "on": "weather", "op": "eq", "value": "sun" },
         { "on": "timeOfDay", "op": "in", "value": ["night"] }
       ],
       "weight": {
-        "base": 26,
+        "base": 20,
         "multipliers": [
           { "when": { "on": "flockScattered", "op": "eq", "value": false }, "times": 1.3, "comment": "A scattered flock does not settle down together to watch the sky." }
         ]
@@ -379,13 +379,13 @@
     {
       "id": "flockHuddle",
       "title": "Rain, and a flock to gather",
-      "comment": "New for #59, filling the seat DL's birthday and first snow left behind. Dramatises DL's own rain-shepherd priority (plan section 2, her fixed priority order: fetch, manual, riding, rain shepherd, dusk and dawn routine, idle play) as a watchable card instead of an unremarked background rule: the flock startling apart at the first drops, and DL running the flockScattered predicate down to zero. #86 coverage: base raised 9 -> 18 — this is the deck's only card that wants rain rather than merely allowing it, and it has no time-of-day gate at all, so it is the one dependable moment across every rainy stretch, whatever the season or the hour.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Rain, and a flock to gather\".",
       "conditions": [
         { "on": "weather", "op": "eq", "value": "rain" },
         { "on": "flockScattered", "op": "eq", "value": true }
       ],
       "weight": {
-        "base": 18,
+        "base": 14,
         "multipliers": [
           { "when": { "on": "dlFarFromFlock", "op": "eq", "value": true }, "times": 1.5, "comment": "A bigger job, a bigger moment, when she has further to run." }
         ]
@@ -410,12 +410,12 @@
     {
       "id": "farmerMeetsMerchant",
       "title": "The farmer meets the merchant",
-      "comment": "New for #59, filling the seat DL's birthday and first snow left behind. Shows off an AND of two actor predicates rather than a single one: merchantPresent and farmerPresent both true is already rare on its own, so the base weight is low and needs no multiplier.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"The farmer meets the merchant\".",
       "conditions": [
         { "on": "merchantPresent", "op": "eq", "value": true },
         { "on": "farmerPresent", "op": "eq", "value": true }
       ],
-      "weight": { "base": 3, "multipliers": [] },
+      "weight": { "base": 2, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 5805, "cooldownSimHours": 96 },
       "durationSimMinutes": 45,
       "hooks": {

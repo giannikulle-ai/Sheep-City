@@ -170,9 +170,21 @@
           "type": "object",
           "properties": { "initial": { "$ref": "#/$defs/int" } },
           "required": ["initial"], "additionalProperties": false
+        },
+        "hay2": {
+          "type": "object",
+          "description": "New for #63: hay2's disposition (docs/content/FARM_BUILDS.md). Not in the prototype, so it lives here rather than in `rules` (rules is asserted exactly against the prototype literal). `tuftRegrowBonusFrac` is a multiplier's fraction (1 + this value), not itself a 0..1 share, so it does not use `unit` — the fix round (2026-09-08) raised it past 1 to make the effect visible. Bounded 0..10 (a build only ever eases regrow, never reverses it, and 10 is far past any value the balance work has tried) rather than left as an unbounded `num`, per the round-2 Verifier finding.",
+          "properties": {
+            "tuftRegrowBonusFrac": {
+              "type": "object",
+              "properties": { "value": { "type": "number", "minimum": 0, "maximum": 10 }, "comment": { "$ref": "_defs.schema.json#/$defs/comment" } },
+              "required": ["value", "comment"], "additionalProperties": false
+            }
+          },
+          "required": ["tuftRegrowBonusFrac"], "additionalProperties": false
         }
       },
-      "required": ["clock", "seasons", "merchant", "flock"], "additionalProperties": false
+      "required": ["clock", "seasons", "merchant", "flock", "hay2"], "additionalProperties": false
     }
   },
   "required": ["source", "rules", "outsideRules"],

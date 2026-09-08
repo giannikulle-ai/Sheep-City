@@ -74,6 +74,12 @@
       }
     },
     "merchant": { "firstVisitMs": { "value": 45000, "comment": "Delay from reset to the first merchant visit." } },
-    "flock":    { "initial": { "value": 5, "comment": "Sheep on the field at reset (indices 0..4 of farm/names.json)." } }
+    "flock":    { "initial": { "value": 5, "comment": "Sheep on the field at reset (indices 0..4 of farm/names.json)." } },
+    "hay2": {
+      "tuftRegrowBonusFrac": {
+        "value": 1.9,
+        "comment": "New for #63 (the flowerbed/hay2/scarecrow disposition, docs/content/FARM_BUILDS.md): the prototype's hay2 upgrade drew and changed nothing (an empty draw stub, sim_template.html line 576). Its disposition is 'change a number': while owned, tuftRegrowPerSec is eased up by this fraction (a multiplier of 1 + this value), a second bale feeding the field. Raised from 0.15 to 2.5 in the fix round after 2026-09-08's owner decision ('make hay2 visible instead'), then lowered to 1.9 in fix round 2 the same day: 2.5 (3.5x) cleared the field-average target but also erased visible grazing — measured over a sim-day on the 40-sheep world, the share of real grazing bouts that move the rendered grass frame fell from 45-86% (unowned) to 0-16% (owned), and no bout ever stripped a tuft bare (0%, vs 27-51% unowned). 1.9 (2.9x) is the largest bonus at which at least half that unowned frame-moving rate survives (46-51%) and tufts still strip sometimes (5-7%), while still clearing the +10pp field-average target with margin (+13.2 to +17.4pp on the 40-sheep world; +2.1 to +3.3pp on the default 5-sheep flock) and staying under tuftBitePerSec (0.018 * 2.9 = 0.0522 < 0.07) so a grazing sheep still wins locally on the tuft it is standing on. Small and farm-only, not part of the world's growth table (plan section 2)."
+      }
+    }
   }
 }

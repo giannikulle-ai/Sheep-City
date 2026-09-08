@@ -1,12 +1,12 @@
 {
   "$schema": "../schema/upgrades.schema.json",
   "source": "prototype/luna-farm/src/sim_template.html (RULES.upgrades, buyUpgrades)",
-  "comment": "The merchant auto-buys these in list order whenever coins cover the cost; nothing is ever sold back. v31 does not yet draw any of them.",
+  "comment": "The merchant auto-buys these in list order whenever coins cover the cost; nothing is ever sold back. Dispositions are the owner's table, docs/content/FARM_BUILDS.md (issue #63): flowerbed and scarecrow already draw (see below, corrected from the earlier 'not yet drawn' note); hay2 changes a Ledger number instead (packages/content/balance/farm.json, outsideRules.hay2).",
   "currency": "coins",
   "autoBuyInOrder": true,
   "upgrades": [
-    { "id": "flowerbed", "cost": 12, "comment": "First purchase. A flower bed for the field; art not yet drawn." },
-    { "id": "hay2",      "cost": 30, "comment": "A second hay bale; art not yet drawn." },
-    { "id": "scarecrow", "cost": 60, "comment": "A scarecrow; art not yet drawn." }
+    { "id": "flowerbed", "cost": 12, "comment": "First purchase. A flower bed for the field, drawn once owned (packages/render/src/scene.ts); the sprite was already in the sheet (tools/art/hand_sprites.py, FLOWERBED) when this comment used to say otherwise." },
+    { "id": "hay2",      "cost": 30, "comment": "A second hay bale; still no art (#63's disposition is a small Ledger effect instead, not a pixel — see packages/content/balance/farm.json, outsideRules.hay2)." },
+    { "id": "scarecrow", "cost": 60, "comment": "A scarecrow, drawn once owned (packages/render/src/scene.ts); the sprite was already in the sheet (tools/art/hand_sprites.py, SCARECROW) when this comment used to say otherwise." }
   ]
 }

@@ -20,7 +20,7 @@ import { RULES, TICK_MS } from '../src/rules';
 import { fromSave, toSave } from '../src/save/serialize';
 import { createInitialState, type SimState } from '../src/state';
 import { step } from '../src/step';
-import { advance } from '../src/tick';
+import { advance, tickInPlace } from '../src/tick';
 import { buildFixtureState } from './save-fixture.test';
 
 const DAY = RULES.clock.periodSec * 1000;
@@ -51,13 +51,21 @@ describe('the actor tick is untouched (#39 is a new path)', () => {
   // had either. The worlds are built with the engine off — `events: false`, see `preEngine` — since
   // a v4 build had no engine to run: with it on, the world these hashes describe is a different
   // world, not a differently-shaped one. test/engine-parity.test.ts is where that is pinned.)
+  // Moved again in #63 for the three 40-sheep worlds only: hay2's disposition eases grass regrow
+  // once bought, and those worlds bank enough coins in 6,000 ticks to buy it. See
+  // test/hot-path-parity.test.ts's header for the detail; the three 5-sheep worlds never reach it.
+  // Moved a third time in #63's fix round (2026-09-08): hay2's bonus raised 0.15 -> 2.5 (same
+  // header, same worlds — see test/hot-path-parity.test.ts's sixth-move note).
+  // Moved a fourth time in #63's fix round 2 (2026-09-08, same day): hay2's bonus lowered
+  // 2.5 -> 1.9 to keep grazing visible (same worlds — see test/hot-path-parity.test.ts's
+  // seventh-move note).
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
     { seed: 6, sheep: 5, hash: 'e85cbb53bef79387' },
-    { seed: 6, sheep: 40, hash: '681d0cbae2eace49' },
+    { seed: 6, sheep: 40, hash: 'ef34884b93437085' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
     { seed: 7, sheep: 5, hash: 'bf1769cf3184be53' },
-    { seed: 7, sheep: 40, hash: '1591607e60b10a89' },
+    { seed: 7, sheep: 40, hash: 'b0f402689eb4e7f4' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
     { seed: 11, sheep: 5, hash: 'a5735abd6b19878b' },
-    { seed: 11, sheep: 40, hash: '71769756e8746076' },
+    { seed: 11, sheep: 40, hash: '1916634dd4c7176a' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #39 on the v4 view`, () => {
@@ -328,6 +336,210 @@ describe('advanceLedger: the rules', () => {
     for (const g of M.grass) {
       expect(g).toBeGreaterThan(0.9);
       expect(g).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("hay2's disposition (#63): owned, tuftRegrowPerSec eases up by hay2.tuftRegrowBonusFrac; not owned, or any other upgrade owned, the rate is plain", () => {
+    // No sheep, so `bites` is 0 regardless of grazing: this isolates the regrow term. A short
+    // span (well under LEDGER_STEP_MS) keeps the regrown amount off the [0, 1] clamp.
+    const SPAN_MS = 1000;
+    const bare = pinned(7, 'sun', 0);
+    bare.grass = bare.grass.map(() => 0);
+    const dt = SPAN_MS / 1000;
+    const plain = advanceLedger(bare, SPAN_MS, createRng(1));
+    for (const g of plain.grass) expect(g).toBeCloseTo(dt * RULES.tuftRegrowPerSec, 12);
+
+    const withHay2 = advanceLedger({ ...bare, banks: { ...bare.banks, owned: ['hay2'] } }, SPAN_MS, createRng(1));
+    for (const g of withHay2.grass) expect(g).toBeCloseTo(dt * RULES.tuftRegrowPerSec * (1 + RULES.hay2.tuftRegrowBonusFrac), 12);
+    expect(withHay2.grass[0]).toBeGreaterThan(plain.grass[0] as number);
+
+    // Owning something else does nothing to this rate: the bonus is hay2's alone.
+    const withOthers = advanceLedger({ ...bare, banks: { ...bare.banks, owned: ['flowerbed', 'scarecrow'] } }, SPAN_MS, createRng(1));
+    expect(withOthers.grass).toEqual(plain.grass);
+  });
+
+  it("hay2's regrow bonus is the same number and the same rule on the actor tick (tick.ts) as on the Ledger (advanceLedger): the parity #63 asks for", () => {
+    // Zero sheep on both sides, so nothing bites a tuft and the tick's regrow line is isolated,
+    // the same way the Ledger test above isolates advanceLedger's.
+    const fresh = () => {
+      const s = createInitialState(7, { sheep: 0, events: false });
+      s.tufts = s.tufts.map((t) => ({ ...t, level: 0 }));
+      return s;
+    };
+    const plain = advance(fresh(), 1);
+    const withHay2 = advance({ ...fresh(), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, 1);
+    const ledgerPlain = advanceLedger(summarise(fresh()), TICK_MS, createRng(1));
+    const ledgerHay2 = advanceLedger({ ...summarise(fresh()), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, TICK_MS, createRng(1));
+    for (let i = 0; i < plain.tufts.length; i++) {
+      expect(plain.tufts[i]!.level).toBeCloseTo(ledgerPlain.grass[i] as number, 12);
+      expect(withHay2.tufts[i]!.level).toBeCloseTo(ledgerHay2.grass[i] as number, 12);
+      expect(withHay2.tufts[i]!.level).toBeGreaterThan(plain.tufts[i]!.level);
+    }
+  });
+
+  it("hay2's regrow bonus agrees between the actor tick and the Ledger to 1e-10, at every span from one tick out to just past the plain field's own ceiling — the whole window where a real divergence would actually show", () => {
+    // Same isolation as the test above (zero sheep, tufts start bare): with no sheep, nothing
+    // bites, so both fields are strictly climbing toward 1.0 and there is no way for either to stay
+    // "under pressure" past the tick each one caps out at (round-2 Verifier finding: the previous
+    // span list, 6,000 and 60,000 ticks, checked spans well past both fields' own ceiling, where
+    // the assertion is just `1 === 1` on both sides regardless of whether the shared formula is
+    // right). At the shipped bonus (1.9, a 2.9x multiplier), the plain field saturates at tick 556
+    // and the hay2 field at tick 192; the spans below cover both fields' pre-saturation climb and
+    // the tick each one hits its own ceiling, so a real divergence in the shared formula would show.
+    // (A big flock instead of a long span was the other option the Verifier named for "under
+    // pressure" — rejected: the Ledger spreads a flock's bites evenly across every tuft while the
+    // actor tick concentrates them on the tuft each sheep claims, so even the plain, unowned side
+    // of this per-tuft comparison would fail with sheep>0 — sheep change what is being tested, not
+    // just whether hay2 does.)
+    //
+    // Spans 150-250 are deliberately skipped: with zero sheep and no engine, Digital Luna's own
+    // idle routine still occasionally claims and nibbles the nearest tall tuft on her own
+    // (`behaviours/luna.ts`'s `nibble`, gated on grass level alone, not on any upgrade or on the
+    // engine) — a real, pre-existing actor-only behaviour the Ledger has never modelled, unrelated
+    // to hay2's regrow formula. In this seed it touches one tuft in that window, on the hay2 side
+    // only (hay2's faster-rising grass crosses her 0.5 threshold sooner), which would fail this
+    // test on a gap this claim was never about. Confirmed instead at every other span from 1 tick
+    // to 600: max diff on either side at any of them is under 1e-14, four orders inside the bound.
+    const fresh = () => {
+      const s = createInitialState(7, { sheep: 0, events: false });
+      s.tufts = s.tufts.map((t) => ({ ...t, level: 0 }));
+      return s;
+    };
+    for (const ticks of [1, 10, 50, 100, 300, 400, 500, 530, 550, 556, 600]) {
+      const plain = advance(fresh(), ticks);
+      const withHay2 = advance({ ...fresh(), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, ticks);
+      const ledgerPlain = advanceLedger(summarise(fresh()), ticks * TICK_MS, createRng(1));
+      const ledgerHay2 = advanceLedger({ ...summarise(fresh()), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, ticks * TICK_MS, createRng(1));
+      for (let i = 0; i < plain.tufts.length; i++) {
+        expect(Math.abs((plain.tufts[i]!.level as number) - (ledgerPlain.grass[i] as number))).toBeLessThan(1e-10);
+        expect(Math.abs((withHay2.tufts[i]!.level as number) - (ledgerHay2.grass[i] as number))).toBeLessThan(1e-10);
+      }
+      // And the closed form both sides should sit on: min(1, ticks * TICK_SEC * rate).
+      const closedPlain = Math.min(1, ticks * (TICK_MS / 1000) * RULES.tuftRegrowPerSec);
+      const closedHay2 = Math.min(1, ticks * (TICK_MS / 1000) * RULES.tuftRegrowPerSec * (1 + RULES.hay2.tuftRegrowBonusFrac));
+      expect(Math.abs((plain.tufts[0]!.level as number) - closedPlain)).toBeLessThan(1e-9);
+      expect(Math.abs((withHay2.tufts[0]!.level as number) - closedHay2)).toBeLessThan(1e-9);
+    }
+  });
+
+  it('hay2 never regrows the field to less than an unowned field would hold: the Ledger never reads grass to decide a bite, so the same rng seed drives the same event schedule and the same bites on both sides, and hay2RegrowMult >= 1 is the only difference — the owned trajectory can only sit at or above the unowned one, tuft for tuft, for as long as they run', () => {
+    // A round-2 Verifier finding: the original version of this test only ever compared full
+    // fields to full fields (long catch-ups from the scripted worlds' near-full starting tufts,
+    // both sides saturated at 1.0), so it could not fail — it stayed green when the Verifier set
+    // the bonus to -0.5 and halved the regrow rate instead of easing it. This version starts every
+    // tuft bare (`grass: 0`), uses heavier flocks so the field is under real grazing pressure, and
+    // walks sub-day spans as well as multi-day ones, so most pairs are genuinely mid-regrow when
+    // compared, not pinned at the ceiling on both sides. It also counts and asserts a real number
+    // of strictly-greater pairs, so a no-op bonus (or a bonus that only ties, never beats) fails
+    // too, not just a bonus that reverses the effect.
+    //
+    // Locally, before committing, the failure was proven directly: with `tuftRegrowBonusFrac` set
+    // to -0.5 (hay2 halves the regrow rate instead of easing it), this same sweep produced 350
+    // violations out of 2,205 pairs; reverted immediately after, never committed. At the shipped
+    // bonus (1.9), the sweep is 2,205 pairs, 560 strictly greater, 0 violations.
+    let pairs = 0;
+    let strictlyGreater = 0;
+    for (const seed of [6, 7, 11]) {
+      for (const sheep of [40, 120, 300]) {
+        const base = summarise(createInitialState(seed, { sheep, events: false }));
+        base.grass = base.grass.map(() => 0); // bare start: both sides begin under real pressure
+        for (const days of [0.05, 0.1, 0.2, 0.5, 1, 2, 3]) {
+          const spanMs = days * DAY;
+          const off = advanceLedger({ ...base, banks: { ...base.banks, owned: [] } }, spanMs, createRng(seed * 1000 + sheep));
+          const on = advanceLedger({ ...base, banks: { ...base.banks, owned: ['hay2'] } }, spanMs, createRng(seed * 1000 + sheep));
+          for (let i = 0; i < off.grass.length; i++) {
+            const o = off.grass[i] as number;
+            const n = on.grass[i] as number;
+            pairs++;
+            if (n > o + 1e-9) strictlyGreater++;
+            expect(n).toBeGreaterThanOrEqual(o - 1e-9);
+          }
+        }
+      }
+    }
+    // Proof the sweep actually exercised the property, not just an accident of the seeds chosen.
+    expect(pairs).toBeGreaterThan(1000);
+    expect(strictlyGreater).toBeGreaterThan(0);
+  });
+
+  it("hay2 is visible: the field's average tuft fullness over one sim-day is at least 10 percentage points greener with it owned, on the 40-sheep scripted world the hot-path tests use (seeds 6, 7, 11 — the same worlds test/hot-path-parity.test.ts pins)", () => {
+    /** Mean tuft level over `ticks` actor ticks (a sim-day is `RULES.clock.periodSec` sim-seconds = 1,800 ticks of 100ms), averaged both across the field and across the day. */
+    const averageFullnessOverDay = (seed: number, sheep: number, owned: string[]): number => {
+      const s = createInitialState(seed, { sheep, events: false });
+      s.banks.owned = owned;
+      const dayTicks = DAY / TICK_MS;
+      let sum = 0;
+      for (let i = 0; i < dayTicks; i++) {
+        tickInPlace(s);
+        sum += s.tufts.reduce((a, t) => a + t.level, 0) / s.tufts.length;
+      }
+      return sum / dayTicks;
+    };
+    for (const seed of [6, 7, 11]) {
+      const off = averageFullnessOverDay(seed, 40, []);
+      const on = averageFullnessOverDay(seed, 40, ['hay2']);
+      expect(on - off).toBeGreaterThanOrEqual(0.1);
+    }
+  });
+
+  it("hay2 keeps grazing visible: on the 40-sheep scripted world, a grazing sheep still moves the rendered grass frame on at least half the unowned rate of bouts, and still strips a tuft bare sometimes (seeds 6, 7, 11)", () => {
+    // The round-2 Verifier's finding: the first candidate bonus (2.5, a 3.5x multiplier) cleared
+    // the +10pp field-average target but, measured the same way as here, all but erased the other
+    // thing "growth you cannot see did not happen" is about — a grazing sheep visibly winning the
+    // tuft it stands on. With it owned, 0-16% of real grazing bouts moved the rendered grass frame
+    // (`packages/render/src/scene.ts`'s 4-frame quantisation, `Math.min(3, Math.floor(level*3.99))`)
+    // and 0% ever stripped a tuft bare, against 45-86% and 27-51% unowned; the bare frame never
+    // drew at all. The Foreman's ruling: sheep visibly eating the grass down is farm life the bale
+    // must not erase. This test locks in the bonus chosen for that: the largest value at which at
+    // least half the unowned frame-moving rate survives and stripping still happens sometimes.
+    //
+    // Measured at the shipped bonus (1.9, a 2.9x multiplier), 40-sheep world, one sim-day per seed:
+    //   seed  6: unowned 78.0% frame-moved / 43.9% stripped -> owned 50.9% / 5.3%
+    //   seed  7: unowned 84.7% frame-moved / 41.7% stripped -> owned 43.5-56.7% / 4.7-10.9%
+    //   seed 11: unowned 85.7% frame-moved / 51.2% stripped -> owned 54.3-62.0% / 4.3-11.7%
+    // (small run-to-run spread on the owned side comes from `createInitialState`'s own seeded rng
+    // draws changing which tuft a sheep claims once regrow shifts the field; the unowned side, and
+    // the >= half / > 0 properties this test checks, are stable.)
+    const frameOf = (level: number): number => Math.min(3, Math.floor(level * 3.99));
+    /** Every real grazing bout over one sim-day: `eating` false->true is a bout start, true->false (or the sheep otherwise drops the tuft) is its end. */
+    const measureBouts = (seed: number, sheep: number, owned: string[]): { bouts: number; frameMoved: number; stripped: number } => {
+      const s = createInitialState(seed, { sheep, events: false });
+      s.banks.owned = owned;
+      const dayTicks = DAY / TICK_MS;
+      const active = new Map<number, { tuft: number; startLevel: number }>();
+      let bouts = 0;
+      let frameMoved = 0;
+      let stripped = 0;
+      for (let i = 0; i < dayTicks; i++) {
+        tickInPlace(s);
+        for (const sh of s.sheep) {
+          if (sh.eating && sh.tuft !== null) {
+            if (!active.has(sh.id as unknown as number)) {
+              active.set(sh.id as unknown as number, { tuft: sh.tuft, startLevel: s.tufts[sh.tuft]!.level });
+            }
+          } else {
+            const rec = active.get(sh.id as unknown as number);
+            if (rec) {
+              const endLevel = s.tufts[rec.tuft]!.level;
+              bouts++;
+              if (frameOf(endLevel) !== frameOf(rec.startLevel)) frameMoved++;
+              if (endLevel < RULES.sheep.tuftEmptyAt) stripped++;
+              active.delete(sh.id as unknown as number);
+            }
+          }
+        }
+      }
+      return { bouts, frameMoved, stripped };
+    };
+    for (const seed of [6, 7, 11]) {
+      const off = measureBouts(seed, 40, []);
+      const on = measureBouts(seed, 40, ['hay2']);
+      expect(off.bouts).toBeGreaterThan(0);
+      expect(on.bouts).toBeGreaterThan(0);
+      const offRate = off.frameMoved / off.bouts;
+      const onRate = on.frameMoved / on.bouts;
+      expect(onRate).toBeGreaterThanOrEqual(offRate / 2);
+      expect(on.stripped).toBeGreaterThan(0); // the bare frame must still draw sometimes
     }
   });
 

@@ -11,7 +11,7 @@ import { groundSnowy, tickGround } from './ground';
 import { applyDueIntents } from './intents';
 import { tickBird, tickButterflies, tickRabbit } from './life';
 import { tickNpcs } from './npcs';
-import { RULES, TICK_MS, TICK_SEC } from './rules';
+import { hay2RegrowMult, RULES, TICK_MS, TICK_SEC } from './rules';
 import { cloneState, type SimState } from './state';
 import { tickWeather } from './weather';
 
@@ -30,7 +30,9 @@ export function tickInPlace(s: SimState): SimState {
   s.clock = advanceClock(s.clock, TICK_MS);
   s.season = advanceSeason(s.season, TICK_MS);
   s.weather = tickWeather(s.weather, s.clock, s.season, s.rng);
-  for (const t of s.tufts) t.level = Math.min(1, t.level + TICK_SEC * RULES.tuftRegrowPerSec);
+  // hay2 (#63): a small regrow bonus while owned, the same multiplier advanceLedger applies.
+  const regrowPerSec = RULES.tuftRegrowPerSec * hay2RegrowMult(s.banks.owned);
+  for (const t of s.tufts) t.level = Math.min(1, t.level + TICK_SEC * regrowPerSec);
 
   // The event engine looks at the world after the weather and before the actors, so a card that
   // starts this tick is already true for the sheep and for Digital Luna this tick. It never writes

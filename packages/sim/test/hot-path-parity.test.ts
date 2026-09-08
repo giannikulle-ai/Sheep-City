@@ -24,6 +24,26 @@
 // view — `events` stripped, version back to 6 — to the values this file carried before #40, which
 // is what proves the tick itself did not move. The engine-on worlds are pinned there too.
 //
+// They moved a fifth time in #63: hay2's disposition eases `tuftRegrowPerSec` up by a fraction
+// once owned (rules.ts's `hay2RegrowMult`), and the 40-sheep worlds bank enough coins inside 6,000
+// ticks to buy it (flowerbed at 12, hay2 at 30 more), so grass — and everything downstream of it —
+// runs differently for them from the moment it is bought. The three 5-sheep worlds never reach 42
+// coins in this window and are untouched; only the three 40-sheep hashes below moved.
+//
+// They moved a sixth time in #63's fix round (2026-09-08): the owner's disposition on the
+// Verifier's finding that the first cut's bonus (15%) was real but invisible was "make hay2
+// visible instead" — `hay2.tuftRegrowBonusFrac` was raised from 0.15 to 2.5 (see rules.ts and
+// docs/content/FARM_BUILDS.md). Same reasoning as the fifth move applies: only the three 40-sheep
+// worlds buy hay2 inside this window, so only their three hashes move again.
+//
+// They moved a seventh time in #63's fix round 2 (2026-09-08, same day): the round-2 Verifier
+// found that 2.5 (3.5x), while clearing the field-average target, also erased visible grazing —
+// almost no grazing bout moved the rendered grass frame or stripped a tuft with hay2 owned. The
+// Foreman's ruling was that sheep visibly eating the grass down is farm life the bale must not
+// erase, so `hay2.tuftRegrowBonusFrac` was lowered to 1.9 (2.9x), the largest value at which at
+// least half the unowned grazing-visibility rate survives. Same reasoning again: only the three
+// 40-sheep worlds move.
+//
 // If a hash here moves, some sheep, DL, or NPC took a different path or drew a different die.
 // That is a parity break, not a number to update: find the behaviour change first, and if it is a
 // deliberate new draw, say so in the PR.
@@ -38,11 +58,11 @@ const TICKS = 6000;
 
 const BEFORE: readonly { seed: number; sheep: number; hash: string }[] = [
   { seed: 6, sheep: 5, hash: '0791cd39c7e2aab8' },
-  { seed: 6, sheep: 40, hash: '205b7d4de17aaf10' },
+  { seed: 6, sheep: 40, hash: 'ab75ceacb516b7ae' }, // moved in #63's fix round 2: hay2's bonus lowered 2.5 -> 1.9
   { seed: 7, sheep: 5, hash: '0ed2243395f4d7e2' },
-  { seed: 7, sheep: 40, hash: 'bc20b20c5bffac4b' },
+  { seed: 7, sheep: 40, hash: 'a33d55048b809e3d' }, // moved in #63's fix round 2: hay2's bonus lowered 2.5 -> 1.9
   { seed: 11, sheep: 5, hash: '0e4a4606aab31838' },
-  { seed: 11, sheep: 40, hash: '391c982b6e6dec4f' },
+  { seed: 11, sheep: 40, hash: 'ce2977de7b3d70d2' }, // moved in #63's fix round 2: hay2's bonus lowered 2.5 -> 1.9
 ];
 
 describe('hot path parity (#27)', () => {

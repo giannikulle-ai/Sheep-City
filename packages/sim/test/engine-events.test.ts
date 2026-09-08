@@ -7,14 +7,14 @@ import { FARM_DECK } from '../src/engine/deck';
 import { applyAuthoredIntent, dayOfSeason, eligibleCards, endEvent, evaluate, preemptedByAuthored, readyAuthored, startEvent, triggerMet } from '../src/engine/engine';
 import { MOOD_RANGE } from '../src/engine/events';
 import { findLostLamb, REFERENCE_RULES, runHook } from '../src/engine/hooks';
-import { simMinutesToMs } from '../src/engine/pacing';
+import { PACING, simMinutesToMs } from '../src/engine/pacing';
 import { lambDistance, PREDICATE_RULES, readPredicate, viewOf } from '../src/engine/view';
 import { tickSheep } from '../src/behaviours/sheep';
 import { applyIntent } from '../src/intents';
 import { createInitialState, type Lamb, type SimState } from '../src/state';
 import { step } from '../src/step';
 import { advance, tickInPlace } from '../src/tick';
-import { atMs } from './engine-helpers';
+import { atMs, stubDeck } from './engine-helpers';
 import { world } from './luna-helpers';
 
 const PERIOD = 180;
@@ -160,6 +160,81 @@ describe('the owner’s authored intent', () => {
     const s = step(createInitialState(11, { events: false }), [{ type: 'authored', id: 'dlBirthday', action: 'trigger' }], 100);
     expect(s.events.running.map((r) => r.id)).toEqual(['dlBirthday']);
     expect(s.events.flags['party']).toBe(true);
+  });
+
+  // Round 1 verifier finding 3 (#82): `trigger` must not be a way around `PACING.concurrentCap`.
+  it('a trigger that would exceed the cap evicts the oldest running card, tells its end, and keeps the cap', () => {
+    const s = createInitialState(13, { events: false });
+    expect(PACING.concurrentCap).toBe(2);
+    startEvent(s, FARM_DECK, 'windfall', 'card');
+    atMs(s, s.clock.nowMs + 1000); // stagger startedMs so "oldest" is unambiguous
+    startEvent(s, FARM_DECK, 'strayCatVisits', 'card');
+    expect(s.events.running.map((r) => r.id)).toEqual(['windfall', 'strayCatVisits']);
+
+    applyIntent(s, { type: 'authored', id: 'cliffStorm', action: 'trigger' });
+
+    // The cap held: still two running, and it is the new authored event plus the *other* card —
+    // windfall, the older of the two, is the one that gave up its slot.
+    expect(s.events.running).toHaveLength(PACING.concurrentCap);
+    expect(s.events.running.map((r) => r.id)).toEqual(['strayCatVisits', 'cliffStorm']);
+    // The evicted card's end is told, with its own reason, and its cooldown is still set (an
+    // eviction is an early end, not a free pass on the deck's own pacing).
+    const evicted = s.chronicle.entries.find((e) => e.line.includes('A windfall'));
+    expect(evicted?.line).toBe("A windfall ended early to make room for the owner's own hand.");
+    expect(evicted?.source).toBe('card');
+    expect(s.events.cooldowns['windfall']).toBeDefined();
+  });
+
+  it('with no running card to give up, a trigger evicts the oldest running event of any kind', () => {
+    const s = createInitialState(14, { events: false });
+    startEvent(s, FARM_DECK, 'cliffStorm', 'authored');
+    atMs(s, s.clock.nowMs + 1000);
+    startEvent(s, FARM_DECK, 'firstSnowOfSeason', 'authored');
+    expect(s.events.running.map((r) => r.id)).toEqual(['cliffStorm', 'firstSnowOfSeason']);
+
+    applyIntent(s, { type: 'authored', id: 'dlBirthday', action: 'trigger' });
+
+    expect(s.events.running).toHaveLength(PACING.concurrentCap);
+    expect(s.events.running.map((r) => r.id)).toEqual(['firstSnowOfSeason', 'dlBirthday']);
+    expect(s.chronicle.entries.some((e) => e.line.startsWith('A storm off the cliff') && e.line.includes('to make room'))).toBe(true);
+  });
+});
+
+// Round 1 verifier finding 5 (#82): a save from a build whose deck has since dropped a card is a
+// world `validateWorld` deliberately allows (save/serialize.ts: "the keys are not [checked]: an id
+// the deck no longer carries is stale data, not an invalid world"). Its end must still be told.
+describe('a running id the deck no longer carries', () => {
+  it('is ended with its own chronicle line and no cooldown, whether ended by hand or by the clock', () => {
+    const deck = stubDeck([{ id: 'a', durationSimMinutes: 10 }]);
+    const s = createInitialState(15, { events: false });
+    s.events = { ...s.events, enabled: true };
+    startEvent(s, deck, 'a', 'card');
+    expect(s.events.running.map((r) => r.id)).toEqual(['a']);
+
+    // The world this save now loads into has a deck that no longer carries 'a' (a card dropped from
+    // the content since the save was written).
+    const shrunkDeck = stubDeck([]);
+    endEvent(s, shrunkDeck, 'a', 'due');
+    expect(s.events.running).toEqual([]);
+    expect(s.events.cooldowns['a']).toBeUndefined(); // no entry left to look one up on
+    const told = s.chronicle.entries.at(-1)!;
+    expect(told.line).toBe('a ended; the deck no longer carries it.');
+    expect(told.source).toBe('card');
+  });
+
+  it('the same, reached the ordinary way: the clock ends it inside `evaluate`, not a hand-written call', () => {
+    const deck = stubDeck([{ id: 'b', durationSimMinutes: 10 }]);
+    const s = createInitialState(16, { events: false });
+    s.events = { ...s.events, enabled: true };
+    startEvent(s, deck, 'b', 'card');
+    atMs(s, s.clock.nowMs + simMinutesToMs(11, s.clock.periodSec)); // past its duration
+
+    const shrunkDeck = stubDeck([]);
+    evaluate(s, shrunkDeck);
+
+    expect(s.events.running).toEqual([]);
+    expect(s.events.cooldowns['b']).toBeUndefined();
+    expect(s.chronicle.entries.some((e) => e.line === 'b ended; the deck no longer carries it.')).toBe(true);
   });
 });
 

@@ -177,9 +177,17 @@ function actorsOf(state: SimState, id: string): string[] {
  * End a running event: its own code effect first (so it can put the world back), then its data end
  * hooks, then the cooldown, then the chronicle line. `reason` is for the line: `'due'` when its
  * duration ran out, `'early'` when the world finished it (a fetched lamb), `'reset'` when the owner
- * reset it.
+ * reset it, `'evicted'` when the owner's own trigger needed the room (see `applyAuthoredIntent`).
+ * Whatever `reason` says, if the deck no longer carries this id — a save from a build whose deck has
+ * since dropped a card (finding 5, Round 1, #82) — there are no hooks and no cooldown to set, only a
+ * chronicle line saying so; see the `entry` check below.
  */
-export function endEvent(state: SimState, deck: Deck, id: string, reason: 'due' | 'early' | 'reset' = 'due'): void {
+export function endEvent(
+  state: SimState,
+  deck: Deck,
+  id: string,
+  reason: 'due' | 'early' | 'reset' | 'evicted' = 'due',
+): void {
   const e = state.events;
   const index = e.running.findIndex((r) => r.id === id);
   if (index < 0) return;
@@ -188,15 +196,34 @@ export function endEvent(state: SimState, deck: Deck, id: string, reason: 'due' 
   const entry = deck.byId.get(id);
   const now = state.clock.nowMs;
   REFERENCE_EFFECTS[id]?.end?.(state);
-  if (!entry) return;
+  if (!entry) {
+    // The deck this save (or this build) carries no longer has this id (finding 5, Round 1, #82):
+    // no hooks to run, no cooldown to set — there is nothing left to look one up on — but it ran,
+    // and its end is a fact, so it still gets a chronicle line.
+    tell(state, {
+      atMs: now,
+      district: FARM_DISTRICT,
+      line: `${id} ended; the deck no longer carries it.`,
+      picture: 'event-end',
+      source: 'card',
+      hint: 0,
+    });
+    return;
+  }
   const event: Card | AuthoredEvent = entry.kind === 'card' ? entry.card : entry.event;
   runHooks(state, event.hooks.end);
   e.cooldowns[id] = now + cooldownMs(state, entry.kind === 'card' ? entry.card : entry.event, entry.kind);
   const ranSimMinutes = Math.round(msToSimMinutes(now - running.startedMs, state.clock.periodSec));
+  const line =
+    reason === 'reset'
+      ? `${event.title} was called off.`
+      : reason === 'evicted'
+        ? `${event.title} ended early to make room for the owner's own hand.`
+        : `${event.title} ended after ${ranSimMinutes} sim-minutes.`;
   tell(state, {
     atMs: now,
     district: FARM_DISTRICT,
-    line: reason === 'reset' ? `${event.title} was called off.` : `${event.title} ended after ${ranSimMinutes} sim-minutes.`,
+    line,
     picture: `${event.storybook.picture}-end`,
     source: entry.kind,
     // An end is a real fact and is always told, but a storybook page is built from the thing that
@@ -286,6 +313,11 @@ export function drawAllowed(state: SimState): boolean {
 /** One card draw attempt under the pacing target. Returns the card that started, or null. */
 function attemptDraw(state: SimState, deck: Deck, view: EventView): RunningEvent | null {
   const e = state.events;
+  // The warm-up (PACING.warmupSimMinutes): no card draws in a fresh world's first stretch, so the
+  // very first look at the world does not win a card before the player has settled in. Authored
+  // events and category actions are not gated by this — they run earlier in `evaluate`, before this
+  // function is even called.
+  if (msToSimMinutes(state.clock.nowMs, state.clock.periodSec) < PACING.warmupSimMinutes) return null;
   if (!drawAllowed(state)) return null;
   const pacing = pacingAt(e.lastStartMs, state.clock.nowMs, state.clock.periodSec);
   const eligible = eligibleCards(state, deck, view);
@@ -341,10 +373,34 @@ export function tickEngine(state: SimState, deck: Deck = FARM_DECK): void {
 }
 
 /**
+ * The running event to give up when the owner's hand needs the room: the oldest-started `card`, so
+ * an authored event never gets bumped for another authored event while an ordinary card is running
+ * next to it; the oldest-started running event of any kind if every slot happens to be authored
+ * (Round 1 verifier finding 3, #82 — undecided by the plan, so the tie-break is "oldest wins", the
+ * same rule `runningMoments` and the draw already read `running` in).
+ */
+function oldestToEvict(state: SimState): RunningEvent | null {
+  const running = state.events.running;
+  if (running.length === 0) return null;
+  let oldestCard: RunningEvent | null = null;
+  let oldestAny: RunningEvent = running[0] as RunningEvent;
+  for (const r of running) {
+    if (r.startedMs < oldestAny.startedMs) oldestAny = r;
+    if (r.kind === 'card' && (oldestCard === null || r.startedMs < oldestCard.startedMs)) oldestCard = r;
+  }
+  return oldestCard ?? oldestAny;
+}
+
+/**
  * The owner's `authored` intent: `trigger` starts an authored event whatever its own trigger says
  * (the plan's "the owner can trigger and reset world-impacting events from the interface"), and
  * `reset` ends one that is running and clears its cooldown so it can happen again. Both are no-ops
  * for an id the deck does not carry, or for `trigger` on one already running.
+ *
+ * `trigger` respects `PACING.concurrentCap` the way `evaluate`'s own authored and card draws do
+ * (Round 1 verifier finding 3, #82): the owner's hand is not a way around the cap. When the cap is
+ * already full it evicts the oldest running event to make room — see `oldestToEvict` — rather than
+ * silently doing nothing, so the owner's hand always works and the cap still holds at every tick.
  */
 export function applyAuthoredIntent(state: SimState, id: string, action: 'trigger' | 'reset', deck: Deck = FARM_DECK): void {
   const entry = deck.byId.get(id);
@@ -352,6 +408,10 @@ export function applyAuthoredIntent(state: SimState, id: string, action: 'trigge
   const e = state.events;
   if (action === 'trigger') {
     if (isRunning(e, id)) return;
+    if (e.running.length >= PACING.concurrentCap) {
+      const evicted = oldestToEvict(state);
+      if (evicted) endEvent(state, deck, evicted.id, 'evicted');
+    }
     startEvent(state, deck, id, 'authored');
     return;
   }

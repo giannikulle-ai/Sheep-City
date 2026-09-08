@@ -404,7 +404,9 @@ describe('v5 to v6', () => {
   it('a loaded v5 world is complete, steps, and can tell into its fresh chronicle', () => {
     const loaded = fromSave(fixture('save-v5.json'));
     expect(loaded.chronicle).toEqual(createChronicle());
-    const after = advance(loaded, 100);
+    // The engine off for the step: this is about the migration filling a fresh chronicle and the
+    // world still ticking, not about what the engine (#40) tells into it once it is directing.
+    const after = advance({ ...loaded, events: { ...loaded.events, enabled: false } }, 100);
     expect(after.chronicle).toEqual(createChronicle());
     expect(fromSave(toSave(loaded))).toEqual(loaded);
   });

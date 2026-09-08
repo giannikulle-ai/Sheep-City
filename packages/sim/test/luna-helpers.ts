@@ -17,14 +17,21 @@ export interface WorldOptions {
   /** Freeze `t` so the phase stays put. Default true. */
   pauseClock?: boolean;
   sheep?: number;
+  /**
+   * Let the event engine direct this world. Default false (#40): these are behaviour tests, and a
+   * card drawing the merchant in or topping up every fleece halfway through one is noise, not
+   * coverage. The engine has its own tests (test/engine-*.test.ts).
+   */
+  events?: boolean;
 }
 
 /**
  * A private world with the dice out of the weather: manual weather mode (no random rain), a
- * paused clock (the phase you asked for stays), and the season you name.
+ * paused clock (the phase you asked for stays), the season you name, and the event engine off
+ * unless the caller asks for it.
  */
 export function world(options: WorldOptions = {}): SimState {
-  const s = cloneState(createInitialState(options.seed ?? 7, options.sheep === undefined ? {} : { sheep: options.sheep }));
+  const s = cloneState(createInitialState(options.seed ?? 7, { ...(options.sheep === undefined ? {} : { sheep: options.sheep }), events: options.events ?? false }));
   s.weather = { ...s.weather, mode: 'manual' };
   if (options.weather) s.weather = setWeather(s.weather, options.weather);
   if (options.t !== undefined) s.clock = { ...s.clock, t: options.t };

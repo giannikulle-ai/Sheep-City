@@ -30,6 +30,9 @@ describe('the registry holds DL in the owner’s order', () => {
     // `act` (#43, the deity direct action) is a chain of its own after `move`: it adds a new
     // reaction gated on being free (not held, ridden, mounted, fetching, or in a busy routine); it
     // does not reorder any of the owner's chains above.
+    // `fetchLamb` (#40, the `lostLamb` card's own half of the work) is one new entry in the
+    // `routine` chain, between the rain shepherd and bedtime: a lamb out at dusk outranks a night
+    // in, and a whole flock in the rain outranks one lamb. Nothing else moved.
     expect(LUNA_BEHAVIOURS.chains()).toEqual(['riding', 'fetch', 'command', 'routine', 'move', 'act']);
     expect(LUNA_BEHAVIOURS.behaviours('riding').map((b) => b.id)).toEqual(['riding']);
     expect(LUNA_BEHAVIOURS.get('riding')?.exclusive).toBeFalsy();
@@ -40,6 +43,7 @@ describe('the registry holds DL in the owner’s order', () => {
       'tiltRecover',
       'pantRest',
       'rainShepherd',
+      'fetchLamb',
       'bedtime',
       'hotPant',
       'idlePlay',

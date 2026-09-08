@@ -12,6 +12,12 @@ import { settle } from './sheep-helpers';
 
 const N = RULES.npc;
 
+/**
+ * A world for the NPC tests: the engine off (#40) on top of what `world` already pins down. These
+ * tests summon the farmer and the merchant themselves and count what follows; a card drawing one of
+ * them in mid-test would be noise. The engine's own hold on the two of them is tested in
+ * test/engine-events.test.ts and test/engine-category.test.ts.
+ */
 function calm(options: Parameters<typeof world>[0] = {}): SimState {
   const s = settle(world(options));
   s.luna.x = 300;
@@ -25,7 +31,10 @@ function footOf(n: Npc) {
 
 describe('schedules', () => {
   it('the farmer comes at clock .06 and .38, once each per day; the merchant 45 s after reset', () => {
-    const s = createInitialState(7);
+    // The engine off (#40): this pins the prototype's own schedule. With the engine directing, the
+    // merchant arrives on a `merchantCaravan` draw instead of his 45-second timer, and the farmer
+    // has a third visit — the dawn market walk, a category action — on top of these two.
+    const s = createInitialState(7, { events: false });
     s.weather = { ...s.weather, mode: 'manual' };
     const farmerAt: number[] = [];
     const merchantAt: number[] = [];

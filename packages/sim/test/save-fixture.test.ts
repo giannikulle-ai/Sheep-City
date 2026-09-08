@@ -12,6 +12,7 @@ import { v3NpcDefaults } from '../src/save/migrations/v3-flock-and-npc-fields';
 import { V4_STAMP_DEFAULTS, v4GroundDefault } from '../src/save/migrations/v4-ground-and-stamps';
 import { summarise } from '../src/ledger/ledger';
 import { createChronicle, tell } from '../src/chronicle/store';
+import { v7EventsDefault } from '../src/save/migrations/v7-events';
 import { SAVE_FORMAT } from '../src/save/doc';
 import { fromSave, toSave, toSaveText } from '../src/save/serialize';
 import { createInitialState, SAVE_VERSION, type SimState } from '../src/state';
@@ -81,6 +82,24 @@ export function buildFixtureState(): SimState {
   s.banks = { wool: 2, coins: 6, owned: ['flowerbed'] };
   s.ground.prints.push({ x: 300, y: 250, tMs: now - 20_000 }, { x: 306, y: 248, tMs: now - 19_300 });
   s.pendingIntents.push({ type: 'setSeason', season: 'winter', at: s.clock.tick + 500 });
+  // Hand-filled engine corners (#40) so the fixture covers every type on `EventsState`: a card
+  // running with its own start behind it, another id on cooldown, a flag, a mood offset, a
+  // remembered shower, and the lamb that card walked off its mother's trail (`lost`, plus the
+  // marker that points at it). Consistent on purpose: this is the `lostLamb` card mid-run, which is
+  // what Digital Luna's `fetchLamb` behaviour reads when a loaded world starts ticking again.
+  const lostLamb = s.sheep[1]!.lambs[0]!;
+  lostLamb.lost = true;
+  s.events.running.push({ id: 'lostLamb', kind: 'card', startedMs: now - 1_000, endsMs: now + 14_000 });
+  s.events.starts['lostLamb'] = now - 1_000;
+  s.events.starts['merchantCaravan'] = now - 100_000;
+  s.events.cooldowns['merchantCaravan'] = now + 140_000;
+  s.events.lastStartMs = now - 1_000;
+  s.events.lastDrawMs = now - 1_000;
+  s.events.lastMomentKind = 'lamb';
+  s.events.flags['lambLost'] = true;
+  s.events.mood = 2;
+  s.events.lastRainMs = now - 60_000;
+  s.events.lostLamb = { sheep: s.sheep[1]!.id, bornMs: lostLamb.bornMs };
   // Two hand-placed chronicle entries so the fixture covers every type on `ChronicleEntry`: a
   // 'ledger' line with only a numeric fact and no actors (its first telling of 'wool', so
   // notability 1), and an 'authored' line with a hint, actors, and a string fact.
@@ -231,6 +250,7 @@ describe('save fixtures', () => {
       out = { ...out, ledger: summarise(out as unknown as SimState), lastLedgerAt: clock.nowMs };
     }
     if (from < 6) out = { ...out, chronicle: createChronicle() };
+    if (from < 7) out = { ...out, events: v7EventsDefault(out) };
     return out;
   }
 

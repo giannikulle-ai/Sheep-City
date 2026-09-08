@@ -118,16 +118,23 @@ const EXPECTED = [
 
 /** Weather, visitors, DL's barn entry, and the bird on the same day, for the shape of the story. */
 const EVENTS = [
+  // The merchant's arrival and the two dawn lines are the event engine's (#40), not the sheep's:
+  // his visit is the `merchantCaravan` card now instead of the prototype's 45-second timer (drawn
+  // at tick 15 on this seed, gone by 416), and the farmer walks past to the market at dawn (tick
+  // 1333 to 1470) as a category action. Every other line, and every sheep transition above, is
+  // exactly what this day was before the engine existed.
+  '15 merchant true',
   '165 bird lands',
   '225 bird leaves',
   '361 farmer true',
-  '451 merchant true',
+  '416 merchant false',
   '596 bird lands',
   '666 bird leaves',
-  '852 merchant false',
   '1103 bird lands',
   '1170 bird leaves',
   '1226 farmer false',
+  '1333 farmer true',
+  '1470 farmer false',
   '1539 rain true',
   '1585 farmer true',
   '1781 luna in',
@@ -196,13 +203,18 @@ describe('scripted sheep day', () => {
   // `ledger`, `lastLedgerAt`); the lists above did not, and test/ledger.test.ts pins this day on
   // its v4 view to the hash from before. It moved again in #60 for the schema only (save v6:
   // `chronicle`, empty since nothing here calls `tell`); the lists above still did not, and
-  // test/chronicle.test.ts pins this day on its v5 view to the hash from before.
+  // test/chronicle.test.ts pins this day on its v5 view to the hash from before. It moved a third
+  // time in #40, and this one is not schema-only: the engine draws cards on this day (the
+  // merchant's cart, a stray cat, a fog morning, and DL's birthday — see the chronicle) and its
+  // own slice is on the state. The *sheep* list above did not move by a single line; the events
+  // list moved by four, all of them the engine's, and test/engine-parity.test.ts pins this day
+  // with the engine off, on its v6 view, to the hash from before #40.
   it('seed 71 twice gives the same day and the same hash', () => {
     const a = scriptedDay(71);
     const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('d0588aba21596281');
+    expect(hashState(a.state)).toBe('341bc0061cce3681');
   });
 
   it('the shape of the day holds for other seeds: needs by day, rest by night, in the barn in rain', () => {
@@ -220,7 +232,9 @@ describe('scripted sheep day', () => {
       }
       if (events.some((e) => /rain true/.test(e))) expect(text, `seed ${seed}`).toMatch(/^\d+ \w+ toBarn/m);
       expect(events, `seed ${seed}`).toContain('361 farmer true');
-      expect(events, `seed ${seed}`).toContain('451 merchant true');
+      // The merchant's arrival is a card draw now (#40), not a stopwatch: it lands on a different
+      // tick on every seed, so the shape to hold is "he came at all", not "he came at 451".
+      expect(events.filter((e) => /merchant true/.test(e)), `seed ${seed}`).not.toEqual([]);
       // Prints only ever lie on snowy ground, and the flock walking in from a shower leaves mud.
       if (state.weather.kind !== 'snow') expect(state.ground.prints, `seed ${seed}`).toEqual([]);
     }

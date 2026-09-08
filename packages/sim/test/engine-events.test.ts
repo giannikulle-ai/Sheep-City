@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { SEASON_MS } from '../src/clock';
 import { FARM_DECK } from '../src/engine/deck';
-import { applyAuthoredIntent, dayOfSeason, eligibleCards, endEvent, evaluate, preemptedByAuthored, readyAuthored, startEvent, triggerMet } from '../src/engine/engine';
+import { applyAuthoredIntent, dayOfSeason, eligibleCards, endEvent, evaluate, preemptedByAuthored, readyAuthored, seasonDayOfFraction, seasonFraction, startEvent, triggerMet } from '../src/engine/engine';
 import { MOOD_RANGE } from '../src/engine/events';
 import { findLostLamb, REFERENCE_RULES, runHook } from '../src/engine/hooks';
 import { PACING, simMinutesToMs } from '../src/engine/pacing';
@@ -27,18 +27,71 @@ function card(id: string) {
 }
 
 describe('authored triggers', () => {
-  it('a date: DL’s birthday is the first day of spring, and a new world is born on it', () => {
+  it('a real date (DL’s birthday, December 15) is loaded, marked deferred to #84, and never fires', () => {
+    // The owner's calendar decision (plan section 2 and decision 10): Digital Luna's birthday is
+    // December 15, a real calendar date, not a point in the sim's own season wheel. The world lane
+    // put the event on a `realDate` trigger in #83. This engine has no real date to compare against
+    // — that needs `outsideRules.seasons.calendar` wired into the sim, which is ticket #84 — so the
+    // event loads *deferred*: it is in the deck, it carries the deferral note, and `triggerMet` is
+    // false for it every time. See `deck.ts`'s `trigger()` and `engine.ts`'s `triggerMet` for why
+    // this is a park rather than either a throw or a silent never-true.
+    const birthday = FARM_DECK.authored.find((e) => e.id === 'dlBirthday')!;
+    expect(birthday.trigger.kind).toBe('realDate');
+    expect(birthday.deferred).toEqual({ kind: 'realDate', ticket: '#84' });
     const s = createInitialState(1, { events: false });
-    expect(dayOfSeason(s)).toBe(1);
-    expect(triggerMet(s, viewOf(s), FARM_DECK.authored[0]!)).toBe(true);
-    // One sim-day later it is day 2 and the date has passed.
-    s.season = { ...s.season, elapsedMs: PERIOD * 1000 };
-    expect(dayOfSeason(s)).toBe(2);
-    expect(triggerMet(s, viewOf(s), FARM_DECK.authored[0]!)).toBe(false);
-    // A season is nine real days of sim time, so the date comes round once a cycle, not once a day.
-    s.season = { ...s.season, elapsedMs: SEASON_MS * 4 };
-    expect(dayOfSeason(s)).toBe(1);
-    expect(triggerMet(s, viewOf(s), FARM_DECK.authored[0]!)).toBe(true);
+    expect(triggerMet(s, viewOf(s), birthday)).toBe(false);
+    // Not on any day of any season, and not at any point in the four-season cycle either.
+    for (const elapsed of [0, PERIOD * 1000, SEASON_MS, SEASON_MS * 2.5, SEASON_MS * 4]) {
+      s.season = { ...s.season, elapsedMs: elapsed };
+      expect(triggerMet(s, viewOf(s), birthday), `elapsedMs ${elapsed}`).toBe(false);
+    }
+    // The owner's own hand still starts it — `applyAuthoredIntent` ignores the trigger by design —
+    // which is the only way the birthday happens in the sim until #84 lands.
+    const owned = createInitialState(1, { events: false });
+    applyAuthoredIntent(owned, 'dlBirthday', 'trigger', FARM_DECK);
+    expect(owned.events.running.map((r) => r.id)).toContain('dlBirthday');
+  });
+
+  it('a deferred authored event never starts by itself over a long unattended run', () => {
+    // The other half of the same fact, from the outside: five real minutes of a world that is
+    // otherwise free to do what it likes, and the birthday is not in it. `dlBirthday` used to be
+    // the first start on every seed, at 0.1 real seconds; deferring it is what removed that.
+    for (const seed of [1, 9, 25]) {
+      const s = advance(createInitialState(seed), 3000);
+      const told = s.chronicle.entries.filter((e) => e.line.includes('birthday'));
+      expect(told, `seed ${seed}`).toEqual([]);
+      expect(s.events.running.map((r) => r.id), `seed ${seed}`).not.toContain('dlBirthday');
+      expect(s.events.cooldowns['dlBirthday'], `seed ${seed}`).toBeUndefined();
+    }
+  });
+
+  it('a sim date is a fraction of the season, and is due for the sim-day it falls in', () => {
+    // The world lane's #83 redefined `simDate.dayOfSeason` as a fraction in [0, 1) rather than the
+    // 1-based day index 1-9 it used to be, because a season under the real-year calendar no longer
+    // has a fixed day count to point at. No shipped authored event uses `simDate` today; this pins
+    // the engine's reader against the schema's new meaning. See `seasonFraction` (engine.ts).
+    const s = createInitialState(1, { events: false });
+    const mid = stubDeck([{ id: 'c' }], [{ id: 'midSummer', trigger: { kind: 'simDate', season: 'summer', dayOfSeason: 0.5 } }]);
+    const event = mid.authored[0]!;
+    expect(event.deferred).toBeUndefined();
+    // A season is SEASON_MS of sim time; summer is the second quarter of the four-season wheel.
+    s.season = { ...s.season, elapsedMs: SEASON_MS + SEASON_MS * 0.5 };
+    expect(seasonFraction(s)).toBeCloseTo(0.5, 9);
+    expect(triggerMet(s, viewOf(s), event)).toBe(true);
+    // Still true anywhere inside that one sim-day (three real minutes), and false the next one.
+    const dayMs = PERIOD * 1000;
+    s.season = { ...s.season, elapsedMs: SEASON_MS + SEASON_MS * 0.5 + dayMs * 0.9 };
+    expect(triggerMet(s, viewOf(s), event)).toBe(true);
+    s.season = { ...s.season, elapsedMs: SEASON_MS + SEASON_MS * 0.5 + dayMs * 1.1 };
+    expect(triggerMet(s, viewOf(s), event)).toBe(false);
+    // The right season, too: the same fraction of spring is not the same fraction of summer.
+    s.season = { ...s.season, elapsedMs: SEASON_MS * 0.5 };
+    expect(triggerMet(s, viewOf(s), event)).toBe(false);
+    // And the season fraction is a fraction: 0 at the season's first moment, never 1.
+    s.season = { ...s.season, elapsedMs: 0 };
+    expect(seasonFraction(s)).toBe(0);
+    expect(seasonDayOfFraction(s, 0)).toBe(1);
+    expect(seasonDayOfFraction(s, 0.5)).toBe(dayOfSeason({ ...s, season: { ...s.season, elapsedMs: SEASON_MS * 0.5 } }));
   });
 
   it('a stock threshold: the cliff storm waits for a real drought', () => {
@@ -70,9 +123,14 @@ describe('authored triggers', () => {
     evaluate(s, FARM_DECK); // it ends here, and its cooldown starts
     expect(s.events.running.map((r) => r.id)).not.toContain('firstSnowOfSeason');
     expect(readyAuthored(s, FARM_DECK).map((e) => e.id)).not.toContain('firstSnowOfSeason');
-    // Well past the cooldown (30 sim-days) it is ready again: this is the first snow of a season,
-    // not of the world.
-    atMs(s, s.clock.nowMs + 31 * PERIOD * 1000);
+    // Well past the cooldown it is ready again: this is the first snow of a season, not of the
+    // world. The world lane rescaled that cooldown from 30 sim-days to 60,000 in #83 (a sim-day is
+    // the clock's 180-second period, not a real day, so 30 sim-days was about 90 real minutes and
+    // let the snow re-arm several times a winter); this steps past the number the data now carries
+    // rather than a hard-coded one, so a further rescale moves the test with it.
+    const snowCooldown = FARM_DECK.authored[2]!.trigger;
+    if (snowCooldown.kind !== 'predicates') throw new Error('firstSnowOfSeason is not a predicate trigger any more');
+    atMs(s, s.clock.nowMs + (snowCooldown.cooldownSimDays + 1) * PERIOD * 1000);
     expect(readyAuthored(s, FARM_DECK).map((e) => e.id)).toContain('firstSnowOfSeason');
   });
 });

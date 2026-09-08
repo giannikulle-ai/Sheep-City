@@ -4,7 +4,7 @@
 // bottom use the shipped fifteen.
 import { describe, expect, it } from 'vitest';
 import { drawAllowed, eligibleCards, endEvent, evaluate, liveWeight, runningMoments, startEvent } from '../src/engine/engine';
-import { FARM_DECK } from '../src/engine/deck';
+import { FARM_DECK, momentKindOf } from '../src/engine/deck';
 import { drawChance, msToSimMinutes, PACING, pacingAt, simHoursToMs, simMinutesToMs } from '../src/engine/pacing';
 import { viewOf } from '../src/engine/view';
 import { hashState } from '../src/hash';
@@ -25,21 +25,23 @@ function bench(seed = 1): SimState {
 describe('the pacing numbers are data', () => {
   it('every one of them is on PACING, with the sim-minute conversion the deck files declare', () => {
     // Round 1 moved this off the plan's every-sim-minute after measuring +66.8 ms on the charter's
-    // catch-up bench. Round 2 verifier found every-two-minutes still NOT MET on 2 of 4 runs on a
-    // different box (mean 1014.4 ms vs. trunk 897.3 ms); tracing the cost (this round) found most of
-    // it was not predicate evaluation at all but `farmerMarketWalk`'s own downstream cost
-    // (`engine/category.ts`) — a real feature, not a bug. `evaluate`'s own share is cut by the
-    // `couldStartSomething` early-out in `engine/engine.ts` (RNG-neutral, checked directly): with it,
-    // still at `evalEverySimMinutes: 2`, four runs each measured branch mean 981.6 ms (MET 3/4, up
-    // from Round 1's 2/4) against trunk's 872.4 ms (MET 4/4), and the engine's own true share
-    // (branch vs. the same build with the engine forced off) is +51.8 ms, down from Round 1's
-    // ~117 ms. A further coarsening to every four minutes was measured too and rejected — the
-    // corrected warm-up already holds the median at 2 card/authored starts per five minutes at this
-    // constant (seeds 1-30: range 1 to 3, 2 of 30 draw no card at all); every-four-minutes keeps
-    // that median and range but roughly doubles the totally-quiet seeds to 4 of 30, for a budget
-    // line whose real cost lever sits elsewhere. Full numbers and the profiling trail are in the
-    // constant's own comment in `engine/pacing.ts` and the PR's
-    // Round 2 note.
+    // catch-up bench. Round 2's verifier re-measured on another box and found every-two-minutes
+    // still NOT MET on 2 of 4 runs; tracing the cost found most of it was not predicate evaluation
+    // at all but `farmerMarketWalk`'s own downstream cost (`engine/category.ts`) — a real feature
+    // the owner asked for, not a bug. `evaluate`'s own share is cut by the `couldStartSomething`
+    // early-out in `engine/engine.ts` (RNG-neutral, checked directly).
+    //
+    // Round 3's bench, four runs each on one box and one install, is in `engine/pacing.ts`'s own
+    // comment and the PR note; the short version is that this box cannot resolve the charter's
+    // 1,000 ms line for either build — trunk's own worst run is inside 1 % of it — and the Foreman
+    // has ruled the line **advisory until #78 lands**. The engine's own share is about +69 ms, of
+    // which about +57 ms is the farmer's market walk. Nothing here claims the branch is under
+    // budget, and nothing here claims it broke one.
+    //
+    // The density figures this comment used to carry (a median of 2 starts with 2 of 30 seeds
+    // drawing no card) did not reproduce and are gone; what the current head actually measures is
+    // in the "five unattended minutes" block at the bottom of this file, and every number there was
+    // measured on this head with two independent rulers.
     expect(PACING.evalEverySimMinutes).toBe(2);
     expect(PACING.concurrentCap).toBeGreaterThan(0);
     expect(PACING.minGapSimMinutes).toBeGreaterThan(0);
@@ -304,43 +306,122 @@ describe('the draw is deterministic and part of the hash', () => {
 });
 
 describe('five unattended minutes', () => {
-  // The ticket's own bar: "a scripted five-minute run shows at least three distinct moment kinds".
-  // Five real minutes of watching is 3,000 ticks, one and two thirds sim-days.
+  // The ticket's own bar (docs/SHEEPCLIFF_PLAN.md, Phase 1 exit): "five unattended sim-minutes at
+  // seed 9 show three distinct moment kinds". Five real minutes of watching is 3,000 ticks, one and
+  // two thirds sim-days.
   //
-  // Seed 9 was the pinned seed through Round 1. Round 2 fixed `warmupSimMinutes` to the owner's
-  // actual "no draws in a fresh world's first minute" (480 sim-minutes, not the 60 Round 1's own
-  // comment miscounted by 8x — `engine/pacing.ts`), and that reshuffles which draw lands when for
-  // every seed, seed 9 included: measured directly, its five minutes now hold only two kinds
-  // (`bubble`, `dl-trick` — DL's birthday, then a stray cat), not three. Traced the run: a
-  // `merchantCaravan` window does open once, boosted by the quiet relaxation, right at the day/dusk
-  // boundary near the watch's midpoint — but this seed's own roll misses it, and the window closes
-  // into a night with nothing else eligible before the watch ends. That is this exact RNG stream's
-  // own bad luck under the corrected warm-up, not a systemic loss of variety: of seeds 1-30 under
-  // the same fix, 18 of 30 still clear three distinct kinds in five minutes (round-2 note has the
-  // full table). Seed 9 is simply no longer one of them, the same way luna-day.test.ts and
-  // sheep-day.test.ts each moved off an earlier pinned seed when a past RNG-affecting change made
-  // that seed's day a different day. Re-pinned to seed 25 (`dlBirthday`, `merchantCaravan`,
-  // `lambZoomiesHour`: `bubble`, `npc-arrival`, `lamb`) — the bar itself (three distinct kinds,
-  // never twice in a row) is exactly as strict as before; only the seed that demonstrates it moved.
-  it('shows at least three distinct moment kinds, and never the same kind twice in a row', () => {
-    let s = createInitialState(25);
+  // READ THIS BEFORE TRUSTING THE NUMBER BELOW. On this head that bar is met by **no seed at all**,
+  // and the reason is a decision, not a regression:
+  //
+  //   * Through rounds 1 and 2, `dlBirthday` fired in the first 0.1 real seconds of every world,
+  //     because its trigger was "the first day of spring" and a fresh world starts on it. It was a
+  //     free start and a free `bubble` kind on all 30 seeds, and it is the whole reason 18 of 30
+  //     seeds used to clear three kinds.
+  //   * The owner then decided the birthday is **December 15, a real calendar date** (plan decision
+  //     10). The world lane put it on a `realDate` trigger in #83, and this engine defers that kind
+  //     to #84 (`engine/deck.ts`) because answering "is it December 15?" needs a real-year calendar
+  //     the sim does not have. So the birthday no longer opens every world — which is what the
+  //     owner asked for — and the free kind is gone with it.
+  //
+  // What is left is the card deck alone, drawing under the owner's own pacing: a real minute of
+  // warm-up out of a five-minute watch, then a 100-real-second gap between starts. That allows at
+  // most three starts in a watch and in practice gives two. Measured on this head, seeds 1-30,
+  // 3,000 ticks, two independent rulers agreeing seed for seed (new entries in `events.running`,
+  // and non-"ended" card/authored chronicle lines): **median 2 starts, range 1 to 2, mean 1.90**;
+  // **26 of 30** seeds show two distinct moment kinds; **0 of 30** show three; **0 of 30** go
+  // without a card. Sweeping the levers does not rescue three kinds either — `minGapSimMinutes`
+  // 800 -> 600 gives 1 of 30, -> 300 gives 6 of 30, `weightForCertainDraw` 12000 -> 4000 gives 3 of
+  // 30, and gap 600 with weight 9000 together gives 9 of 30 while pushing the mean to 2.37, past
+  // the owner's "about three moments per five minutes". Three kinds in five minutes and the owner's
+  // pacing are in genuine tension once the birthday is not free, and which one gives is the owner's
+  // call, not this lane's: see the PR's "Owner decision needed?".
+  //
+  // So the population test below pins what is true — that a five-minute watch is not one thing
+  // happening once — at a floor with margin, and the seed-9 test is the readable demonstration on
+  // the plan's own seed. Neither of them is the plan's three-kind bar, and neither pretends to be.
+  it('seed 9, the plan’s own seed: two distinct moment kinds, and never the same kind twice running', () => {
+    // Seed 9 was the plan's pinned seed; round 2 moved it to 25 after the warm-up fix, which the
+    // round-3 verifier rightly called a seed chosen because it passed. Moving back to the plan's own
+    // seed removes that choice: seed 9 is not picked, it is the one the document names. What it
+    // shows on this head is a stray cat (`dl-trick`) and the merchant (`npc-arrival`) — two starts,
+    // two kinds, no repeat.
+    let s = createInitialState(9);
     const kinds = new Set<string>();
     const order: string[] = [];
-    let running = '';
+    const kindOrder: string[] = [];
+    const seen = new Set<string>();
     for (let i = 0; i < 3000; i++) {
       s = advance(s, 1);
       for (const kind of runningMoments(s)) kinds.add(kind);
-      const ids = s.events.running.map((r) => `${r.id}@${r.startedMs}`).join(',');
-      if (ids !== running) {
-        for (const r of s.events.running) if (!order.includes(`${r.id}@${r.startedMs}`)) order.push(`${r.id}@${r.startedMs}`);
-        running = ids;
+      for (const r of s.events.running) {
+        const key = `${r.id}@${r.startedMs}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        order.push(key);
+        kindOrder.push(momentKindOf(r.id) ?? '?');
       }
     }
-    expect(kinds.size).toBeGreaterThanOrEqual(3);
-    expect(order.length).toBeGreaterThanOrEqual(3);
-    // Every start is in the chronicle, and the world is not dead: at least one every two minutes.
+    expect(order.map((k) => k.split('@')[0])).toEqual(['strayCatVisits', 'merchantCaravan']);
+    expect(kindOrder).toEqual(['dl-trick', 'npc-arrival']);
+    expect(kinds.size).toBeGreaterThanOrEqual(2);
+    expect(order.length).toBeGreaterThanOrEqual(2);
+    // `PACING.noRepeatMomentKind`: never two of the same kind back to back. The quiet relaxation
+    // deliberately lifts it after a long enough silence (see `eligibleCards`), so this is asserted
+    // on this seed, where the relaxation never bit, and measured over the population below.
+    for (let i = 1; i < kindOrder.length; i++) expect(kindOrder[i], `${kindOrder[i - 1]} then ${kindOrder[i]}`).not.toBe(kindOrder[i - 1]);
+    // Every start is in the chronicle, told, not just held on the state.
     const told = s.chronicle.entries.filter((e) => e.source === 'card' || e.source === 'authored');
     expect(told.length).toBeGreaterThanOrEqual(order.length);
-    expect(order.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('the population, seeds 1-30: a five-minute watch is never empty, and usually holds two kinds', () => {
+    // A population bar, not a seed one — the round-3 verifier's finding C: a single seed can be
+    // chosen to pass, and the seed-25 pin it replaced went on passing in worlds where five seeds in
+    // thirty cleared the bar. This one cannot be satisfied by any single seed's luck.
+    //
+    // Measured at this head: two or more distinct kinds on **26 of 30**; two or more starts on
+    // **27 of 30**; a card drawn on **30 of 30**; three or more distinct kinds on **0 of 30** (see
+    // the block comment above — that is the plan's own bar, and it is the owner's decision to make,
+    // not a number to quietly lower). The floors are set well under the measured values so a loss
+    // of several seeds is tolerated and a collapse fails: 20 of 30 for the two-kind bar (measured
+    // 26), 22 of 30 for the two-start bar (measured 27), and no seed at all silent.
+    const kindCounts: number[] = [];
+    const startCounts: number[] = [];
+    const silent: number[] = [];
+    const oneKind: number[] = [];
+    const repeated: number[] = [];
+    for (let seed = 1; seed <= 30; seed++) {
+      let s = createInitialState(seed);
+      const kinds = new Set<string>();
+      const seen = new Set<string>();
+      const kindOrder: string[] = [];
+      for (let i = 0; i < 3000; i++) {
+        s = advance(s, 1);
+        for (const r of s.events.running) {
+          const key = `${r.id}@${r.startedMs}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const k = momentKindOf(r.id) ?? '?';
+          kinds.add(k);
+          kindOrder.push(k);
+        }
+      }
+      kindCounts.push(kinds.size);
+      startCounts.push(seen.size);
+      if (seen.size === 0) silent.push(seed);
+      if (kinds.size < 2) oneKind.push(seed);
+      if (kindOrder.some((k, i) => i > 0 && k === kindOrder[i - 1])) repeated.push(seed);
+    }
+    const twoKinds = kindCounts.filter((n) => n >= 2).length;
+    const threeKinds = kindCounts.filter((n) => n >= 3).length;
+    const twoStarts = startCounts.filter((n) => n >= 2).length;
+    const report = `kinds>=2 on ${twoKinds}/30 (measured 26), kinds>=3 on ${threeKinds}/30 (measured 0 — the plan's bar, see this block's comment), starts>=2 on ${twoStarts}/30 (measured 27), silent seeds ${silent.join(',') || 'none'}, one-kind seeds ${oneKind.join(',') || 'none'} (measured 1, 12, 25, 26)`;
+    expect(twoKinds, report).toBeGreaterThanOrEqual(20);
+    expect(twoStarts, report).toBeGreaterThanOrEqual(22);
+    expect(silent, report).toEqual([]);
+    // The no-repeat rule holds everywhere except where the quiet relaxation lifts it on purpose:
+    // measured, exactly one seed of thirty shows two starts of the same kind running (seed 25,
+    // `lostLamb` then `lambZoomiesHour`, both `lamb`, after a long silence).
+    expect(repeated.length, `seeds with a back-to-back repeat kind: ${repeated.join(',') || 'none'} (measured 25)`).toBeLessThanOrEqual(3);
   });
 });

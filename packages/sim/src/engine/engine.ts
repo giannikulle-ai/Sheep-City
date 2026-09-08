@@ -47,20 +47,43 @@ export const PARAMETER_COVERAGE: Readonly<Record<string, { hooks: readonly Event
  * Which day of its season the world is on, counting from 1: the sim time elapsed inside the current
  * season, divided by one sim-day (the clock's own period).
  *
- * Worth knowing what that means in this world, because the content's own page reads it differently
- * (docs/content/EVENT_DECK.md: "the sim has a running `dayCount` and a season cycle but no explicit
- * day-within-the-season concept yet; `simDate` assumes `clock.dayCount mod 9`"). A season here is
- * `SEASON_MS`, nine *real* days of sim time (clock.ts), while a sim-day is the clock's 180-second
- * period — so a season is 4,320 sim-days, not 9, and "the first day of spring" is a three-real-
- * minute window that comes round about once every nine real days of watching. `dayCount mod 9`
- * would instead make the birthday a thing that happens every nine sim-days, about every 27 real
- * minutes, which is not a birthday. This reads the calendar the sim actually keeps; the mismatch
- * is a schema question for the world lane, raised on the issue.
+ * A season here is `SEASON_MS`, nine *real* days of sim time (clock.ts), while a sim-day is the
+ * clock's 180-second period — so a season is 4,320 sim-days, not nine, and one season-day is a
+ * three-real-minute window. This reads the calendar the sim actually keeps.
  */
 export function dayOfSeason(state: SimState): number {
   const dayMs = state.clock.periodSec * 1000;
   const intoSeason = ((state.season.elapsedMs % SEASON_MS) + SEASON_MS) % SEASON_MS;
   return Math.floor(intoSeason / dayMs) + 1;
+}
+
+/**
+ * How far through the current season the world is, as a fraction: 0 at the season's first moment,
+ * 0.5 at its midpoint, approaching but never reaching 1 at its end.
+ *
+ * This is the shape a `simDate` trigger's `dayOfSeason` is written in as of the world lane's #83
+ * (`packages/content/schema/authored-events.schema.json`: "0 is the first moment of the season, up
+ * to (not including) 1 at the season's end; e.g. 0.5 is the season's midpoint whether that season
+ * ran 81 real days or 101"). It used to be a 1-based integer day index 1-9, and this engine read it
+ * as one — a mismatch the round-3 verifier caught. A fraction is the reading that survives #84:
+ * once seasons take their length from `outsideRules.seasons.calendar` and stop being nine real days
+ * each, "halfway through summer" still means something and "day 5 of 9" does not. Nothing about the
+ * fraction needs the real-year calendar, only a season's own start and length, which the sim has
+ * today — so this is implemented now rather than deferred with `realDate`.
+ *
+ * `seasonDayOfFraction` below turns such a fraction back into the season-day that contains it, so a
+ * `simDate` trigger still fires for exactly one sim-day (three real minutes) and not for a single
+ * floating-point instant no clock would ever land on.
+ */
+export function seasonFraction(state: SimState): number {
+  const intoSeason = ((state.season.elapsedMs % SEASON_MS) + SEASON_MS) % SEASON_MS;
+  return intoSeason / SEASON_MS;
+}
+
+/** The season-day (1-based, same basis as `dayOfSeason`) that a [0, 1) season fraction falls in. */
+export function seasonDayOfFraction(state: SimState, fraction: number): number {
+  const dayMs = state.clock.periodSec * 1000;
+  return Math.floor((fraction * SEASON_MS) / dayMs) + 1;
 }
 
 /** Does this card write, or is it, a parameter the name covers? */
@@ -238,8 +261,11 @@ function cooldownMs(state: SimState, event: Card | AuthoredEvent, kind: 'card' |
   if (kind === 'card') return simHoursToMs((event as Card).limits.cooldownSimHours, periodSec);
   const trigger = (event as AuthoredEvent).trigger;
   // A date has no cooldown of its own: it is barred for just under one four-season cycle, so "the
-  // first day of spring" comes round once a year and cannot fire twice in the same spring.
-  if (trigger.kind === 'simDate') return SEASON_MS * 4 * PACING.simDateCooldownCycles;
+  // first day of spring" comes round once a year and cannot fire twice in the same spring. The
+  // same bar covers `realDate`, which is deferred to #84 and so can only ever be started by the
+  // owner's own hand (`applyAuthoredIntent`) — the number just has to be finite and sane until
+  // #84 replaces it with a real year.
+  if (trigger.kind === 'simDate' || trigger.kind === 'realDate') return SEASON_MS * 4 * PACING.simDateCooldownCycles;
   return simDaysToMs(trigger.cooldownSimDays, periodSec);
 }
 
@@ -249,10 +275,24 @@ export function triggerMet(state: SimState, view: EventView, event: AuthoredEven
   switch (trigger.kind) {
     case 'predicates':
       return allHold(view, trigger.all);
+    // `dayOfSeason` on the trigger is a fraction of the season, not a day number (#83's schema; see
+    // `seasonFraction`). The event is due for the whole sim-day that fraction falls in.
     case 'simDate':
-      return currentSeason(state.season) === trigger.season && dayOfSeason(state) === trigger.dayOfSeason;
+      return currentSeason(state.season) === trigger.season && dayOfSeason(state) === seasonDayOfFraction(state, trigger.dayOfSeason);
     case 'stockThreshold':
       return holds(view, { on: trigger.on, op: trigger.op, value: trigger.value });
+    // Deferred to #84, and false every single time until then. `realDate` means a date in the real
+    // calendar — Digital Luna's birthday is December 15 (the owner's calendar decision, plan
+    // section 2; put on this trigger by the world lane in #83). Answering "is it December 15 now?"
+    // needs the real-year calendar — `outsideRules.seasons.calendar` in
+    // `packages/content/balance/farm.json` — wired into the sim as an input, and that wiring is
+    // ticket #84's, not this engine's (#40). This engine has no real date to compare against, so
+    // there is no honest answer but "not yet": the deck loads the event (marked `deferred`, see
+    // `deck.ts`), it sits in `deck.authored` where #84 will find it, and it never starts by
+    // itself. The owner's own hand can still start it (`applyAuthoredIntent(..., 'trigger')`
+    // deliberately ignores the trigger), which is how the birthday is exercised today.
+    case 'realDate':
+      return false;
     default: {
       const never: never = trigger;
       throw new Error(`authored trigger: unknown kind ${JSON.stringify(never)}`);
@@ -353,6 +393,7 @@ function couldStartSomething(state: SimState, deck: Deck): boolean {
   if (e.running.length >= PACING.concurrentCap) return false; // every start path checks this first
   const now = state.clock.nowMs;
   for (const event of deck.authored) {
+    if (event.deferred) continue; // a deferred trigger (`realDate`, #84) can never be met: never worth a look
     if (isRunning(e, event.id)) continue;
     const until = e.cooldowns[event.id];
     if (until === undefined || now >= until) return true; // off cooldown: worth a real look

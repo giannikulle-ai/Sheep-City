@@ -98,12 +98,27 @@ export interface Card {
 export type AuthoredTrigger =
   | { readonly kind: 'predicates'; readonly all: readonly Predicate[]; readonly cooldownSimDays: number }
   | { readonly kind: 'simDate'; readonly season: SeasonName; readonly dayOfSeason: number }
-  | { readonly kind: 'stockThreshold'; readonly on: PredicateOn; readonly op: PredicateOp; readonly value: number; readonly cooldownSimDays: number };
+  | { readonly kind: 'stockThreshold'; readonly on: PredicateOn; readonly op: PredicateOp; readonly value: number; readonly cooldownSimDays: number }
+  | { readonly kind: 'realDate'; readonly month: number; readonly day: number; readonly windowSimMinutes?: number };
+
+/**
+ * A trigger kind this engine knows the shape of but cannot yet evaluate, and the ticket that will
+ * make it evaluable. Loading records it here rather than throwing, so the deck still loads and the
+ * event is visibly parked instead of quietly never firing for an unknown reason. See `triggerMet`.
+ */
+export type DeferredTrigger = { readonly kind: 'realDate'; readonly ticket: '#84' };
 
 export interface AuthoredEvent {
   readonly id: string;
   readonly title: string;
   readonly trigger: AuthoredTrigger;
+  /**
+   * Set when this event's trigger is a *known but not yet implemented* kind (today: `realDate`,
+   * deferred to #84). The deck loads, the event is in `byId` and `deck.authored`, and `triggerMet`
+   * returns false for it every time — so it never starts on its own until #84 lands. Undefined for
+   * every event the engine can actually evaluate.
+   */
+  readonly deferred?: DeferredTrigger;
   /** Authored parameters a card does not get. Open by design; the engine only reads what it knows. */
   readonly variables: Readonly<Record<string, unknown>>;
   /** Card ids, or bare parameter names (`mood`, `weather`, ...), this event outranks while it runs. */
@@ -262,25 +277,59 @@ function trigger(raw: unknown, where: string): AuthoredTrigger {
     case 'simDate': {
       const season = str(t['season'], `${where}.season`);
       if (!['spring', 'summer', 'autumn', 'winter'].includes(season)) fail(`${where}.season`, `"${season}" is not a season`);
-      return { kind, season: season as SeasonName, dayOfSeason: num(t['dayOfSeason'], `${where}.dayOfSeason`) };
+      // A fraction of the season, in [0, 1), since the world lane's #83 — not the 1-based day index
+      // 1-9 it used to be. See `seasonFraction` in engine.ts.
+      const day = num(t['dayOfSeason'], `${where}.dayOfSeason`);
+      if (day < 0 || day >= 1) fail(`${where}.dayOfSeason`, `expected a fraction of the season in [0, 1), got ${day}`);
+      return { kind, season: season as SeasonName, dayOfSeason: day };
     }
     case 'stockThreshold': {
       const p = predicate({ on: t['on'], op: t['op'], value: t['value'] }, where);
       return { kind, on: p.on, op: p.op, value: num(t['value'], `${where}.value`), cooldownSimDays: num(t['cooldownSimDays'], `${where}.cooldownSimDays`) };
     }
+    // `realDate` is a real calendar date — "December 15, every real year" (the owner's calendar
+    // decision, plan section 2; the world lane put Digital Luna's birthday on it in #83). This
+    // engine cannot evaluate it yet, because deciding whether *now* is December 15 needs the
+    // real-year calendar model — `outsideRules.seasons.calendar` in `packages/content/balance/
+    // farm.json` — wired into the sim as an input, and that is ticket **#84**, not this one (#40).
+    // So the kind is known, its shape is checked here, and the event loads *deferred*: it sits in
+    // the deck, `authoredEvent` marks it `deferred: { kind: 'realDate', ticket: '#84' }`, and
+    // `triggerMet` (engine.ts) returns false for it on every look at the world, so the birthday
+    // never fires by itself until #84 gives the sim a real date to compare against. Parked in the
+    // open beats either of the two silent failures: throwing here would take the whole deck — and
+    // with it every test that imports the sim — down over data the world lane owns and the owner
+    // asked for, and quietly accepting it as "never true" would leave no trace of why the birthday
+    // stopped happening. A kind this engine has never heard of still fails loudly, below.
+    case 'realDate': {
+      const month = num(t['month'], `${where}.month`);
+      const day = num(t['day'], `${where}.day`);
+      if (!Number.isInteger(month) || month < 1 || month > 12) fail(`${where}.month`, `expected a month 1-12, got ${JSON.stringify(t['month'])}`);
+      if (!Number.isInteger(day) || day < 1 || day > 31) fail(`${where}.day`, `expected a day 1-31, got ${JSON.stringify(t['day'])}`);
+      const window = t['windowSimMinutes'];
+      if (window === undefined) return { kind, month, day };
+      return { kind, month, day, windowSimMinutes: num(window, `${where}.windowSimMinutes`) };
+    }
     default:
-      return fail(`${where}.kind`, `"${kind}" is not a trigger kind this engine implements (predicates, simDate, stockThreshold)`);
+      return fail(`${where}.kind`, `"${kind}" is not a trigger kind this engine implements (predicates, simDate, stockThreshold, realDate)`);
   }
+}
+
+/** The deferral note for a trigger kind the engine loads but cannot yet evaluate, or undefined. */
+function deferralOf(t: AuthoredTrigger): DeferredTrigger | undefined {
+  return t.kind === 'realDate' ? { kind: 'realDate', ticket: '#84' } : undefined;
 }
 
 function authoredEvent(raw: unknown, where: string): AuthoredEvent {
   const e = rec(raw, where);
   const duration = num(e['durationSimMinutes'], `${where}.durationSimMinutes`);
   if (duration <= 0) fail(`${where}.durationSimMinutes`, `expected a positive number, got ${duration}`);
+  const trig = trigger(e['trigger'], `${where}.trigger`);
+  const deferred = deferralOf(trig);
   return {
     id: str(e['id'], `${where}.id`),
     title: str(e['title'], `${where}.title`),
-    trigger: trigger(e['trigger'], `${where}.trigger`),
+    trigger: trig,
+    ...(deferred ? { deferred } : {}),
     variables: rec(e['variables'], `${where}.variables`),
     priorityOver: list(e['priorityOver'], `${where}.priorityOver`).map((x, i) => str(x, `${where}.priorityOver[${i}]`)),
     durationSimMinutes: duration,
@@ -293,6 +342,9 @@ function authoredEvent(raw: unknown, where: string): AuthoredEvent {
 /**
  * Read a card file and an authored file into a `Deck`. Throws on anything this engine could not
  * evaluate: an unknown predicate, operator, hook op, or trigger kind, a bad number, a duplicate id.
+ * The one exception is a trigger kind this engine knows of but has not implemented yet (`realDate`,
+ * deferred to #84): that loads, carries a `deferred` note on the event, and never fires. See
+ * `trigger()` above for why.
  */
 export function loadDeck(cardsDoc: unknown, authoredDoc: unknown): Deck {
   const cardsRaw = rec(cardsDoc, 'cards');

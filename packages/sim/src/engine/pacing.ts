@@ -70,26 +70,18 @@ export const PACING = {
    * Round 1's measured ~117 ms and consistent with the `farmerMarketWalk` attribution above. Delta
    * branch-on vs. trunk: +109.2 ms, still over budget on 1 of 4 runs.
    *
-   * Round 2 also tried the obvious next lever — `evalEverySimMinutes: 4` — and measured it: mean
-   * 975.5 ms, MET on 3 of 4 runs, a real further improvement on the bench. But `farmerMarketWalk`'s
-   * cost is fixed (once a day, however often the engine looks), so the only thing a coarser interval
-   * actually buys here is fewer *card* draw attempts. With the warm-up correctly at 480 sim-minutes
-   * (this round's own fix), the ticket's "about three per five minutes" was already down to a median
-   * of **2** card/authored starts in five real minutes at `evalEverySimMinutes: 2` (seeds 1-30:
-   * range 1 to 3, 2 of the 30 seeds draw no card at all in the whole watch) — the warm-up eating
-   * closer to a third of every five-minute watch costs real density on its own, independent of this
-   * constant. Moving to every-four-minutes measured the same median (2) and the same range (1 to 3),
-   * but roughly doubled the quiet tail: 4 of the 30 seeds drew no card at all, against 2 at every-two-
-   * minutes. That is a real, further cost — not the "median 3 to 2" this comment first claimed before
-   * re-measuring against the corrected warm-up, which was wrong — spent to shave a budget line whose
-   * real cost is a different feature entirely, so it was reverted; every number above and every seed
-   * this round re-measures below is `evalEverySimMinutes: 2`. Between a catch-up bench not reliably
-   * under budget on this box either way, and a quiet-seed rate that doubles for a marginal bench gain,
-   * this round keeps the smaller number and says so plainly rather than trade more of the ticket's own
-   * density for a mean that still isn't a guarantee. The way out from here is a lever aimed at the
-   * NPC-presence cost itself, the deferred #78, or the Foreman/owner deciding the budget line is
-   * advisory until one of those lands — not a further cut to how often the engine looks. See the PR's
-   * Round 2 note for the full measurements.
+   * Round 2 also tried the obvious next lever — `evalEverySimMinutes: 4` — for the bench. Round 3
+   * re-measured its *density* cost on this head (the round-2 comment's figures rested on a run that
+   * did not reproduce, round-3 verifier finding B) and it is still not a trade worth making:
+   * `farmerMarketWalk`'s cost is fixed (once a day, however often the engine looks), so a coarser
+   * interval buys only fewer *card* draw attempts. Seeds 1-30, five real minutes each, measured at
+   * this head: at `evalEverySimMinutes: 2`, 26 of 30 watches show two distinct moment kinds, 27 of
+   * 30 show two or more starts, mean 1.90 starts; at 4, that falls to 23 of 30, 24 of 30 and 1.83.
+   * The round-2 bench figure for the 4-lever (mean 975.5 ms) is **not** re-measured here and is not
+   * relied on: this round's bench work is the trunk/branch/engine-off comparison below. So the
+   * constant stays at 2, and the way out of the budget line is a lever aimed at the NPC-presence
+   * cost itself, the deferred #78, or the ruling that the line is advisory until one of those lands
+   * (the Foreman's round-3 call) — not a further cut to how often the engine looks.
    */
   evalEverySimMinutes: 2,
 
@@ -105,9 +97,28 @@ export const PACING = {
    * in Round 1 (owner note on #82, after `evalEverySimMinutes: 2`): the ticket asked for "about
    * three" card/authored starts in a five-real-minute watch, and the shipped 240 (thirty real
    * seconds) measured a median of five, range four to six. 800 is one hundred real seconds when
-   * watching: long enough that two cards never crowd each other, and that a five-real-minute watch
-   * (2,400 sim-minutes) holds three or four rather than five or six. See the retune's measurements
-   * on `warmupSimMinutes`'s neighbour below and in `test/engine-draw.test.ts`.
+   * watching: long enough that two cards never crowd each other.
+   *
+   * **What a five-minute watch actually holds, measured at this head** (seeds 1-30, 3,000 ticks,
+   * two independent rulers — new entries in `events.running`, and non-"ended" card/authored
+   * chronicle lines — agreeing seed for seed): **median 2 starts, range 1 to 2, mean 1.90**; a card
+   * drawn on **30 of 30** seeds (none silent); longest silence between starts **205.5 real seconds**
+   * (seed 1), median longest gap **125.8 s**; longest silence between any chronicle line at all
+   * **166.7 s** (seed 1), median **102.5 s**; first card draw at **482.4 sim-minutes** at the
+   * earliest, median 639.2, latest 1,210.4 — none before the 480-sim-minute warm-up. Counting the
+   * farmer's dawn market walk, which is a moment on the field but not a card, a watch holds three
+   * things rather than two.
+   *
+   * That is one moment fewer than rounds 1 and 2 reported, and the reason is not this constant:
+   * `dlBirthday` used to start in the first 0.1 real seconds of every world, and no longer does
+   * (its trigger is a real calendar date now and this engine defers it to #84 — see `deck.ts`).
+   * The lever, if the owner watches it and wants the thin seeds lifted, is **this number, 800 to
+   * 600**. Measured on the same thirty seeds: the seeds showing fewer than two starts go from
+   * **3 of 30 to none**, the seeds showing two distinct kinds from **26 of 30 to 30 of 30**, the
+   * worst silence between starts from **205.5 s to 151.3 s**, and the mean from 1.90 to 2.07 —
+   * still inside "about three moments per five minutes" counting the farmer's walk. It does not buy
+   * the plan's three *kinds* (1 of 30 at that setting): see `test/engine-draw.test.ts`'s "five
+   * unattended minutes" block for the full sweep and why. **The owner does not have to move it.**
    */
   minGapSimMinutes: 800,
 
@@ -137,9 +148,18 @@ export const PACING = {
    * (1,200, then 1,600) cost the ticket's own seed-9 bar of three distinct moment kinds in a five-
    * minute run, because the relaxation (which lifts the no-repeat-moment-kind rule) then had too
    * little of the watch left to reach. 820 is 102.5 real seconds when watching, just past the
-   * retuned gap: long enough that ordinary pacing is never bent by it, and measured to keep the
-   * seed-9 bar with room either side (empirically fine from 801 through about 830, breaking again by
-   * 840 — see `test/engine-draw.test.ts`, which pins the exact bar this constant has to clear).
+   * retuned gap: long enough that ordinary pacing is never bent by it.
+   *
+   * Round 2's comment here claimed a window "empirically fine from 801 through about 830, breaking
+   * again by 840". That was measured under the old 60-sim-minute warm-up and does not survive
+   * either the warm-up fix or the birthday's deferral. **Re-measured at this head** (seeds 1-30,
+   * five real minutes, share of watches showing two or more distinct moment kinds, which is what
+   * the deck can actually deliver here — see `test/engine-draw.test.ts`): 26/30 at 801, 26/30 at
+   * 820, 26/30 at 840, 25/30 at 900, 24/30 at 1000, 22/30 at 1200. There is no cliff at 840 any
+   * more; the curve is a slow slope, and 820 sits at the top of it. No setting anywhere in that
+   * range reaches three distinct kinds on a single seed, so this constant is not the lever for the
+   * plan's exit bar either — `test/engine-draw.test.ts`'s population test is what guards it now,
+   * and it is a floor over thirty seeds rather than one seed's luck.
    */
   quietStretchSimMinutes: 820,
 

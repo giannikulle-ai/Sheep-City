@@ -7,6 +7,7 @@
 // save taken mid-frame resumes exactly where it stopped.
 
 import { SEASONS } from '../clock';
+import { freezeChronicleEntry } from '../chronicle/store';
 import { CHRONICLE_SOURCES } from '../chronicle/types';
 import { FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type IntentType } from '../intents';
 import { cloneState, SAVE_VERSION, type SimState } from '../state';
@@ -32,7 +33,15 @@ export function fromSave(doc: unknown): SimState {
   }
   const world = current['world'];
   validateWorld(world);
-  return cloneState({ ...world, version: SAVE_VERSION });
+  // `world` (and its `chronicle.entries`) are plain objects `migrateSave` read out of the caller's
+  // document — JSON.parse output, unfrozen, and shared by reference with whatever `doc` it came
+  // from. `cloneState` below copies everything else a level deeper, but `cloneChronicle` only
+  // slices the entries array (see chronicle/store.ts): it trusts every entry it shares by reference
+  // is one `tell` froze, which a loaded entry never was. Freeze each one into a fresh, detached copy
+  // here, once per load, so that trust holds for a loaded world too and the module's contract above
+  // (the state and the document never share objects) is actually true for the chronicle.
+  const chronicle = { ...world.chronicle, entries: world.chronicle.entries.map(freezeChronicleEntry) };
+  return cloneState({ ...world, chronicle, version: SAVE_VERSION });
 }
 
 /** `toSave` as text, for localStorage and the export-as-text fallback. Two-space indent, trailing newline. */

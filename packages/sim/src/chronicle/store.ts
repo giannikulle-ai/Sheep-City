@@ -2,10 +2,13 @@
 // `SimState.chronicle`; `cloneChronicle` gives the tick loop's clone-per-tick pattern (state.ts) a
 // copy so a tick can append to its own private copy without touching the input. An entry, once
 // told, is never edited — `tell` freezes it (and its `actors` and `facts`) before it is pushed —
-// so `cloneChronicle` only needs a new *array*, not a new copy of every entry: `entries.slice()` is
-// enough, and a tick's cost stops scaling with how much history the world has told (a deep
-// per-entry copy here was linear in the whole log's length; see chronicle.test.ts, "cloneChronicle
-// is not linear in the log"). `tell` is the package's only way to add to the store.
+// so `cloneChronicle` only needs a new *array*, not a new copy of every entry: `entries.slice()`
+// instead of the old per-entry deep copy. That is a constant-factor fix, not a change of order:
+// cloning is still O(entries), just at a few nanoseconds each instead of a full copy, so a tick's
+// cost still grows with how much history the world has told — only slowly enough now to stay
+// inside the 2 ms live budget out to several hundred thousand entries, far past what a year of
+// history reaches today (see chronicle.test.ts, "cloning stays a small constant per entry" for the
+// measured numbers). `tell` is the package's only way to add to the store.
 
 import type { ActorId, SimState } from '../state';
 import { cloneChronicleStats, createChronicleStats, noteFact, notabilityScale, type ChronicleStats } from './notability';
@@ -26,14 +29,27 @@ export function createChronicle(): Chronicle {
 
 /** A new store, safe to append to without touching the original: a new `entries` array and new
  * stats maps. Entries themselves are never copied — `tell` freezes every one it writes and never
- * edits or replaces one already in `entries`, so the clone can share them by reference and stay
- * O(distinct fact keys), not O(entries). */
+ * edits or replaces one already in `entries`, so the clone can share them by reference: a plain
+ * `entries.slice()` rather than a per-entry deep copy. Still O(entries), not O(1) or O(distinct fact
+ * keys) — the array itself is copied — but at a small constant per entry instead of a full clone of
+ * each one; see chronicle.test.ts for the measured cost. */
 export function cloneChronicle(chronicle: Chronicle): Chronicle {
   return {
     entries: chronicle.entries.slice(),
     nextId: chronicle.nextId,
     stats: cloneChronicleStats(chronicle.stats),
   };
+}
+
+/** Freeze one entry into the same detached, immutable shape the store's only writer (`tell`)
+ * produces: a fresh `actors` array, a fresh `facts` object, then the entry itself, all frozen. Used
+ * by `tell` for a freshly told entry, and by the save/load path (`save/serialize.ts`) for one that
+ * came off disk — so a loaded world's entries are just as immune to outside mutation as a told one,
+ * including mutation of the parsed document `fromSave` read them from. */
+export function freezeChronicleEntry(entry: ChronicleEntry): ChronicleEntry {
+  const actors = Object.freeze([...entry.actors]) as ActorId[];
+  const facts = Object.freeze({ ...entry.facts }) as Record<string, FactValue>;
+  return Object.freeze({ ...entry, actors, facts }) as ChronicleEntry;
 }
 
 /** `noteFact` every fact in `facts`, and return the highest notability any of them turned up (0 if
@@ -72,14 +88,14 @@ function recordFacts(stats: ChronicleStats, facts: Record<string, FactValue>, ac
  * false for an entry with no `facts`, regardless of its `hint`.
  */
 export function tell(state: Pick<SimState, 'chronicle'>, input: TellInput): ChronicleEntry {
-  // Frozen for real at runtime (readonly here is just what TS can express for an array/object
-  // literal); ChronicleEntry's own fields stay plainly typed since nothing outside this function
-  // is meant to know or care that its instances happen to be frozen.
-  const actors = Object.freeze(input.actors ? [...input.actors] : []) as ActorId[];
-  const facts = Object.freeze(input.facts ? { ...input.facts } : {}) as Record<string, FactValue>;
+  const actors = input.actors ? [...input.actors] : [];
+  const facts = input.facts ? { ...input.facts } : {};
   const { notability: factNotability, first } = recordFacts(state.chronicle.stats, facts, actors);
   const notability = input.source === 'card' || input.source === 'authored' ? Math.max(notabilityScale(input.hint ?? 0), factNotability) : factNotability;
-  const entry = Object.freeze({
+  // `freezeChronicleEntry` does the actual freezing (readonly here is just what TS can express for
+  // an array/object literal); ChronicleEntry's own fields stay plainly typed since nothing outside
+  // this function is meant to know or care that its instances happen to be frozen.
+  const entry = freezeChronicleEntry({
     id: `c${state.chronicle.nextId}`,
     atMs: input.atMs,
     district: input.district,
@@ -90,7 +106,7 @@ export function tell(state: Pick<SimState, 'chronicle'>, input: TellInput): Chro
     notability,
     first,
     facts,
-  }) as ChronicleEntry;
+  } as ChronicleEntry);
   state.chronicle.nextId++;
   state.chronicle.entries.push(entry);
   return entry;

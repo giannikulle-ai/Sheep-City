@@ -164,6 +164,54 @@ describe('save fixtures', () => {
     expect(JSON.stringify(again, null, 2) + '\n').toBe(readFileSync(join(fixturesDir, name), 'utf8'));
   });
 
+  describe('fromSave detaches a loaded world from its input document (module contract, serialize.ts:1-3)', () => {
+    type ChronicleDoc = { version: number; world: { chronicle: { entries: Array<Record<string, unknown>> } } & Record<string, unknown> };
+
+    it('mutating the parsed document after fromSave never rewrites the loaded world, and every loaded entry is frozen', () => {
+      const name = `save-v${SAVE_VERSION}.json`;
+      const doc = readFixture(name) as ChronicleDoc;
+      expect(doc.world.chronicle.entries.length).toBeGreaterThan(0); // the fixture has two hand-placed entries
+
+      const loaded = fromSave(doc);
+      const before = loaded.chronicle.entries.map((e) => ({ ...e }));
+
+      // Reach into the parsed document and tamper with its first entry, actors, and facts, the way
+      // a host holding onto its parsed envelope could.
+      const docEntry = doc.world.chronicle.entries[0]!;
+      docEntry['line'] = 'TAMPERED';
+      (docEntry['actors'] as unknown[]).push('tampered-actor');
+      (docEntry['facts'] as Record<string, unknown>)['wool'] = 999_999;
+
+      expect(loaded.chronicle.entries).toEqual(before);
+      for (const entry of loaded.chronicle.entries) {
+        expect(Object.isFrozen(entry)).toBe(true);
+        expect(Object.isFrozen(entry.actors)).toBe(true);
+        expect(Object.isFrozen(entry.facts)).toBe(true);
+        expect(() => {
+          (entry as { line: string }).line = 'nope';
+        }).toThrow(TypeError);
+      }
+    });
+
+    it('a migrated older fixture detaches too: relabelling the fixture one version back walks it through the v5->v6 migration, which keeps a chronicle already present rather than filling a fresh one', () => {
+      const name = `save-v${SAVE_VERSION}.json`;
+      const doc = readFixture(name) as ChronicleDoc;
+      const older: ChronicleDoc = { ...doc, version: SAVE_VERSION - 1 };
+      expect(older.world.chronicle.entries.length).toBeGreaterThan(0);
+
+      const loaded = fromSave(older);
+      expect(loaded.version).toBe(SAVE_VERSION);
+      const before = loaded.chronicle.entries.map((e) => ({ ...e }));
+
+      const docEntry = older.world.chronicle.entries[0]!;
+      docEntry['line'] = 'TAMPERED VIA MIGRATION PATH';
+      (docEntry['facts'] as Record<string, unknown>)['wool'] = -1;
+
+      expect(loaded.chronicle.entries).toEqual(before);
+      expect(Object.isFrozen(loaded.chronicle.entries[0])).toBe(true);
+    });
+  });
+
   type OldDoc = { version: number; world: { luna: Record<string, unknown>; npcs: { farmer: Record<string, unknown> | null; merchant: Record<string, unknown> | null } } & Record<string, unknown> };
 
   /** `world` as the migrations from `from` should leave it: the old fields, plus each later version's defaults. */

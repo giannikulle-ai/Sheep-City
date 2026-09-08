@@ -101,7 +101,7 @@ describe('the store is append-only', () => {
     expect(entry.line).toBe('a');
   });
 
-  it("cloneChronicle is not linear in the log: cloning a chronicle of 40,000 entries costs about what cloning an empty one does", () => {
+  it('cloning stays a small constant per entry: a tick with 40,000 entries costs a small multiple of an empty one, well inside the 2 ms budget', () => {
     // Both districts tick with 40 sheep, the charter's bench line, so the rest of a tick's own cost
     // (behaviours, ground, small life) is the same on both sides and only the chronicle differs.
     // The median, not the mean, of many single-tick timings: this suite runs its files in

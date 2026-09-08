@@ -205,7 +205,7 @@ Goal: the farm surprises you, and the world starts writing its own history.
 - Region map navigation designed as a document before any village content (client and sim, owner's pin on the design).
 - Disposition of flowerbed, hay2, scarecrow: change a number, draw a pixel, or go (sim).
 
-Exit: five unattended sim-minutes at seed 9 show three distinct moment kinds; a scripted week away yields a storybook page whose every line traces to a chronicle entry, at least one written by the social graph; three powers react within ten ticks; the map design is pinned.
+Exit: five unattended real minutes of a fresh world hold about three moments and no seed is silent (measured at the engine's merge: two card moments plus the farmer's walk in 27 of 30 seeds; three distinct kinds in a majority of seeds is the deck's bar, #86); a scripted week away yields a storybook page whose every line traces to a chronicle entry, at least one written by the social graph; three powers react within ten ticks; the map design is pinned.
 
 ### Phase 2 — Village
 Goal: Sheepcliff is a place, not a field.
@@ -284,7 +284,7 @@ These seed the backlog so the team can start the morning after you say which ass
 
 ## 10. How we know it is working
 
-- Watch test: five unattended minutes, three distinct moments, on every build.
+- Watch test: five unattended minutes, about three moments and never a silent seed, on every build; three distinct kinds once the deck (#86) delivers them.
 - Reaction latency: every deity power shows a beat within one second.
 - Absence: a day away yields a storybook with three true events.
 - Growth: a week away yields a visible new building without input.
@@ -306,6 +306,7 @@ Answer in one comment whenever convenient; the defaults are the assumptions in s
 7. Phase 0 started 2026-09-02 on the owner's go. Tickets #2 to #11; first three workers spawned. Passed the same day: the owner merged the real sim (PR #34) and flipped the live tile (PR #50).
 8. Event layer and world model, 2026-09-02 23:15 UTC: an engine, not a Director; cards v2 now at fifteen cards; a chronicle any system writes to; a whole-world storybook that keeps every page and only tells; settlements grow and the farm does not; DL unharmable as an invariant. Recorded in section 2; the Phase 1 and 2 lists follow it.
 9. The owner's operating rules (check-in cadence, model choice while a usage window is spent) live in `docs/agents/ROSTER.md`, not here.
+14. The engine's pin, 2026-09-08 20:55 UTC: merged as it stands (PR #82). The Phase 1 exit line is restated as "about three moments per five minutes, none silent"; three distinct kinds in a majority of seeds moves to the deck ticket (#86); no pacing number moves. The earlier three-kind numbers were propped up by the birthday firing at world start, which the December 15 decision removed.
 13. Deity weather hold, 2026-09-08 19:00 UTC: a sky power holds for three hours of world time by default, whatever the day length (22.5 real seconds at the three-minute day), then hands back to the season. Recorded on PR #90.
 12. The economy is not the farm's, 2026-09-08 17:40 UTC: no transaction happens on the farm. The merchant's caravan is a passer-by on the road between places (a moment: sheep stare, Digital Luna trots the fence); wool leaves with the farmer's dawn market walk and is sold in the settlement's ledger, off screen until Village Green exists; coins become a settlement stock and the farm's ledger keeps wool, grass, and the flock. Cards that hand the farm coins (the windfall, the dug-up purse) are reviewed under the same rule. Also: a seed is a world; the farm belongs to the owner's world and a world may be created without it (districts as a per-world list), to be built after the engine lands.
 11. Digital Luna's dusk order, 2026-09-08 17:30 UTC: "fetch wins". Fetching a lost lamb sits above bedtime in her chain (below rain shelter, riding, and the stick), so a lamb out at dusk is a job, not a night in. Pacing target for the event engine: about three moments per five real minutes, not five; a warm-up with no card draws in a fresh world's first minute; the merchant comes when there is wool to sell.

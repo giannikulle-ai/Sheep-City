@@ -67,13 +67,24 @@ export function tickWeather(weather: Weather, clock: Clock, season: Season, rng:
   const now = clock.nowMs;
   // A deity `weather` intent's hold (PR #43): overrides while it lasts, then hands back to the
   // season with a clean slate, exactly as if the sky had cleared on its own, so the season's own
-  // roll schedule is never left stuck mid-override.
+  // roll schedule is never left stuck mid-override. A later `weather` intent fully replaces an
+  // earlier hold in progress (`applyWeather`, intents.ts, overwrites `holdUntilMs` and `foggy`
+  // outright) — a short second hold (say a 1-minute fog) cuts an earlier, longer one (a 10-minute
+  // rain) short, handing back at the *second* intent's time, not the first's. Round 2 note.
   if (next.mode === 'manual' && next.holdUntilMs !== undefined && now >= next.holdUntilMs) {
     next = setWeather(next, 'sun');
     next.mode = 'season';
-    next.foggy = false;
+    delete next.foggy;
     delete next.holdUntilMs;
   }
+
+  // A season-rolled shower keeps its own clock even under a manual hold, so a deity `fog` tap
+  // never freezes one already running: `fog` never calls `setWeather` (Round 2 fix for a Verifier
+  // finding), so `kind` and `untilMs` are exactly what the season left them, and this still ends
+  // the shower on schedule. A full override (`sun`/`rain`/`snow`/`clear`) already resets `untilMs`
+  // to 0 in `setWeather`, so this is a no-op for those — the override itself is the honest "the
+  // shower is over" the deity asked for; only a hold that leaves `kind` untouched reaches here.
+  if (next.kind !== 'sun' && next.untilMs && now > next.untilMs) next = setWeather(next, 'sun');
 
   if (next.mode !== 'season') return next;
 
@@ -91,6 +102,5 @@ export function tickWeather(weather: Weather, clock: Clock, season: Season, rng:
       next.untilMs = now + lenLo + nextFloat(rng) * (lenHi - lenLo);
     }
   }
-  if (next.kind !== 'sun' && next.untilMs && now > next.untilMs) next = setWeather(next, 'sun');
   return next;
 }

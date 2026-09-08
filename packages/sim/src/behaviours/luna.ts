@@ -577,32 +577,50 @@ export const walk: LunaBehaviour = {
 // owner's priority order above (fetch > manual > riding > rain shepherd > bed and dawn > idle
 // play, #5) is untouched — this adds a new reaction, it does not reorder DL's existing one. The
 // condition stands in for "above idle, below danger": it only fires when she is not already held
-// by a command, a ride, a mount, a fetch, or a busy routine (rain shelter, bedtime, asleep), so a
-// queued command waits rather than pulling her out of any of those; it does win over idle play
-// (flop, stick zoomies, nibble, the rabbit chase), the same way a command intent already would.
+// by a command, a ride, a mount, a fetch, a busy routine (rain shelter, bedtime, asleep), or —
+// Round 2 fix for a Verifier blocker — actually inside the barn. `rainShepherd` clears `l.routine`
+// to `null` the instant she steps inside (see `shelterEnter` above), so `BUSY_ROUTINES` alone does
+// not cover her once she is sheltering; without `!l.inBarn` here a queued `call` read her as free,
+// dragged her back out into the rain with `inBarn` still `true`, killed her rain-shepherd routine
+// for the rest of that shower (its first branch requires `!l.inBarn`), and ended in a teleport when
+// `leaveBarn` next ran. Now a queued command simply waits at the door, the same as the existing
+// `come` button already does when she is sheltering. It does win over idle play (flop, stick
+// zoomies, nibble, the rabbit chase), the same way a command intent already would.
 //
 // Digital Luna cannot be harmed: `calm` and `startle` on her are a no-op or a friendly reaction,
 // never a forced state. `calm` here is a plain no-op beyond acknowledging the tap (nothing on her
 // needs calming — she is never scattering); `startle` is a friendly head-tilt she recovers from on
 // her own via `tiltRecover`, never a scatter. Only `call` moves her, and only by walking, the same
 // as the `come` button already does at an arbitrary point instead of `SPOT.front`.
+//
+// A second `act` intent landing in the same tick (before this chain has run) simply overwrites
+// `l.actCmd`: the first command is silently dropped, not queued behind the second. Fine for now —
+// two deity taps in one 100 ms tick is not a real interaction — but worth a queue if that changes.
 // ---------------------------------------------------------------------------------------------
-
-/** How much a treat's mood bump raises the nearest tuft: `moodOf` reads mean grass level (ledger.ts). */
-const TREAT_TUFT_BUMP = 0.2;
 
 export const act: LunaBehaviour = {
   id: 'act',
   chain: 'act',
   priority: 5,
   condition: (_, l) =>
-    l.actCmd != null && l.manual === null && l.riding === null && l.mounting === null && l.stick === null && !BUSY_ROUTINES.includes(l.routine),
+    l.actCmd != null &&
+    l.manual === null &&
+    l.riding === null &&
+    l.mounting === null &&
+    l.stick === null &&
+    !l.inBarn &&
+    !BUSY_ROUTINES.includes(l.routine),
   tick: ({ state, now }, l) => {
     const cmd = l.actCmd as NonNullable<Luna['actCmd']>;
-    l.actCmd = null;
+    delete l.actCmd;
     switch (cmd.verb) {
       case 'call':
         if (cmd.x !== undefined && cmd.y !== undefined) {
+          // Every existing DL command releases a claimed tuft (`intents.ts`'s `dlAction` and
+          // `throwStick`); `call` and `startle` did not, so a tuft claimed when the tap landed sat
+          // claimed forever — `nearestTuft` skips claimed tufts, so each leak permanently removed
+          // one from grazing, from her own nibble pick, and from `treat` (Verifier finding #2).
+          releaseTuft(state, l);
           l.manual = 'walk';
           l.anim = 'run';
           l.target = { x: cmd.x, y: cmd.y };
@@ -615,20 +633,21 @@ export const act: LunaBehaviour = {
         return;
       case 'startle':
         // DL cannot be harmed: a friendly head-tilt, not a scatter. `tiltRecover` (priority 70,
-        // above this chain's placement) settles her back to a pant on its own.
+        // above this chain's placement) settles her back to a pant on its own. Release any claimed
+        // tuft too, same reason as `call` above.
+        releaseTuft(state, l);
         bubble(l, 'startle', 900, now);
         l.anim = 'tilt';
         l.t0Ms = now;
         return;
-      case 'treat': {
+      case 'treat':
+        // The heart-and-tag only: no tuft write. `moodOf` (ledger.ts) reads mood off the mean tuft
+        // level, not a stock the actor carries, and district grass is also the grazing/wool
+        // economy's input, so feeding a tuft from a per-creature tap was a resource button wearing
+        // an affection button's icon (Verifier finding #6). A real mood bump waits for mood to
+        // become a Ledger stock of its own; until then `treat` is the same friendly tap `pet` gives.
         petLuna(l, now);
-        const t = nearestTuft(state.tufts, foot(l), 0);
-        if (t !== null) {
-          const tuft = state.tufts[t] as Tuft;
-          tuft.level = Math.min(1, tuft.level + TREAT_TUFT_BUMP);
-        }
         return;
-      }
       default: {
         const never: never = cmd.verb;
         throw new Error(`unknown act verb ${String(never)}`);

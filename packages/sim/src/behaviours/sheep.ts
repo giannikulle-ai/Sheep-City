@@ -256,19 +256,20 @@ export const pickNeed: SheepBehaviour = {
 // never the loser of that contest. `!rain` keeps a called or treated sheep from abandoning the
 // barn walk rainShelter just started; the command then waits, unconsumed, until the rain (its own
 // "danger") clears. Not `contextOnly`: every branch reads the actor's own `actCmd`.
+//
+// A second `act` intent landing in the same tick simply overwrites `s.actCmd`: the first command
+// is silently dropped, not queued behind the second. See the identical note on Digital Luna's own
+// `act` chain in `behaviours/luna.ts`.
 // ---------------------------------------------------------------------------------------------
-
-/** How much a treat's mood bump raises the nearest tuft: `moodOf` reads mean grass level (ledger.ts). */
-const TREAT_TUFT_BUMP = 0.2;
 
 export const act: SheepBehaviour = {
   id: 'act',
   chain: 'needs',
   priority: 5,
   condition: ({ rain }, s) => s.actCmd != null && !rain,
-  tick: ({ state, now, rng }, s) => {
+  tick: ({ now, rng }, s) => {
     const cmd = s.actCmd as NonNullable<Sheep['actCmd']>;
-    s.actCmd = null;
+    delete s.actCmd;
     switch (cmd.verb) {
       case 'call':
         // A call makes the target walk to the point given; no pick-up-and-move, so this is the
@@ -297,19 +298,16 @@ export const act: SheepBehaviour = {
         bubble(s, 'startle', 900, now);
         return;
       }
-      case 'treat': {
-        // The prototype's heart-and-tag, plus a small mood bump: `moodOf` (ledger.ts) reads DL's
-        // mood off the mean tuft level, not a stock on the actor, so a treat honestly raises it by
-        // feeding the nearest tuft rather than inventing a new per-sheep number.
+      case 'treat':
+        // The heart-and-tag only: no tuft write. `moodOf` (ledger.ts) reads mood off the mean tuft
+        // level, not a stock the actor carries, and district grass is also the grazing/wool
+        // economy's input, so feeding a tuft from a per-creature tap was a resource button wearing
+        // an affection button's icon (Verifier finding #6, owner's call). A real mood bump waits
+        // for mood to become a Ledger stock of its own; until then `treat` is the same tap `pet`
+        // already gives a sheep, just from the deity tray instead of a click.
         bubble(s, 'heart', 1600, now);
         s.tagUntilMs = now + RULES.petTagMs;
-        const i = nearestTuft(state.tufts, { x: s.x + SFOOT[0], y: s.y + SFOOT[1] }, 0);
-        if (i !== null) {
-          const t = state.tufts[i] as Tuft;
-          t.level = Math.min(1, t.level + TREAT_TUFT_BUMP);
-        }
         return;
-      }
       default: {
         const never: never = cmd.verb;
         throw new Error(`unknown act verb ${String(never)}`);

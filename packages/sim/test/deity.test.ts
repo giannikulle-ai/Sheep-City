@@ -12,7 +12,7 @@ import { fromSave, toSave } from '../src/save/serialize';
 import { createInitialState, type SimState } from '../src/state';
 import { step } from '../src/step';
 import { tick } from '../src/tick';
-import { world } from './luna-helpers';
+import { runUntil, world } from './luna-helpers';
 import { settle } from './sheep-helpers';
 
 /** Apply `intents` at the next boundary and run that one tick, as `intents.test.ts` does. */
@@ -85,8 +85,80 @@ describe('weather intent', () => {
     let s = tickWith(world(), { type: 'weather', kind: 'fog', holdSimMinutes: 0.5 });
     expect(s.weather.foggy).toBe(true);
     s = step(s, [], 300 * 100); // 0.5 sim-minute = 300 ticks
-    expect(s.weather.foggy).toBe(false);
+    // The hand-back deletes `foggy` rather than writing `false` (Round 2 fix): absent means "no
+    // fog", the same as it did before any deity intent ever ran (see the fresh-world test above).
+    expect(s.weather.foggy).toBeUndefined();
+    expect(JSON.stringify(s.weather)).not.toMatch(/foggy/);
     expect(s.weather.mode).toBe('season');
+  });
+
+  it('holdSimMinutes <= 0 still lands the override for one tick, rather than never landing at all', () => {
+    // Round 2 fix for a Verifier blocker: `holdUntilMs` used to equal the pre-tick clock exactly,
+    // so `tickWeather`'s `now >= holdUntilMs` was already true on the very tick the override
+    // landed, and it never took effect. Now it holds for one tick, then hands back on the next.
+    // (Kind is not asserted past hand-back: the season may re-roll new weather — even back to
+    // rain — the instant control returns to it; `mode` is the honest signal that hand-back ran.)
+    for (const holdSimMinutes of [0, -5]) {
+      let s = tickWith(world({ weather: 'sun' }), { type: 'weather', kind: 'rain', holdSimMinutes });
+      expect(s.weather.kind, `holdSimMinutes=${holdSimMinutes}`).toBe('rain');
+      expect(s.weather.mode, `holdSimMinutes=${holdSimMinutes}`).toBe('manual');
+      s = step(s, [], TICK_MS); // one more tick: the hold ends
+      expect(s.weather.mode, `holdSimMinutes=${holdSimMinutes}`).toBe('season');
+      expect(s.weather.holdUntilMs, `holdSimMinutes=${holdSimMinutes}`).toBeUndefined();
+    }
+  });
+
+  it('a non-finite holdSimMinutes does not lock the weather forever or brick the save', () => {
+    for (const holdSimMinutes of [NaN, Infinity, -Infinity]) {
+      let s = tickWith(world({ weather: 'sun' }), { type: 'weather', kind: 'rain', holdSimMinutes });
+      expect(s.weather.kind, String(holdSimMinutes)).toBe('rain');
+      expect(Number.isFinite(s.weather.holdUntilMs), String(holdSimMinutes)).toBe(true);
+      expect(() => toSave(s), String(holdSimMinutes)).not.toThrow();
+      s = step(s, [], TICK_MS); // treated as zero: hands back on the very next tick
+      expect(s.weather.mode, String(holdSimMinutes)).toBe('season');
+      expect(s.weather.holdUntilMs, String(holdSimMinutes)).toBeUndefined();
+      expect(() => toSave(s), String(holdSimMinutes)).not.toThrow();
+    }
+  });
+
+  it('a fog hold does not freeze a season-rolled shower: it still ends on its own untilMs', () => {
+    // A rain the *season* rolled, with its own end time, running when the fog tap lands.
+    let s = world({ sheep: 0 });
+    s.weather = { ...s.weather, mode: 'season', kind: 'rain', rain: true, untilMs: 500 };
+    s = tickWith(s, { type: 'weather', kind: 'fog', holdSimMinutes: 10 });
+    expect(s.weather.kind).toBe('rain'); // fog only layers on; the shower is untouched when it lands
+    expect(s.weather.foggy).toBe(true);
+    expect(s.weather.mode).toBe('manual');
+    s = step(s, [], 900); // past the shower's own untilMs (500), nowhere near the fog hold's end
+    expect(s.weather.kind).toBe('sun'); // the shower ended on its own schedule, fog notwithstanding
+    expect(s.weather.mode).toBe('manual'); // still under the fog hold itself
+    expect(s.weather.foggy).toBe(true); // fog persists until its own hold ends
+  });
+
+  it('a tray setWeather during a deity hold wins: it is not reverted when the hold expires', () => {
+    let s = tickWith(world({ sheep: 0 }), { type: 'weather', kind: 'rain', holdSimMinutes: 10 });
+    expect(s.weather.kind).toBe('rain');
+    expect(s.weather.holdUntilMs).toBeDefined();
+    s = tickWith(s, { type: 'setWeather', weather: 'snow' });
+    expect(s.weather.kind).toBe('snow');
+    expect(s.weather.holdUntilMs).toBeUndefined(); // the tray tap clears the hold outright
+    s = step(s, [], 10 * 60_000); // long past the deity hold's original 10 minutes
+    expect(s.weather.kind).toBe('snow'); // still what the tray set, never reverted to season/sun
+    expect(s.weather.mode).toBe('manual');
+  });
+
+  it('a later hold fully replaces an earlier one: a short second hold cuts a longer first one short', () => {
+    // Documented in weather.ts and intents.ts: `applyWeather` overwrites `holdUntilMs` (and
+    // `foggy`) outright, so a 1-minute fog over a 10-minute deity rain hands back at 1 minute, not
+    // 10. (Kind is not asserted past hand-back: the season may re-roll new weather the instant
+    // control returns to it, same as the plain hold hand-back test above.)
+    let s = tickWith(world({ sheep: 0 }), { type: 'weather', kind: 'rain', holdSimMinutes: 10 });
+    s = tickWith(s, { type: 'weather', kind: 'fog', holdSimMinutes: 1 });
+    expect(s.weather.kind).toBe('rain'); // fog does not touch kind
+    expect(s.weather.foggy).toBe(true);
+    s = step(s, [], 61_000); // well past the fog hold's 1 minute, nowhere near the rain hold's 10
+    expect(s.weather.mode).toBe('season'); // handed back already: the second, shorter hold won
+    expect(s.weather.foggy).toBeUndefined();
   });
 
   it('rejects a queued weather intent with the wrong fields', () => {
@@ -153,15 +225,16 @@ describe('act intent: a sheep', () => {
     expect(q.resting).toBe(false);
   });
 
-  it('treat is the heart-and-tag with a small mood bump: the nearest tuft grows', () => {
+  it('treat is the heart-and-tag only: no tuft write (owner Round 2 call, see luna.ts act chain)', () => {
     const s = settle(world());
-    const q = s.sheep[0]!;
-    const nearest = s.tufts.reduce((best, t, i) => (Math.hypot(t.x - q.x, t.y - q.y) < Math.hypot(s.tufts[best]!.x - q.x, s.tufts[best]!.y - q.y) ? i : best), 0);
-    s.tufts[nearest]!.level = 0.3;
+    const before = s.tufts.map((t) => t.level);
     const a = tickWith(s, { type: 'act', target: 'sheep-0', verb: 'treat' });
     expect(a.sheep[0]!.icon).toBe('heart');
     expect(a.sheep[0]!.tagUntilMs).toBe(TICK_MS + RULES.petTagMs);
-    expect(a.tufts[nearest]!.level).toBeGreaterThan(0.3);
+    // No tuft level moved beyond the ordinary regrowth every tuft gets every tick (tick.ts),
+    // treat or no treat: the old per-tap bump is gone.
+    const grown = before.map((lvl) => Math.min(1, lvl + (TICK_MS / 1000) * RULES.tuftRegrowPerSec));
+    a.tufts.forEach((t, i) => expect(t.level).toBeCloseTo(grown[i]!, 9));
   });
 
   it('a stale target is a no-op, as every other targeted intent treats one', () => {
@@ -206,14 +279,15 @@ describe('act intent: Digital Luna', () => {
     expect(Math.hypot(a.luna.x - before.x, a.luna.y - before.y)).toBeGreaterThan(0);
   });
 
-  it('treat is the heart-and-tag with a small mood bump on the nearest tuft', () => {
+  it('treat is the heart-and-tag only: no tuft write (owner Round 2 call)', () => {
     const s = centreLuna(world());
-    const nearest = s.tufts.reduce((best, t, i) => (Math.hypot(t.x - s.luna.x, t.y - s.luna.y) < Math.hypot(s.tufts[best]!.x - s.luna.x, s.tufts[best]!.y - s.luna.y) ? i : best), 0);
-    s.tufts[nearest]!.level = 0.3;
+    const before = s.tufts.map((t) => t.level);
     const a = tickWith(s, { type: 'act', target: LUNA_ID, verb: 'treat' });
     expect(a.luna.icon).toBe('heart');
     expect(a.luna.tagUntilMs).toBe(TICK_MS + 1800);
-    expect(a.tufts[nearest]!.level).toBeGreaterThan(0.3);
+    // No tuft level moved beyond the ordinary regrowth every tuft gets every tick (tick.ts).
+    const grown = before.map((lvl) => Math.min(1, lvl + (TICK_MS / 1000) * RULES.tuftRegrowPerSec));
+    a.tufts.forEach((t, i) => expect(t.level).toBeCloseTo(grown[i]!, 9));
   });
 
   it('DL invariant: calm on her is a no-op beyond a friendly acknowledgement, never a forced state', () => {
@@ -270,6 +344,70 @@ describe('act intent: Digital Luna', () => {
     expect(b.luna.actCmd).not.toBeNull();
   });
 
+  it('a queued call waits while she shelters from the rain, and never drags her out (Verifier blocker #1)', () => {
+    // No sheep: `rainShepherd`'s "every sheep is in" gate (luna.ts) is then vacuously true, so she
+    // reaches the barn on her own in a bounded number of ticks.
+    const s = world({ weather: 'rain', sheep: 0 });
+    runUntil(s, (w) => w.luna.inBarn);
+    expect(s.luna.inBarn).toBe(true);
+    const atDoor = { x: s.luna.x, y: s.luna.y };
+
+    const a = tickWith(s, { type: 'act', target: LUNA_ID, verb: 'call', x: 120, y: 300 });
+    expect(a.luna.actCmd).not.toBeNull(); // queued, not consumed: `act`'s condition sees `inBarn`
+
+    const b = step(a, [], 3000 * TICK_MS); // 300 s of continued rain
+    expect(b.luna.inBarn).toBe(true); // never dragged out into the rain
+    expect(b.luna.x).toBe(atDoor.x); // inBarn consistent with her position: she never moved
+    expect(b.luna.y).toBe(atDoor.y);
+    expect(b.luna.routine).toBeNull(); // rainShepherd's "already inside" branch, alive and well
+    expect(b.luna.wet).toBe(0); // her rain-shepherd guards (`!l.inBarn`) were never bypassed
+    expect(b.luna.actCmd).not.toBeNull(); // the call is still waiting at the door
+
+    // The rain ends: she leaves the barn the normal way, from right where she already was — not a
+    // teleport from some point out on the field the buggy `call` would have dragged her to.
+    const c = tickWith(b, { type: 'setWeather', weather: 'sun' });
+    expect(c.luna.inBarn).toBe(false);
+    const jump = Math.hypot(c.luna.x - atDoor.x, c.luna.y - atDoor.y);
+    expect(jump).toBeLessThan(40); // `leaveBarn`'s own small reposition, not a field-crossing jump
+  });
+
+  it('call and startle never leak a claimed tuft, even mid-walk to it (Verifier blocker #2)', () => {
+    for (const verb of ['call', 'startle'] as const) {
+      const s = centreLuna(world());
+      s.luna.tuft = 0;
+      s.tufts[0]!.claimed = LUNA_ID;
+      const intent: Intent = verb === 'call' ? { type: 'act', target: LUNA_ID, verb: 'call', x: 50, y: 50 } : { type: 'act', target: LUNA_ID, verb };
+      let w = tickWith(s, intent);
+      for (let i = 0; i < 40; i++) w = tick(w);
+      expect(w.luna.tuft, verb).toBeNull();
+      expect(w.tufts.some((t) => t.claimed === LUNA_ID), verb).toBe(false);
+    }
+  });
+
+  it('a call with a non-finite point is rejected outright, not queued', () => {
+    const s = centreLuna(world());
+    const before = { x: s.luna.x, y: s.luna.y };
+    const a = tickWith(s, { type: 'act', target: LUNA_ID, verb: 'call', x: NaN, y: 10 });
+    expect(a.luna.actCmd).toBeUndefined();
+    expect(a.luna.x).toBe(before.x);
+    expect(a.luna.y).toBe(before.y);
+    expect(() => toSave(a)).not.toThrow();
+  });
+
+  it('every verb reacts within ten ticks', () => {
+    for (const verb of ACT_VERBS) {
+      const s = centreLuna(world());
+      const intent: Intent = verb === 'call' ? { type: 'act', target: LUNA_ID, verb: 'call', x: 200, y: 220 } : { type: 'act', target: LUNA_ID, verb };
+      let w = tickWith(s, intent);
+      let reacted = w.luna.actCmd == null; // the command was consumed: the behaviour ran
+      for (let i = 0; i < 9 && !reacted; i++) {
+        w = tick(w);
+        reacted = w.luna.actCmd == null;
+      }
+      expect(reacted, verb).toBe(true);
+    }
+  });
+
   it('rejects a queued act intent with the wrong fields', () => {
     const code = (fn: () => unknown) => {
       try {
@@ -289,6 +427,58 @@ describe('act intent: Digital Luna', () => {
     expect(code(() => fromSave(withIntent({ type: 'act', target: 'luna', verb: 'call' })))).toBe('invalid-world');
     expect(code(() => fromSave(withIntent({ type: 'act', target: 'luna', verb: 'pounce' })))).toBe('invalid-world');
     expect(code(() => fromSave(withIntent({ type: 'act', verb: 'calm' })))).toBe('invalid-world');
+  });
+});
+
+describe('every weather kind reaches an actor within ten ticks', () => {
+  // Issue #43's own bar. `fog` and `clear` have no gameplay effect yet beyond the flag itself (the
+  // PR's own Weak spots section: "the engine ticket reuses it for a visibility effect"), so their
+  // "reaction" here is honestly the weather field, not a creature's behaviour — everything else is
+  // a sheep actually doing something different because of the sky.
+  it('rain: a settled sheep starts walking to the barn door', () => {
+    const s = settle(world({ weather: 'sun', sheep: 1 }));
+    let w = tickWith(s, { type: 'weather', kind: 'rain', holdSimMinutes: 5 });
+    let reacted = w.sheep[0]!.shelter;
+    for (let i = 0; i < 9 && !reacted; i++) {
+      w = tick(w);
+      reacted = w.sheep[0]!.shelter;
+    }
+    expect(reacted).toBe(true);
+  });
+
+  it('snow: a settled, standing sheep starts collecting snow on its back', () => {
+    const s = settle(world({ weather: 'sun', sheep: 1 }));
+    let w = tickWith(s, { type: 'weather', kind: 'snow', holdSimMinutes: 5 });
+    let reacted = w.sheep[0]!.snow > 0;
+    for (let i = 0; i < 9 && !reacted; i++) {
+      w = tick(w);
+      reacted = w.sheep[0]!.snow > 0;
+    }
+    expect(reacted).toBe(true);
+  });
+
+  it('sun: a sheep the rain left wet starts drying off once it stops', () => {
+    const s = settle(world({ weather: 'rain', sheep: 1 }));
+    s.sheep[0]!.wet = 0.5;
+    let w = tickWith(s, { type: 'weather', kind: 'sun', holdSimMinutes: 5 });
+    for (let i = 0; i < 9; i++) w = tick(w);
+    expect(w.sheep[0]!.wet).toBeLessThan(0.5);
+  });
+
+  it('fog: the visibility flag itself lands and stays set', () => {
+    const s = settle(world({ weather: 'sun', sheep: 1 }));
+    let w = tickWith(s, { type: 'weather', kind: 'fog', holdSimMinutes: 5 });
+    for (let i = 0; i < 9; i++) w = tick(w);
+    expect(w.weather.foggy).toBe(true);
+  });
+
+  it('clear: the sky is sun and the fog flag is off', () => {
+    const s = settle(world({ weather: 'rain', sheep: 1 }));
+    s.weather = { ...s.weather, foggy: true };
+    let w = tickWith(s, { type: 'weather', kind: 'clear', holdSimMinutes: 5 });
+    for (let i = 0; i < 9; i++) w = tick(w);
+    expect(w.weather.kind).toBe('sun');
+    expect(w.weather.foggy).toBeFalsy();
   });
 });
 

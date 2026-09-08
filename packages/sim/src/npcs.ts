@@ -166,8 +166,21 @@ export function tickNpcs(s: SimState): void {
     const k = Math.floor(at * 100);
     const key = k * 1000 + s.clock.dayCount;
     if (day === k && s.npcs.lastVisitKey !== key) {
-      s.npcs.lastVisitKey = key;
-      summonFarmer(s);
+      // Round 1 verifier finding 7 (#82): with the engine directing, a card can summon him
+      // off-schedule (`shearingDay`'s "a visit outside his two", `engine/hooks.ts`), and
+      // `summonFarmer` itself no-ops while he is already on the field. Booking the key regardless
+      // would read a slot he slept through — already busy on the card's business — as visited, and
+      // he would never get his own farmer for it. So with the engine on, only book the key when he
+      // is actually free to be summoned for it; the key stays open and is retried on a later tick
+      // still inside the same window, once he is.
+      //
+      // With the engine off there is no card in the room, so this always takes the summon branch —
+      // including the prototype's own two-visit collision (`test/npcs.test.ts`'s "is consumed
+      // unseen... odd but kept"), which this leaves exactly as it was.
+      if (!s.events.enabled || !s.npcs.farmer) {
+        s.npcs.lastVisitKey = key;
+        summonFarmer(s);
+      }
     }
   }
   // The merchant's fixed timer is the engine-off path. While the engine directs, the

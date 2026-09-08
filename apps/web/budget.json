@@ -1,6 +1,6 @@
 {
-  "comment": "Size budget for the built apps/web bundle, checked after vite build. Kilobytes on disk, uncompressed. JS budget raised from 48 to 128 on 2026-09-02 when the sim (behaviour registry, Luna chain, sheep, NPCs) started shipping in the bundle; the sim is expected to reach roughly 90 kB by the end of Phase 0.",
-  "maxJsKb": 128,
+  "comment": "Size budget for the built apps/web bundle, checked after vite build. Kilobytes on disk, uncompressed. JS budget raised from 48 to 128 on 2026-09-02 when the sim (behaviour registry, Luna chain, sheep, NPCs) started shipping in the bundle; the sim is expected to reach roughly 90 kB by the end of Phase 0. JS budget raised from 128 to 192 and total from 400 to 464 on 2026-09-08 when the event engine (PR #82: the card deck data, the authored events, the engine) started shipping in the bundle, which measured 164.1 kB of JS and 437.2 kB total at the merge; the owner's decision, plan decision 15. The phone downloads the gzipped bundle, 58 kB at that merge.",
+  "maxJsKb": 192,
   "maxCssKb": 8,
-  "maxTotalKb": 400
+  "maxTotalKb": 464
 }

@@ -41,6 +41,7 @@ Model choice per role, set by the owner on 2026-09-08 after the first Sonnet spr
 5. **Pre-push check.** Before pushing, the worker checks every claim in its PR body against its own diff; an over-claim costs an Opus round.
 6. **Concurrency.** At most five Sonnet workers and two Opus Verifiers at once.
 7. **Wakes.** The Foreman is woken only by its hourly check-in (while anything runs), the four-hourly routine, and a worker or Verifier reporting. It does not subscribe to per-PR CI events; each wake re-reads the whole context, and that, not the workers, is the largest cost line.
+8. **Build check.** A Verifier runs `npm run build` (the web bundle and its size budget) on every PR whose diff touches a package the web app imports (`packages/sim`, `packages/render`, `packages/content`), whatever the lane; a sim PR that pushes the bundle over budget is red, and the Foreman reads the PR's checks before any merge, including one the owner has pinned. Rule added 2026-09-08 after the engine merged with a red build check nobody had read.
 
 GPT keys are useful for Scouts and for bulk content drafting (villager names, event flavour text, dialogue) where a second voice helps, and never for merging code.
 

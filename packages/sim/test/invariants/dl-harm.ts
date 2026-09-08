@@ -28,6 +28,16 @@
 //
 // `LUNA_ANIMS` (src/behaviours/luna.ts) is the one export this file needed from `src` and didn't
 // already have: the list of `anim` strings her own chain ever assigns. See its doc comment there.
+//
+// One shape of kind 2 needs memory across ticks that a per-state `HarmCheck` cannot carry — a
+// `manual` value that never changes is indistinguishable, one tick at a time, from a value that is
+// legitimately about to change. `RideStuckGuard` below covers that one case (Round 3, review
+// finding R2-6); everything else in `HARM_CHECKS` stays a pure function of a single state, as the
+// fuzz's per-tick `harmIn` call expects.
+//
+// Round 3 also closed two checks that were narrower than their own doc comments or conditions
+// claimed: `riding-sheep-exists` now reads `mounting` as well as `riding` (R2-5), and
+// `manual-hold-bounded`'s upper bound is no longer masked by `riding`/`mounting` being set (R2-4).
 
 import { findSheep } from '../../src/actors';
 import { LUNA_ANIMS } from '../../src/behaviours/luna';
@@ -124,9 +134,16 @@ export const HARM_CHECKS: readonly HarmCheck[] = [
   },
   // --- Round 2 (#61 review finding 2): a forced or stuck hold, not just an out-of-range field. ---
   {
+    // Round 3, review finding R2-5: the doc comment above (harm kind 2) claims this checks
+    // "riding/mounting pointing at a sheep that does not exist", but the check itself only ever
+    // read `riding`. Harmless so far — `ride`'s own tick clears a bogus `mounting` the very next
+    // tick — but the doc said mounting was covered and it was not, so it now is.
     name: 'riding-sheep-exists',
-    detect: (l, state) =>
-      l.riding === null || findSheep(state, l.riding) ? null : `riding "${l.riding}" names no sheep in state.sheep — she is forced onto a mount that isn't there`,
+    detect: (l, state) => {
+      if (l.riding !== null && !findSheep(state, l.riding)) return `riding "${l.riding}" names no sheep in state.sheep — she is forced onto a mount that isn't there`;
+      if (l.mounting !== null && !findSheep(state, l.mounting)) return `mounting "${l.mounting}" names no sheep in state.sheep — she is forced onto a mount that isn't there`;
+      return null;
+    },
   },
   {
     name: 'riding-hold-bounded',
@@ -135,16 +152,19 @@ export const HARM_CHECKS: readonly HarmCheck[] = [
   {
     name: 'manual-hold-bounded',
     detect: (l, state) => {
-      // Mirrors the `manual` behaviour's own condition: `manualUntilMs` is only read at all while
-      // `l.manual !== null && !l.riding && !l.mounting`.
-      if (l.manual === null || l.riding !== null || l.mounting !== null) return null;
-      // Always enforced: the upper bound. Even for the values below that may leave manualUntilMs
-      // stale in the past, nothing legitimate ever pushes it far into the future — this alone still
-      // catches a bypass that pins any manual value with manualUntilMs = Infinity, 'ride' included.
+      if (l.manual === null) return null;
+      // The upper bound is enforced whenever `manual` is set at all, regardless of `riding` or
+      // `mounting` — Round 3, review finding R2-4: the old condition mirrored the `manual`
+      // behaviour's own read-gate (`!l.riding && !l.mounting`) exactly, which meant a writer that
+      // kept either flag set alongside an unbounded `manualUntilMs` hid completely from this check.
+      // Nothing legitimate ever pushes `manualUntilMs` far into the future no matter what `riding`
+      // or `mounting` read, so this half has no reason to be masked by them.
       const upper = boundedTimer('manualUntilMs', l.manualUntilMs, state.clock.nowMs);
       if (upper) return upper;
-      // The "not already stale" half only means something for the values manualUntilMs actually
-      // governs; see TIMED_MANUAL's doc comment for why the others are exempt from it.
+      // The "not already stale" half only means something once the `manual` behaviour would
+      // actually read `manualUntilMs` for this tick (its own condition: `!l.riding && !l.mounting`)
+      // and only for the values it actually governs — see TIMED_MANUAL's doc comment.
+      if (l.riding !== null || l.mounting !== null) return null;
       if (!TIMED_MANUAL.has(l.manual)) return null;
       return l.manualUntilMs >= state.clock.nowMs
         ? null
@@ -183,6 +203,45 @@ export const HARM_CHECKS: readonly HarmCheck[] = [
  * every DL-invariant test shares: the fuzz asserts this is always `[]`; the static guard asserts
  * her sanctioned command surface never makes it anything else.
  */
+/**
+ * Ticks a legitimate `manual === 'ride'` transient (mounting and riding both null — a mount that
+ * just failed, waiting for the `manual` behaviour's own fallback to clear it next tick) may run for
+ * before it counts as stuck rather than in-flight. Measured, not guessed: a full 50-seed fuzz (a
+ * scripted day each, `ride` exercised by every seed via `LUNA_ACTIONS`) never saw this run past 1
+ * tick. Set to 3 for margin — "more than a few ticks" per the review, not a hair trigger on the
+ * measured number.
+ */
+export const RIDE_STUCK_AFTER_TICKS = 3;
+
+/**
+ * Round 3, review finding R2-6 (the `TIMED_MANUAL` exemption): `manual-hold-bounded`'s "not already
+ * stale" half exempts `'ride'` on purpose (see `TIMED_MANUAL`'s doc comment) because a failed mount
+ * can legitimately leave it sitting on the default, already-stale `manualUntilMs` for one tick. That
+ * makes a writer that pins `manual = 'ride'` for many ticks — with neither `mounting` nor `riding`
+ * ever set — completely invisible to every check above: nothing about a *single* tick's state tells
+ * the legitimate one-tick transient apart from a stuck one, only how many ticks in a row it has held.
+ *
+ * That needs memory across ticks, which the rest of `HARM_CHECKS` deliberately does not carry (each
+ * entry is a pure function of one state) — so this is a small stateful tracker instead of a
+ * `HarmCheck` entry, kept here so "what harm looks like" still lives in one file. Instantiate one
+ * per run and feed it a tick at a time; the fuzz (the only test that ever exercises `ride`) does
+ * this alongside `harmIn`. The static guard and the off-screen block never set `manual`, so they
+ * have no need of it.
+ */
+export class RideStuckGuard {
+  private run = 0;
+
+  /** Feed one tick's Luna in; returns a reason once the stuck run passes the threshold, else null. */
+  next(l: Luna): string | null {
+    if (l.manual === 'ride' && l.riding === null && l.mounting === null) this.run++;
+    else this.run = 0;
+    if (this.run > RIDE_STUCK_AFTER_TICKS) {
+      return `manual has been "ride" for ${this.run} consecutive ticks with neither mounting nor riding set — a stuck hold, not a failed-mount transient (that clears within ${RIDE_STUCK_AFTER_TICKS})`;
+    }
+    return null;
+  }
+}
+
 export function harmIn(state: SimState): string[] {
   if (!state.luna) return ['state.luna is missing: she has been removed'];
   const reasons: string[] = [];

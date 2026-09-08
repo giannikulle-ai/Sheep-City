@@ -11,6 +11,7 @@ import { V2_LUNA_DEFAULTS } from '../src/save/migrations/v2-luna-fetch-fields';
 import { v3NpcDefaults } from '../src/save/migrations/v3-flock-and-npc-fields';
 import { V4_STAMP_DEFAULTS, v4GroundDefault } from '../src/save/migrations/v4-ground-and-stamps';
 import { summarise } from '../src/ledger/ledger';
+import { createChronicle, tell } from '../src/chronicle/store';
 import { SAVE_FORMAT } from '../src/save/doc';
 import { fromSave, toSave, toSaveText } from '../src/save/serialize';
 import { createInitialState, SAVE_VERSION, type SimState } from '../src/state';
@@ -80,6 +81,11 @@ export function buildFixtureState(): SimState {
   s.banks = { wool: 2, coins: 6, owned: ['flowerbed'] };
   s.ground.prints.push({ x: 300, y: 250, tMs: now - 20_000 }, { x: 306, y: 248, tMs: now - 19_300 });
   s.pendingIntents.push({ type: 'setSeason', season: 'winter', at: s.clock.tick + 500 });
+  // Two hand-placed chronicle entries so the fixture covers every type on `ChronicleEntry`: a
+  // 'ledger' line with only a numeric fact and no actors (its first telling of 'wool', so
+  // notability 1), and an 'authored' line with a hint, actors, and a string fact.
+  tell(s, { atMs: now, district: 'farm', line: '2 wool banked', picture: 'wool', source: 'ledger', facts: { wool: 2 } });
+  tell(s, { atMs: now, district: 'farm', line: `${clover.name} grazed through the rain`, picture: 'graze', source: 'authored', actors: [clover.id], hint: 0.2, facts: { weather: 'rain' } });
   return s;
 }
 
@@ -158,6 +164,54 @@ describe('save fixtures', () => {
     expect(JSON.stringify(again, null, 2) + '\n').toBe(readFileSync(join(fixturesDir, name), 'utf8'));
   });
 
+  describe('fromSave detaches a loaded world from its input document (module contract, serialize.ts:1-3)', () => {
+    type ChronicleDoc = { version: number; world: { chronicle: { entries: Array<Record<string, unknown>> } } & Record<string, unknown> };
+
+    it('mutating the parsed document after fromSave never rewrites the loaded world, and every loaded entry is frozen', () => {
+      const name = `save-v${SAVE_VERSION}.json`;
+      const doc = readFixture(name) as ChronicleDoc;
+      expect(doc.world.chronicle.entries.length).toBeGreaterThan(0); // the fixture has two hand-placed entries
+
+      const loaded = fromSave(doc);
+      const before = loaded.chronicle.entries.map((e) => ({ ...e }));
+
+      // Reach into the parsed document and tamper with its first entry, actors, and facts, the way
+      // a host holding onto its parsed envelope could.
+      const docEntry = doc.world.chronicle.entries[0]!;
+      docEntry['line'] = 'TAMPERED';
+      (docEntry['actors'] as unknown[]).push('tampered-actor');
+      (docEntry['facts'] as Record<string, unknown>)['wool'] = 999_999;
+
+      expect(loaded.chronicle.entries).toEqual(before);
+      for (const entry of loaded.chronicle.entries) {
+        expect(Object.isFrozen(entry)).toBe(true);
+        expect(Object.isFrozen(entry.actors)).toBe(true);
+        expect(Object.isFrozen(entry.facts)).toBe(true);
+        expect(() => {
+          (entry as { line: string }).line = 'nope';
+        }).toThrow(TypeError);
+      }
+    });
+
+    it('a migrated older fixture detaches too: relabelling the fixture one version back walks it through the v5->v6 migration, which keeps a chronicle already present rather than filling a fresh one', () => {
+      const name = `save-v${SAVE_VERSION}.json`;
+      const doc = readFixture(name) as ChronicleDoc;
+      const older: ChronicleDoc = { ...doc, version: SAVE_VERSION - 1 };
+      expect(older.world.chronicle.entries.length).toBeGreaterThan(0);
+
+      const loaded = fromSave(older);
+      expect(loaded.version).toBe(SAVE_VERSION);
+      const before = loaded.chronicle.entries.map((e) => ({ ...e }));
+
+      const docEntry = older.world.chronicle.entries[0]!;
+      docEntry['line'] = 'TAMPERED VIA MIGRATION PATH';
+      (docEntry['facts'] as Record<string, unknown>)['wool'] = -1;
+
+      expect(loaded.chronicle.entries).toEqual(before);
+      expect(Object.isFrozen(loaded.chronicle.entries[0])).toBe(true);
+    });
+  });
+
   type OldDoc = { version: number; world: { luna: Record<string, unknown>; npcs: { farmer: Record<string, unknown> | null; merchant: Record<string, unknown> | null } } & Record<string, unknown> };
 
   /** `world` as the migrations from `from` should leave it: the old fields, plus each later version's defaults. */
@@ -176,18 +230,22 @@ describe('save fixtures', () => {
       const clock = out['clock'] as { nowMs: number };
       out = { ...out, ledger: summarise(out as unknown as SimState), lastLedgerAt: clock.nowMs };
     }
+    if (from < 6) out = { ...out, chronicle: createChronicle() };
     return out;
   }
 
-  for (const from of [1, 2, 3, 4]) {
+  for (const from of [1, 2, 3, 4, 5]) {
     it(`save-v${from}.json comes back as a current-version document with the same world plus exactly the migrated fields`, () => {
       const old = readFixture(`save-v${from}.json`) as OldDoc;
       const again = toSave(fromSave(old));
       expect(old.version).toBe(from);
       expect(again.version).toBe(SAVE_VERSION);
       expect(again.world).toEqual(migratedWorld(from, old.world));
-      expect(old.world).not.toHaveProperty('ledger');
-      expect(old.world).not.toHaveProperty('lastLedgerAt');
+      if (from < 5) {
+        expect(old.world).not.toHaveProperty('ledger');
+        expect(old.world).not.toHaveProperty('lastLedgerAt');
+      }
+      expect(old.world).not.toHaveProperty('chronicle');
       if (from < 4) expect(old.world).not.toHaveProperty('ground');
       if (from < 3) expect(old.world).not.toHaveProperty('nameIdx');
     });

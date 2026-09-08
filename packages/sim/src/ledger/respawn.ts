@@ -6,6 +6,7 @@
 // resting and Digital Luna is asleep in the barn; in rain the flock is in the barn already.
 
 import { phaseOf } from '../clock';
+import { cloneChronicle, type Chronicle } from '../chronicle/store';
 import { FLOWERS, LFOOT, randomFoot, SFOOT, SPOT } from '../geometry';
 import { groundSnowy } from '../ground';
 import { createRng, nextFloat } from '../rng';
@@ -18,8 +19,16 @@ import { cloneLedger, type Ledger } from './ledger';
  * default, so a district respawns onto its own field). The returned state carries the ledger as
  * its snapshot, taken now. No NPC is on the field; the merchant's timer and the farmer's visit
  * key carry over so their schedules continue.
+ *
+ * `chronicle` is the outgoing state's log, carried across the respawn (a fresh district passes
+ * `createChronicle()`). `respawn`'s own numbers hold nothing of a district's history — the Ledger
+ * is exactly the numbers that survive with no actors in the room — so the caller must say what, if
+ * anything, the respawned world remembers; there is no silent default that drops it. A deep copy of
+ * `chronicle` is taken (`cloneChronicle`), so the returned state never shares it with the caller's
+ * own copy. `catchUp` is the caller on the plan's offline-catch-up path; it passes the state's own
+ * chronicle and then tells the gap's diff onto the respawned world.
  */
-export function respawn(ledger: Ledger, seed: number = ledger.seed): SimState {
+export function respawn(ledger: Ledger, chronicle: Chronicle, seed: number = ledger.seed): SimState {
   const rng = createRng(seed);
   const now = ledger.clock.nowMs;
   const phase = phaseOf(ledger.clock.t);
@@ -91,6 +100,7 @@ export function respawn(ledger: Ledger, seed: number = ledger.seed): SimState {
     pendingIntents: [],
     ledger: cloneLedger(ledger),
     lastLedgerAt: now,
+    chronicle: cloneChronicle(chronicle),
   };
   state.ground.wasSnowy = groundSnowy(state);
   return state;

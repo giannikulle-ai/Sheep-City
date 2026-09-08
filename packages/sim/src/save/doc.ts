@@ -11,6 +11,9 @@
 //                        sheep and `world.luna` gain `lastStamp` and `stampSide` for the ground stamps.
 // v5 (#39):              same envelope; `world` gains `ledger` (the district's numbers as the Ledger
 //                        path last wrote them, see ledger/ledger.ts) and `lastLedgerAt`.
+// v6 (#60):              same envelope; `world` gains `chronicle` (the whole world's log, see
+//                        chronicle/store.ts): an append-only list of entries plus the rolling stats
+//                        `tell` judges a new number's notability against.
 
 import type { SimState } from '../state';
 

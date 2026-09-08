@@ -17,7 +17,9 @@
 // The hash below covers the whole end-of-day state, `SAVE_VERSION` included, so it also moves on a
 // save-schema bump even when this list does not; say which of the two moved in the PR. It moved
 // in #39 for the schema only (save v5: `ledger`, `lastLedgerAt`); the list did not, and
-// test/ledger.test.ts pins this day on its v4 view to the hash from before.
+// test/ledger.test.ts pins this day on its v4 view to the hash from before. It moved again in #60
+// for the schema only (save v6: `chronicle`, empty since nothing here calls `tell`); the list
+// still did not, and test/chronicle.test.ts pins this day on its v5 view to the hash from before.
 import { describe, expect, it } from 'vitest';
 import { phaseOf } from '../src/clock';
 import { hashState } from '../src/hash';
@@ -91,7 +93,7 @@ describe('scripted day', () => {
     const b = scriptedDay(11);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('067877d6ea96f42c');
+    expect(hashState(a.state)).toBe('c69b538ba6cd2e56');
   });
 
   it('the shape of the day holds for other seeds: bed at dusk, asleep by night, up by day', () => {

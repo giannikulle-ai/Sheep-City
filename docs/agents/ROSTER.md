@@ -29,8 +29,8 @@ Live list of lanes and sessions. The Foreman updates this on every spawn and arc
 | art | done | session_01Q47K68B53zVR6UFSQfpzLJ | #47 crow brief and frames, PR #53 merged by the owner 22:07 UTC (the pin; Verifier session_01WUXF4oyVKuAY2XN4sFhzVr) | 2026-09-02 |
 | sim | done | session_01KvdHVJrPpHcy7fN9XctWFo | #39 Ledger, PR #57 merged by the owner 23:05 UTC before a Verifier pass; post-merge audit by an Opus Verifier (see below) | 2026-09-02 |
 | client | done | session_01RLbJ7BSan8mt2pBH5DM11Q | #20 jump-to dawn and dusk, PR #56 merged by the owner 23:05 UTC | 2026-09-02 |
-| sim | active (Opus) | session_01Rwt7bfLwfMgVJifDib5pVA | #40 Director with a pacing curve and deck runner | 2026-09-02 |
-| verifier | active (Opus) | session_01FamLoXMbsgSSLwowPTo5kk | post-merge audit of PR #57 (Ledger) on trunk; findings become sim issues | 2026-09-02 |
+| sim | archived | session_01Rwt7bfLwfMgVJifDib5pVA | #40, stopped by the owner 2026-09-02 before any push; the ticket is rewritten as the event engine | 2026-09-02 |
+| verifier | active (Opus) | session_01FamLoXMbsgSSLwowPTo5kk | post-merge audit of PR #57 (Ledger) on trunk, resumed 2026-09-08; findings become sim issues | 2026-09-02 |
 | economy | not started | — | Phase 2 | — |
 
 Budget tier: Standard (about four lanes), set 2026-09-02.
@@ -52,11 +52,16 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 ## Phase 0 exit
 Passed 2026-09-02 21:22 UTC: the owner merged PR #34 (real sim in the app at v31 parity) after the Verifier's approval; that merge is the pin. PR #32 followed; the owner merged the tile swap (PR #50) at 21:37 and https://sheep-city.sheepcliff.com serves the app. Remaining tail: #33 small life (landed as PR #54), #20 jump-to values (active).
 
-## Phase 1 ticket order (after the plan rewrite, 2026-09-02)
-Landed: #41 world event deck (PR #52, cards v1), #47 art crows (PR #53, pinned), #39 sim Ledger (PR #57), #33 small life (PR #54), #20 (PR #56).
-One sim worker at a time, in this order: cards v2 schema (world, new ticket) -> chronicle and `tell` (sim, new) -> #40 event engine (sim, rewritten) -> DL invariant test (sim, new) -> #45 social graph v1 (sim, rewritten) -> #43 deity intents (sim) -> #42 storybook (client, rewritten, owner pin) -> #44 powers UX (client, owner pin) -> #48 crows on the engine (sim) -> #46 social frames (art, owner pin) -> map design document (client and sim, new, owner pin) -> disposition of flowerbed, hay2, scarecrow (sim, new) -> #49 qa coverage against the chronicle -> Phase 2.
-Client housekeeping when the lane is idle: #55.
+## Phase 1 ticket order (after the plan rewrite, merged as PR #58 on 2026-09-08)
+Landed: #41 world event deck (PR #52, cards v1), #47 art crows (PR #53, pinned), #39 sim Ledger (PR #57), #33 small life (PR #54), #20 (PR #56), #58 the plan rewrite (merged by the owner 07:00 UTC).
+One sim worker at a time: #59 cards v2 schema (world, next to start) -> #60 chronicle and `tell` (sim) -> #40 event engine (sim) -> #61 DL invariant test (sim) -> #45 social graph v1 (sim) -> #43 deity intents (sim) -> #48 crows on the engine (sim) -> #63 disposition of farm builds (sim).
+Client: #55 (housekeeping, whenever idle) -> #42 storybook (after #60 and #40; owner pin) -> #44 powers UX (after #43; owner pin) -> #62 region map design document (with sim; owner pin).
+Art: #64 art direction document (any time; owner pin); #46 social frames (after #45; owner pin).
+Qa: #49 last. Phase 2 (#65 farmer rework, #66 shear readability, #67 DL animation set, #68 harbour gauge) after #62 is pinned.
 Cap: no more than three needs-owner-pin PRs open at once.
+
+## Health note 2026-09-08 07:15 UTC
+The owner merged the plan rewrite (PR #58) and the check-in routine is re-enabled. The interrupted #40 session was archived (the ticket is rewritten); the interrupted post-merge audit of PR #57 was resumed by a poke. Starting the #59 worker failed: this Foreman session is in plan permission mode after the planning pass, and a child cannot be more permissive than its parent; the owner switches the session back to auto and the worker starts on the next check-in or on request.
 
 ## Health note 2026-09-02 20:50 UTC
 The usage cap lifted at 20:20 UTC. All three stalled sessions resumed from a scheduled poke with their context intact and opened PRs #31, #32, #34 within twenty minutes; no work was lost. The cap cost about an hour of wall time. Rule kept from it: workers push early, and the Foreman treats a session over three hours with no push as a health signal.

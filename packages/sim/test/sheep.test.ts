@@ -38,7 +38,10 @@ describe('the registry holds the sheep block in the prototype’s order', () => 
     expect(SHEEP_BEHAVIOURS.chains()).toEqual(['shelter', 'rest', 'needs', 'eat', 'lambs', 'move']);
     expect(SHEEP_BEHAVIOURS.behaviours('shelter').map((b) => b.id)).toEqual(['rainShelter', 'leaveShelter']);
     expect(SHEEP_BEHAVIOURS.behaviours('rest').map((b) => b.id)).toEqual(['nightRest', 'wake']);
-    expect(SHEEP_BEHAVIOURS.behaviours('needs').map((b) => b.id)).toEqual(['pickNeed']);
+    // `act` (#43, the deity direct action) shares the `needs` chain at priority 5, above
+    // `pickNeed`'s 0, so a queued command always wins the chain outright; it does not touch the
+    // needs weights (graze/hay/drink/rest/wander below).
+    expect(SHEEP_BEHAVIOURS.behaviours('needs').map((b) => b.id)).toEqual(['act', 'pickNeed']);
     expect(SHEEP_BEHAVIOURS.behaviours('eat').map((b) => b.id)).toEqual(['eat']);
     expect(SHEEP_BEHAVIOURS.behaviours('lambs').map((b) => b.id)).toEqual(['lambs']);
     expect(SHEEP_BEHAVIOURS.behaviours('move').map((b) => b.id)).toEqual(['walk']);

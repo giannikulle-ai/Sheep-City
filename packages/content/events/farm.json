@@ -1,7 +1,7 @@
 {
   "$schema": "../schema/events.schema.json",
-  "source": "New for Sheepcliff (#41). Timings lean on balance/farm.json: the merchant's cadence, the clock phases, the season odds.",
-  "comment": "The farm's event deck. The Director (packages/sim, #40) draws a card whose preconditions hold, weighted, respecting cooldowns; runs its start hooks; ends it after its duration with the end hooks. Every card has a beat the player sees within one second. Cozy only: nothing here hurts anyone.",
+  "source": "New for Sheepcliff (#41), migrated to the v2 card schema for #59 so the engine (#40) is built against it, not v1.",
+  "comment": "The farm's event deck. The engine (packages/sim, #40) draws a card whose conditions hold, weighted live by its multipliers, respecting its limits; runs its start hooks; ends it after its duration with the end hooks. Every card has a beat the player sees within one second. Cozy only: nothing here hurts anyone. DL's birthday and first snow moved to events/authored.json for #59 (plan section 2 names them as the punctuation cards don't do); flockHuddle and farmerMeetsMerchant are new so the deck stays at fifteen.",
   "district": "farm",
   "timeScale": {
     "simMinutesPerDay": 1440,
@@ -13,10 +13,14 @@
     {
       "id": "fogMorning",
       "title": "Fog morning",
-      "comment": "The reference visibility event for #40. The flock huddles; DL counts them by ear.",
-      "weight": 10,
-      "cooldownSimHours": 48,
-      "preconditions": { "season": ["autumn", "winter", "spring"], "weather": ["sun"], "timeOfDay": ["dawn"] },
+      "comment": "The reference visibility event for #40. The flock huddles; DL counts them by ear. v2: conditions ported 1:1 from v1's preconditions; no multiplier, a fog roll is weather, not an actor state.",
+      "conditions": [
+        { "on": "season", "op": "in", "value": ["autumn", "winter", "spring"] },
+        { "on": "weather", "op": "eq", "value": "sun" },
+        { "on": "timeOfDay", "op": "in", "value": ["dawn"] }
+      ],
+      "weight": { "base": 10, "multipliers": [] },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 3120, "cooldownSimHours": 48 },
       "durationSimMinutes": 240,
       "hooks": {
         "start": [
@@ -28,17 +32,27 @@
           { "op": "flag", "name": "fog", "value": false }
         ]
       },
-      "storybook": { "line": "A fog came down at dawn and {dl} counted the flock by their bleats.", "picture": "fogMorning" },
+      "storybook": { "line": "A fog came down at dawn and {dl} counted the flock by their bleats.", "picture": "fogMorning", "notability": 0.3 },
       "moment": { "kind": "weather", "detail": "fog" },
       "beat": { "start": "The field greys out to shapes within a second; the flock bunches up.", "end": "The fog thins from the top down and the barn's red comes back first." }
     },
     {
       "id": "crowsOnTheField",
       "title": "Crows on the field",
-      "comment": "Crows are data here and art in #47; DL's chase is sim work in #48. Fires when the hay is worth stealing.",
-      "weight": 12,
-      "cooldownSimHours": 36,
-      "preconditions": { "season": ["summer", "autumn"], "weather": ["sun"], "timeOfDay": ["day"], "flockSize": { "min": 1 } },
+      "comment": "Crows are data here and art in #47; DL's chase is sim work in #48. v2: flockSize.min becomes a ledger.flock condition; new causality, the issue's own example, crows are likelier when the hay is high — the Ledger has no separate hay stock, so this reads ledger.grass (the mean tuft level) as the stand-in, flagged to sim on #40. Base weight also drops from v1's flat 12 to 8: the new ×2 grass multiplier now carries the busy-hay-day likelihood the old flat number tried to bake in on its own, so the base has to sit lower to keep the same overall frequency once the multiplier can double it.",
+      "conditions": [
+        { "on": "season", "op": "in", "value": ["summer", "autumn"] },
+        { "on": "weather", "op": "eq", "value": "sun" },
+        { "on": "timeOfDay", "op": "in", "value": ["day"] },
+        { "on": "ledger.flock", "op": "gte", "value": 1 }
+      ],
+      "weight": {
+        "base": 8,
+        "multipliers": [
+          { "when": { "on": "ledger.grass", "op": "gte", "value": 0.6 }, "times": 2, "comment": "Plenty of grazing left standing reads as hay worth stealing." }
+        ]
+      },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 2250, "cooldownSimHours": 36 },
       "durationSimMinutes": 90,
       "hooks": {
         "start": [
@@ -49,17 +63,28 @@
           { "op": "mood", "target": "dl", "delta": 1, "comment": "She chased them off. Good dog." }
         ]
       },
-      "storybook": { "line": "Three crows landed on the hay and {dl} sent them packing.", "picture": "crows" },
+      "storybook": { "line": "Three crows landed on the hay and {dl} sent them packing.", "picture": "crows", "notability": 0.35 },
       "moment": { "kind": "dl-trick", "detail": "crow-chase" },
       "beat": { "start": "Three crows drop onto the hay bale; the nearest sheep backs off a step.", "end": "DL runs at them, they scatter over the fence, she trots back with her tail up." }
     },
     {
       "id": "lostLamb",
       "title": "Lost lamb",
-      "comment": "Reference event for #40: a lamb wanders off the field at dusk and DL fetches it home.",
-      "weight": 8,
-      "cooldownSimHours": 48,
-      "preconditions": { "lambPresent": true, "timeOfDay": ["dusk"], "weather": ["sun", "rain"] },
+      "comment": "Reference event for #40: a lamb wanders off the field at dusk and DL fetches it home. v2: this is the issue's own worked example. The hard gate stays dusk-only, sun or rain, so the storybook line stays true (it always happens near dusk); the three named actor predicates now do the causal work v1 could only fake with a flat weight of 8. `lambFarFromMother` is PROPOSED to sim on #40: today's sim springs every lamb to a fixed point behind its mother every tick with no detachment behaviour, so this predicate cannot yet be true and the card cannot yet fire on it — the multiplier is written for the sim #40 will build, not the one that exists today.",
+      "conditions": [
+        { "on": "lambPresent", "op": "eq", "value": true },
+        { "on": "timeOfDay", "op": "in", "value": ["dusk"] },
+        { "on": "weather", "op": "in", "value": ["sun", "rain"] }
+      ],
+      "weight": {
+        "base": 5,
+        "multipliers": [
+          { "when": { "on": "lambFarFromMother", "op": "eq", "value": true }, "times": 3, "comment": "This is what \"lost\" means; the strongest driver, once sim on #40 can produce it (see the card comment: PROPOSED, not true in today's sim)." },
+          { "when": { "on": "flockScattered", "op": "eq", "value": true }, "times": 2, "comment": "Nobody was minding the edges." },
+          { "when": { "on": "dlFarFromFlock", "op": "eq", "value": true }, "times": 1.5, "comment": "DL was not close enough to notice it slip out." }
+        ]
+      },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 3000, "cooldownSimHours": 48 },
       "durationSimMinutes": 120,
       "hooks": {
         "start": [
@@ -72,17 +97,20 @@
           { "op": "mood", "target": "dl", "delta": 1 }
         ]
       },
-      "storybook": { "line": "{lamb} wandered off at dusk and {dl} brought them home before dark.", "picture": "lostLamb" },
+      "storybook": { "line": "{lamb} wandered off at dusk and {dl} brought them home before dark.", "picture": "lostLamb", "notability": 0.6 },
       "moment": { "kind": "lamb", "detail": "lost" },
       "beat": { "start": "A lamb slips out the gate; its mother stands up and bleats after it.", "end": "DL walks the lamb back through the gate, slowly, right behind it, and the ewe meets them." }
     },
     {
       "id": "merchantCaravan",
       "title": "Merchant caravan",
-      "comment": "Replaces the fixed merchant timer (#40). Cooldown 32 sim hours is balance merchant.everyMs (240 s real) in in-world time; duration 240 sim minutes is merchant.stayMs (30 s real).",
-      "weight": 14,
-      "cooldownSimHours": 32,
-      "preconditions": { "merchantPresent": false, "timeOfDay": ["day", "dusk"] },
+      "comment": "Replaces the fixed merchant timer (#40). Cooldown 32 sim hours is balance merchant.everyMs (240 s real) in in-world time; duration 240 sim minutes is merchant.stayMs (30 s real). v2: conditions ported 1:1; no multiplier, his cadence is mechanical, not actor-driven.",
+      "conditions": [
+        { "on": "merchantPresent", "op": "eq", "value": false },
+        { "on": "timeOfDay", "op": "in", "value": ["day", "dusk"] }
+      ],
+      "weight": { "base": 14, "multipliers": [] },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 2160, "cooldownSimHours": 32 },
       "durationSimMinutes": 240,
       "hooks": {
         "start": [
@@ -90,17 +118,28 @@
         ],
         "end": []
       },
-      "storybook": { "line": "The merchant's cart rolled in and {coins} coins changed hands.", "picture": "merchant" },
+      "storybook": { "line": "The merchant's cart rolled in and {coins} coins changed hands.", "picture": "merchant", "notability": 0.4 },
       "moment": { "kind": "npc-arrival", "detail": "merchant" },
       "beat": { "start": "The cart rolls in from the right edge; DL looks up.", "end": "A coin bubble, the cart rolls out, and a new thing stands on the farm if the coins stretched to it." }
     },
     {
       "id": "shearingDay",
       "title": "Shearing day",
-      "comment": "Reference event for #40: the sim tops every fleece up to ready and summons the farmer, who shears the lot.",
-      "weight": 6,
-      "cooldownSimHours": 72,
-      "preconditions": { "season": ["spring", "summer"], "weather": ["sun"], "timeOfDay": ["day"], "flockSize": { "min": 3 } },
+      "comment": "Reference event for #40: the sim tops every fleece up to ready and summons the farmer, who shears the lot. v2: flockSize.min becomes ledger.flock; new ledger.wool condition and multiplier so shearing day is triggered by a flock that is genuinely close to ready, not only by season and a coin flip.",
+      "conditions": [
+        { "on": "season", "op": "in", "value": ["spring", "summer"] },
+        { "on": "weather", "op": "eq", "value": "sun" },
+        { "on": "timeOfDay", "op": "in", "value": ["day"] },
+        { "on": "ledger.flock", "op": "gte", "value": 3 },
+        { "on": "ledger.wool", "op": "gte", "value": 0.5, "comment": "The flock's mean fleece is already more than half grown; this is a day whose time has come, not a random draw." }
+      ],
+      "weight": {
+        "base": 6,
+        "multipliers": [
+          { "when": { "on": "ledger.wool", "op": "gte", "value": 0.75 }, "times": 2, "comment": "The fuller the flock already is, the readier the day." }
+        ]
+      },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 4620, "cooldownSimHours": 72 },
       "durationSimMinutes": 300,
       "hooks": {
         "start": [
@@ -112,59 +151,21 @@
           { "op": "mood", "target": "flock", "delta": 2, "comment": "Lighter, cooler, bouncier." }
         ]
       },
-      "storybook": { "line": "Shearing day. The farmer clipped {flock} fleeces and the sheep felt the breeze.", "picture": "shearing" },
+      "storybook": { "line": "Shearing day. The farmer clipped {flock} fleeces and the sheep felt the breeze.", "picture": "shearing", "notability": 0.7 },
       "moment": { "kind": "bubble", "detail": "shears" },
       "beat": { "start": "Every sheep on the field goes fluffy at once; the farmer walks in with the shears bubble.", "end": "The last sheep is trim, the wool bank is full, and the flock does a little hop." }
     },
     {
-      "id": "dlBirthday",
-      "title": "DL's birthday",
-      "comment": "Rare and warm. Pinned to spring because we do not know the real date; the owner can move it. Cake bubble is an art ask.",
-      "weight": 1,
-      "cooldownSimHours": 720,
-      "preconditions": { "season": ["spring"], "weather": ["sun"], "timeOfDay": ["day"] },
-      "durationSimMinutes": 180,
-      "hooks": {
-        "start": [
-          { "op": "flag", "name": "party", "value": true, "comment": "The flock gathers round DL; heart bubbles all round; DL does her spin." },
-          { "op": "mood", "target": "all", "delta": 3 }
-        ],
-        "end": [
-          { "op": "flag", "name": "party", "value": false }
-        ]
-      },
-      "storybook": { "line": "It was {dl}'s birthday. The whole flock came over to say so.", "picture": "birthday" },
-      "moment": { "kind": "bubble", "detail": "cake" },
-      "beat": { "start": "A cake bubble over DL; every sheep turns and walks towards her.", "end": "The ring of sheep drifts apart and DL flops down in the middle, done in." }
-    },
-    {
-      "id": "firstSnow",
-      "title": "First snow",
-      "comment": "The flock's first look at snow. The cooldown, not the calendar, makes it rare; a once-per-season field would be cleaner (see the PR).",
-      "weight": 10,
-      "cooldownSimHours": 720,
-      "preconditions": { "season": ["winter"], "weather": ["snow"] },
-      "durationSimMinutes": 120,
-      "hooks": {
-        "start": [
-          { "op": "flag", "name": "firstSnow", "value": true, "comment": "Sheep look up and stand still; lambs bounce; DL snaps at flakes." },
-          { "op": "mood", "target": "flock", "delta": 1 }
-        ],
-        "end": [
-          { "op": "flag", "name": "firstSnow", "value": false }
-        ]
-      },
-      "storybook": { "line": "The first snow fell and {dl} tried to catch it in her mouth.", "picture": "firstSnow" },
-      "moment": { "kind": "dl-trick", "detail": "snow-bite" },
-      "beat": { "start": "Every sheep stops and looks up; DL leaps at a flake.", "end": "The flock goes back to grazing with white on their backs." }
-    },
-    {
       "id": "rainbowAfterRain",
       "title": "Rainbow after rain",
-      "comment": "Needs the proposed recentWeather precondition: sun now, rain within the last twenty sim minutes.",
-      "weight": 12,
-      "cooldownSimHours": 24,
-      "preconditions": { "weather": ["sun"], "recentWeather": { "kind": "rain", "withinSimMinutes": 20 }, "timeOfDay": ["day", "dusk"] },
+      "comment": "v1 proposed a bespoke `recentWeather` precondition beyond the issue's list; v2 carries the same idea forward as an ordinary predicate, `simMinutesSinceRain`, so it fits the ordinary {on, op, value} shape instead of a one-off object. Still PROPOSED to sim on #40, same as v1 flagged it.",
+      "conditions": [
+        { "on": "weather", "op": "eq", "value": "sun" },
+        { "on": "simMinutesSinceRain", "op": "lte", "value": 20 },
+        { "on": "timeOfDay", "op": "in", "value": ["day", "dusk"] }
+      ],
+      "weight": { "base": 12, "multipliers": [] },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 1530, "cooldownSimHours": 24 },
       "durationSimMinutes": 90,
       "hooks": {
         "start": [
@@ -175,17 +176,25 @@
           { "op": "flag", "name": "rainbow", "value": false }
         ]
       },
-      "storybook": { "line": "The rain stopped and a rainbow stood over the barn for a while.", "picture": "rainbow" },
+      "storybook": { "line": "The rain stopped and a rainbow stood over the barn for a while.", "picture": "rainbow", "notability": 0.3 },
       "moment": { "kind": "weather", "detail": "rainbow" },
       "beat": { "start": "The arc fades in over the barn as the last drops fall; the sheep come out of the doorway.", "end": "It fades from the outside in and is gone." }
     },
     {
       "id": "strayCatVisits",
       "title": "A stray cat visits",
-      "comment": "The cat is a new creature: data here, art and behaviour in their own tickets (High gate). It sits on a fence post and leaves on its own.",
-      "weight": 7,
-      "cooldownSimHours": 60,
-      "preconditions": { "weather": ["sun"], "timeOfDay": ["dusk", "night"] },
+      "comment": "The cat is a new creature: data here, art and behaviour in their own tickets (High gate). v2: new flockScattered multiplier, a calm settled flock reads as safer for a cat to approach.",
+      "conditions": [
+        { "on": "weather", "op": "eq", "value": "sun" },
+        { "on": "timeOfDay", "op": "in", "value": ["dusk", "night"] }
+      ],
+      "weight": {
+        "base": 7,
+        "multipliers": [
+          { "when": { "on": "flockScattered", "op": "eq", "value": false }, "times": 1.3, "comment": "A settled flock is a quieter field for a cautious visitor." }
+        ]
+      },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 3750, "cooldownSimHours": 60 },
       "durationSimMinutes": 150,
       "hooks": {
         "start": [
@@ -193,17 +202,20 @@
         ],
         "end": []
       },
-      "storybook": { "line": "A stray cat sat on the fence at dusk. {dl} pretended not to care.", "picture": "cat" },
+      "storybook": { "line": "A stray cat sat on the fence at dusk. {dl} pretended not to care.", "picture": "cat", "notability": 0.5 },
       "moment": { "kind": "dl-trick", "detail": "cat-standoff" },
       "beat": { "start": "A cat pads in along the fence; DL freezes mid-step and stares.", "end": "The cat hops down and leaves the way it came; DL does a stretch as if she meant it." }
     },
     {
       "id": "farmersDayOff",
       "title": "The farmer's day off",
-      "comment": "Fires at dawn so both of the farmer's visits (farmer.visitsAt) are skipped. DL walks the farmer's rounds instead.",
-      "weight": 6,
-      "cooldownSimHours": 96,
-      "preconditions": { "timeOfDay": ["dawn"] },
+      "comment": "Fires at dawn so both of the farmer's visits (farmer.visitsAt) are skipped. DL walks the farmer's rounds instead. v2: adds a farmerPresent condition — he cannot take the day off if he is already on the field.",
+      "conditions": [
+        { "on": "timeOfDay", "op": "in", "value": ["dawn"] },
+        { "on": "farmerPresent", "op": "eq", "value": false }
+      ],
+      "weight": { "base": 6, "multipliers": [] },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 6480, "cooldownSimHours": 96 },
       "durationSimMinutes": 720,
       "hooks": {
         "start": [
@@ -215,17 +227,26 @@
           { "op": "mood", "target": "dl", "delta": 2, "comment": "She managed." }
         ]
       },
-      "storybook": { "line": "The farmer took the day off, so {dl} did the rounds herself.", "picture": "dayOff" },
+      "storybook": { "line": "The farmer took the day off, so {dl} did the rounds herself.", "picture": "dayOff", "notability": 0.55 },
       "moment": { "kind": "dl-trick", "detail": "rounds" },
       "beat": { "start": "The gate stays shut at the usual time; DL trots to the trough and looks into it.", "end": "The farmer is back next morning with a heart bubble for DL." }
     },
     {
       "id": "nightOfTheFireflies",
       "title": "Night of the fireflies",
-      "comment": "Fireflies exist as small life from #33; this card brings a swarm. DL snaps at them and catches none.",
-      "weight": 10,
-      "cooldownSimHours": 48,
-      "preconditions": { "season": ["summer"], "weather": ["sun"], "timeOfDay": ["night"] },
+      "comment": "Fireflies exist as small life from #33; this card brings a swarm. DL snaps at them and catches none. v2: new flockScattered multiplier, the swarm is easier to notice, and DL freer to chase it, on a settled night.",
+      "conditions": [
+        { "on": "season", "op": "in", "value": ["summer"] },
+        { "on": "weather", "op": "eq", "value": "sun" },
+        { "on": "timeOfDay", "op": "in", "value": ["night"] }
+      ],
+      "weight": {
+        "base": 10,
+        "multipliers": [
+          { "when": { "on": "flockScattered", "op": "eq", "value": false }, "times": 1.2, "comment": "A settled flock means DL is free to bounce after lights instead of minding sheep." }
+        ]
+      },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 3080, "cooldownSimHours": 48 },
       "durationSimMinutes": 200,
       "hooks": {
         "start": [
@@ -236,17 +257,26 @@
           { "op": "flag", "name": "fireflies", "value": false }
         ]
       },
-      "storybook": { "line": "Fireflies filled the field and {dl} snapped at every one and caught none.", "picture": "fireflies" },
+      "storybook": { "line": "Fireflies filled the field and {dl} snapped at every one and caught none.", "picture": "fireflies", "notability": 0.4 },
       "moment": { "kind": "dl-trick", "detail": "firefly-snap" },
       "beat": { "start": "A dozen lights blink on around the tree and drift out; DL bounces after the nearest.", "end": "The lights thin out one by one and DL sits down, panting." }
     },
     {
       "id": "lambZoomiesHour",
       "title": "Lamb zoomies hour",
-      "comment": "Short and daft. Every lamb runs rings round the trough; the ewes do not move.",
-      "weight": 12,
-      "cooldownSimHours": 24,
-      "preconditions": { "lambPresent": true, "weather": ["sun"], "timeOfDay": ["day", "dusk"] },
+      "comment": "Short and daft. Every lamb runs rings round the trough; the ewes do not move. v2: new flockScattered multiplier, a lamb only feels safe enough to bolt for fun when the flock is not on edge.",
+      "conditions": [
+        { "on": "lambPresent", "op": "eq", "value": true },
+        { "on": "weather", "op": "eq", "value": "sun" },
+        { "on": "timeOfDay", "op": "in", "value": ["day", "dusk"] }
+      ],
+      "weight": {
+        "base": 12,
+        "multipliers": [
+          { "when": { "on": "flockScattered", "op": "eq", "value": false }, "times": 1.5, "comment": "A calm flock, not a stressed one, is when a lamb plays." }
+        ]
+      },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 1500, "cooldownSimHours": 24 },
       "durationSimMinutes": 60,
       "hooks": {
         "start": [
@@ -257,17 +287,28 @@
           { "op": "flag", "name": "zoomies", "value": false }
         ]
       },
-      "storybook": { "line": "{lamb} got the zoomies and ran rings round the trough.", "picture": "zoomies" },
+      "storybook": { "line": "{lamb} got the zoomies and ran rings round the trough.", "picture": "zoomies", "notability": 0.25 },
       "moment": { "kind": "lamb", "detail": "zoomies" },
       "beat": { "start": "A lamb bolts from its mother's side and tears round the trough.", "end": "It stops dead, wobbles, and lies down next to its mother." }
     },
     {
       "id": "wellRunsLow",
       "title": "The well runs low",
-      "comment": "A hot dry spell. The trough is drawn low and the sheep queue at it until the farmer comes with buckets. Drop bubble is an art ask.",
-      "weight": 7,
-      "cooldownSimHours": 72,
-      "preconditions": { "season": ["summer"], "weather": ["sun"], "timeOfDay": ["day"], "flockSize": { "min": 5 } },
+      "comment": "A hot dry spell. The trough is drawn low and the sheep queue at it until the farmer comes with buckets. Drop bubble is an art ask. v2: flockSize.min becomes ledger.flock; new ledger.grass condition so this is a genuine dry spell, not any sunny summer day, plus a farmerPresent multiplier — it worsens fastest with nobody around to catch it early.",
+      "conditions": [
+        { "on": "season", "op": "in", "value": ["summer"] },
+        { "on": "weather", "op": "eq", "value": "sun" },
+        { "on": "timeOfDay", "op": "in", "value": ["day"] },
+        { "on": "ledger.flock", "op": "gte", "value": 5 },
+        { "on": "ledger.grass", "op": "lte", "value": 0.3, "comment": "The mean tuft level reads parched, not just dry-ish." }
+      ],
+      "weight": {
+        "base": 7,
+        "multipliers": [
+          { "when": { "on": "farmerPresent", "op": "eq", "value": false }, "times": 1.4, "comment": "Nobody around yet to top it up before it gets bad." }
+        ]
+      },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 4500, "cooldownSimHours": 72 },
       "durationSimMinutes": 180,
       "hooks": {
         "start": [
@@ -280,17 +321,21 @@
           { "op": "mood", "target": "flock", "delta": 2 }
         ]
       },
-      "storybook": { "line": "The well ran low in the heat until the farmer came with buckets.", "picture": "wellLow" },
+      "storybook": { "line": "The well ran low in the heat until the farmer came with buckets.", "picture": "wellLow", "notability": 0.5 },
       "moment": { "kind": "bubble", "detail": "drop" },
       "beat": { "start": "The trough's water drops to a line; a drop bubble over the nearest sheep.", "end": "The farmer walks in, tops it up, and the queue breaks up drinking." }
     },
     {
       "id": "windfall",
       "title": "A windfall",
-      "comment": "DL digs by the tree and finds a purse. Twelve coins is four wool at the merchant's price: a nice surprise, not a jackpot.",
-      "weight": 5,
-      "cooldownSimHours": 72,
-      "preconditions": { "weather": ["sun", "rain"], "timeOfDay": ["day"] },
+      "comment": "DL digs by the tree and finds a purse. Twelve coins is four wool at the merchant's price: a nice surprise, not a jackpot. v2: new ledger.coins condition, the surprise means more, and is truer to \"nobody asked whose\", when the bank was already lean.",
+      "conditions": [
+        { "on": "weather", "op": "in", "value": ["sun", "rain"] },
+        { "on": "timeOfDay", "op": "in", "value": ["day"] },
+        { "on": "ledger.coins", "op": "lte", "value": 40, "comment": "A find lands better on a lean bank." }
+      ],
+      "weight": { "base": 5, "multipliers": [] },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 4350, "cooldownSimHours": 72 },
       "durationSimMinutes": 30,
       "hooks": {
         "start": [
@@ -299,17 +344,26 @@
         ],
         "end": []
       },
-      "storybook": { "line": "{dl} dug up a purse by the tree. {coins} coins, and nobody asked whose.", "picture": "windfall" },
+      "storybook": { "line": "{dl} dug up a purse by the tree. {coins} coins, and nobody asked whose.", "picture": "windfall", "notability": 0.45 },
       "moment": { "kind": "bubble", "detail": "coin" },
       "beat": { "start": "DL digs at the foot of the tree; a coin bubble pops over her.", "end": "She trots back to the field with her nose muddy; the coin count is up." }
     },
     {
       "id": "stargazingNight",
       "title": "Stargazing night",
-      "comment": "A clear night. Everybody lies down and looks up; the sky layer brightens its stars.",
-      "weight": 8,
-      "cooldownSimHours": 48,
-      "preconditions": { "season": ["summer", "autumn"], "weather": ["sun"], "timeOfDay": ["night"] },
+      "comment": "A clear night. Everybody lies down and looks up; the sky layer brightens its stars. v2: new flockScattered multiplier, a settled flock is what lies down together.",
+      "conditions": [
+        { "on": "season", "op": "in", "value": ["summer", "autumn"] },
+        { "on": "weather", "op": "eq", "value": "sun" },
+        { "on": "timeOfDay", "op": "in", "value": ["night"] }
+      ],
+      "weight": {
+        "base": 8,
+        "multipliers": [
+          { "when": { "on": "flockScattered", "op": "eq", "value": false }, "times": 1.3, "comment": "A scattered flock does not settle down together to watch the sky." }
+        ]
+      },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 3120, "cooldownSimHours": 48 },
       "durationSimMinutes": 240,
       "hooks": {
         "start": [
@@ -320,9 +374,64 @@
           { "op": "flag", "name": "starsBright", "value": false }
         ]
       },
-      "storybook": { "line": "A clear night. {dl} sat by the gate and watched the stars with the flock.", "picture": "stars" },
+      "storybook": { "line": "A clear night. {dl} sat by the gate and watched the stars with the flock.", "picture": "stars", "notability": 0.3 },
       "moment": { "kind": "dl-trick", "detail": "stargaze" },
       "beat": { "start": "The stars come up bright; DL sits down by the gate with her head tipped back.", "end": "The sky dims to its usual night and DL walks to the barn door to sleep." }
+    },
+    {
+      "id": "flockHuddle",
+      "title": "Rain, and a flock to gather",
+      "comment": "New for #59, filling the seat DL's birthday and first snow left behind. Dramatises DL's own rain-shepherd priority (plan section 2, her fixed priority order: fetch, manual, riding, rain shepherd, dusk and dawn routine, idle play) as a watchable card instead of an unremarked background rule: the flock startling apart at the first drops, and DL running the flockScattered predicate down to zero.",
+      "conditions": [
+        { "on": "weather", "op": "eq", "value": "rain" },
+        { "on": "flockScattered", "op": "eq", "value": true }
+      ],
+      "weight": {
+        "base": 9,
+        "multipliers": [
+          { "when": { "on": "dlFarFromFlock", "op": "eq", "value": true }, "times": 1.5, "comment": "A bigger job, a bigger moment, when she has further to run." }
+        ]
+      },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 1860, "cooldownSimHours": 30 },
+      "durationSimMinutes": 60,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "gathering", "value": true, "comment": "DL's rain-shepherd priority reads this and beelines for the furthest sheep first." },
+          { "op": "mood", "target": "flock", "delta": -1, "comment": "Rain, and no one gathering them in yet." }
+        ],
+        "end": [
+          { "op": "flag", "name": "gathering", "value": false },
+          { "op": "mood", "target": "flock", "delta": 2, "comment": "Safe and dry under the barn eave." },
+          { "op": "mood", "target": "dl", "delta": 1 }
+        ]
+      },
+      "storybook": { "line": "Rain caught the flock scattered and {dl} gathered every one of them in.", "picture": "flockHuddle", "notability": 0.45 },
+      "moment": { "kind": "dl-trick", "detail": "gather" },
+      "beat": { "start": "The rain starts and the flock startles apart; DL breaks into a run toward the furthest one.", "end": "The last sheep is walked in under the barn eave and DL circles the group once, checking." }
+    },
+    {
+      "id": "farmerMeetsMerchant",
+      "title": "The farmer meets the merchant",
+      "comment": "New for #59, filling the seat DL's birthday and first snow left behind. Shows off an AND of two actor predicates rather than a single one: merchantPresent and farmerPresent both true is already rare on its own, so the base weight is low and needs no multiplier.",
+      "conditions": [
+        { "on": "merchantPresent", "op": "eq", "value": true },
+        { "on": "farmerPresent", "op": "eq", "value": true }
+      ],
+      "weight": { "base": 3, "multipliers": [] },
+      "limits": { "concurrent": 1, "minGapSimMinutes": 5805, "cooldownSimHours": 96 },
+      "durationSimMinutes": 45,
+      "hooks": {
+        "start": [
+          { "op": "flag", "name": "crossing", "value": true, "comment": "Cosmetic only: the two NPCs pause to talk instead of following their separate plans for a moment." }
+        ],
+        "end": [
+          { "op": "flag", "name": "crossing", "value": false },
+          { "op": "mood", "target": "dl", "delta": 1, "comment": "Two of her favourite visitors at once." }
+        ]
+      },
+      "storybook": { "line": "The farmer and the merchant crossed paths on the lane and {dl} sat between them.", "picture": "farmerMeetsMerchant", "notability": 0.55 },
+      "moment": { "kind": "npc-arrival", "detail": "crossing" },
+      "beat": { "start": "The merchant's cart rolls in just as the farmer is finishing his rounds; they stop to talk.", "end": "They go their separate ways, the farmer to the gate, the cart down the lane, and DL trots off after her nose." }
     }
   ]
 }

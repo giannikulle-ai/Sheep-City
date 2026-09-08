@@ -60,6 +60,26 @@ Art: #64 art direction document (any time; owner pin); #46 social frames (after 
 Qa: #49 last. Phase 2 (#65 farmer rework, #66 shear readability, #67 DL animation set, #68 harbour gauge) after #62 is pinned.
 Cap: no more than three needs-owner-pin PRs open at once.
 
+## Sprint 2026-09-08, started 09:15 UTC on the owner's "go"
+Seven workers on Sonnet, run as subagents inside the Foreman session in isolated git worktrees (remote child sessions could not start: the Foreman session's permission mode is default, and a child cannot be more permissive than its parent). Each pushes its branch and leaves a PR body in the Foreman's scratchpad; the Foreman opens the PR, runs a Verifier on a stronger model, and merges sim PRs one at a time (later ones merge trunk before their PR).
+
+| Ticket | Lane | Branch | PR | Gate | Status at 14:15 UTC |
+|---|---|---|---|---|---|
+| #59 cards v2 schema | world | lane/world/59-cards-v2-schema | #70 | low | **Merged 13:27 UTC** after round 2 (six fixes) and a re-check |
+| #60 chronicle and tell | sim | lane/sim/60-chronicle | #71 | medium | Round 2 pushed (shallow clone with frozen entries, first flag, sample floor, respawn keeps the log); re-check running; merges first among sim PRs |
+| #61 DL invariant test | sim | lane/sim/61-dl-invariant | #72 | medium | **Merged by the owner 14:00 UTC** at the round-2 head; the Verifier's two remaining holes go to a follow-up PR on `lane/sim/61-invariant-fence` |
+| #43 deity intents | sim | lane/sim/43-deity-intents | #73 | medium, pin on feel | **Pinned: merged by the owner 14:00 UTC** after round 2 and a re-check (startle on DL is a head-tilt; treat is a heart only) |
+| #62 region map design document | client | lane/client/62-region-map-design | #69 | high, pin | **Pinned: merged by the owner 14:00 UTC** |
+| #64 art direction document | art | lane/art/64-art-direction | #74 | high, pin | **Pinned: merged by the owner 13:52 UTC** after round 2 and a re-check |
+| #55 e2e on the sim clock | client | lane/client/55-e2e-sim-clock | #75 | low | **Merged 13:15 UTC** after a two-comment fix round |
+
+All seven workers delivered by 12:00 UTC; the seven PRs were open by 12:42 UTC with CI green on every head. Every first-round Verifier verdict was changes requested, none approved; four of six found a PR-body claim the diff did not back. Fix rounds ran on Sonnet on the same branches; a Verifier on a stronger model re-checks every round before any merge, and two re-checks found one small residual each, fixed by the Foreman with a measurement. Sonnet fix rounds cost 65k to 260k tokens each.
+
+Sim merge order: #60 first (save v6), then #43 and #61 after merging trunk. #40 the engine starts as soon as #59 and #60 land; #63 after #60. Check-ins hourly during the sprint, back to four-hourly when it is merged. Pins closed: #74 13:52 UTC, #73 and #69 14:00 UTC; the owner also merged #72 at its round-2 head. Only #71 is open; it merges trunk (now carrying #73 and #72) before landing. Phase 2 may start once #71 lands, since #62 is pinned.
+
+## Health note 2026-09-08 14:00 UTC
+At 13:50:42 UTC every open sprint PR (#69, #71, #72, #73, #74) was closed without merging from the owner's account, one per second, and at 13:51:06 all five were reopened the same way. GitHub delivered the closes first and the reopens a few minutes later, so the Foreman stopped the two round-3 fix workers and cancelled the sprint check-in in between; both were relaunched at 14:00 once the reopens were confirmed against the live PR list. About ten minutes of worker time lost, no branch touched. Rule kept: a close from the owner's account halts spending at once, and nothing is reopened by the Foreman; a reopen resumes it.
+
 ## Health note 2026-09-08 07:15 UTC
 The owner merged the plan rewrite (PR #58) and the check-in routine is re-enabled. The interrupted #40 session was archived (the ticket is rewritten); the interrupted post-merge audit of PR #57 was resumed by a poke. Starting the #59 worker failed: this Foreman session is in plan permission mode after the planning pass, and a child cannot be more permissive than its parent; the owner switches the session back to auto and the worker starts on the next check-in or on request.
 

@@ -11,7 +11,7 @@
 // Priorities inside a chain follow the prototype's `if / else if` order. The needs pick is one
 // weighted roll with the prototype's thresholds (.5 / .62 / .72 / .8), drawn by the registry.
 
-import { nearestTuft } from '../actors';
+import { bubble, nearestTuft } from '../actors';
 import { phaseOf } from '../clock';
 import { SFOOT, SPOT, randomFoot, type Point } from '../geometry';
 import { groundSnowy, stampGround } from '../ground';
@@ -250,6 +250,73 @@ export const pickNeed: SheepBehaviour = {
 };
 
 // ---------------------------------------------------------------------------------------------
+// A deity direct action (issue #43): `call`, `calm`, `startle`, `treat`. Shares the `needs` chain
+// with `pickNeed` so a queued command wins the chain's one winner outright (priority 5 over
+// `pickNeed`'s 0) without a chain of its own, and so rain shelter — a separate, earlier chain — is
+// never the loser of that contest. `!rain` keeps a called or treated sheep from abandoning the
+// barn walk rainShelter just started; the command then waits, unconsumed, until the rain (its own
+// "danger") clears. Not `contextOnly`: every branch reads the actor's own `actCmd`.
+//
+// A second `act` intent landing in the same tick simply overwrites `s.actCmd`: the first command
+// is silently dropped, not queued behind the second. See the identical note on Digital Luna's own
+// `act` chain in `behaviours/luna.ts`.
+// ---------------------------------------------------------------------------------------------
+
+export const act: SheepBehaviour = {
+  id: 'act',
+  chain: 'needs',
+  priority: 5,
+  condition: ({ rain }, s) => s.actCmd != null && !rain,
+  tick: ({ now, rng }, s) => {
+    const cmd = s.actCmd as NonNullable<Sheep['actCmd']>;
+    delete s.actCmd;
+    switch (cmd.verb) {
+      case 'call':
+        // A call makes the target walk to the point given; no pick-up-and-move, so this is the
+        // same walk any other command queues, just aimed at the deity's point instead of a tuft.
+        if (cmd.x !== undefined && cmd.y !== undefined) {
+          s.resting = false;
+          s.eating = false;
+          setPath(s, [{ x: cmd.x, y: cmd.y }]);
+          s.wander = 0;
+        }
+        return;
+      case 'calm':
+        // Ends a run or a zoomie and lies the sheep down.
+        s.tx = s.ty = null;
+        s.path = [];
+        s.wander = 0;
+        s.eating = false;
+        s.resting = true;
+        return;
+      case 'startle': {
+        // A short scatter with a bubble: one new foot point, same draw the tray's scatter uses.
+        s.resting = false;
+        s.eating = false;
+        setPath(s, [randomFoot(rng)]);
+        s.wander = 0;
+        bubble(s, 'startle', 900, now);
+        return;
+      }
+      case 'treat':
+        // The heart-and-tag only: no tuft write. `moodOf` (ledger.ts) reads mood off the mean tuft
+        // level, not a stock the actor carries, and district grass is also the grazing/wool
+        // economy's input, so feeding a tuft from a per-creature tap was a resource button wearing
+        // an affection button's icon (Verifier finding #6, owner's call). A real mood bump waits
+        // for mood to become a Ledger stock of its own; until then `treat` is the same tap `pet`
+        // already gives a sheep, just from the deity tray instead of a click.
+        bubble(s, 'heart', 1600, now);
+        s.tagUntilMs = now + RULES.petTagMs;
+        return;
+      default: {
+        const never: never = cmd.verb;
+        throw new Error(`unknown act verb ${String(never)}`);
+      }
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------------------------
 // Chain `eat`: bite the claimed tuft; stop when it is bare or on a roll.
 // ---------------------------------------------------------------------------------------------
 
@@ -339,7 +406,7 @@ export const walk: SheepBehaviour = {
 // ---------------------------------------------------------------------------------------------
 
 export const SHEEP_BEHAVIOURS = createRegistry<SheepContext, Sheep>();
-for (const b of [rainShelter, leaveShelter, nightRest, wake, pickNeed, eat, lambs, walk]) SHEEP_BEHAVIOURS.register(b);
+for (const b of [rainShelter, leaveShelter, nightRest, wake, act, pickNeed, eat, lambs, walk]) SHEEP_BEHAVIOURS.register(b);
 
 /** Build the per-tick context the prototype computed at the top of `tick`. `foot` is per sheep. */
 export function sheepContext(s: SimState): SheepContext {

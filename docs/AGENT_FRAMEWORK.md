@@ -40,6 +40,7 @@ Model choice per role, set by the owner on 2026-09-08 after the first Sonnet spr
 4. **Round cap.** Two Sonnet fix rounds per PR. A third goes to Opus. If Opus cannot clear it, it goes to the owner as a blocker, never to Fable.
 5. **Pre-push check.** Before pushing, the worker checks every claim in its PR body against its own diff; an over-claim costs an Opus round.
 6. **Concurrency.** At most five Sonnet workers and two Opus Verifiers at once.
+7. **Wakes.** The Foreman is woken only by its hourly check-in (while anything runs), the four-hourly routine, and a worker or Verifier reporting. It does not subscribe to per-PR CI events; each wake re-reads the whole context, and that, not the workers, is the largest cost line.
 
 GPT keys are useful for Scouts and for bulk content drafting (villager names, event flavour text, dialogue) where a second voice helps, and never for merging code.
 

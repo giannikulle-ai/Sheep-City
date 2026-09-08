@@ -250,6 +250,67 @@
         font-size: 12px;
         opacity: 0.8;
       }
+      /* The storybook page (#42): a whole-stage card, most-notable line first, one tap or swipe
+         anywhere dismisses it (the pointerdown handler is on #storybook itself, so the backdrop
+         and the card both dismiss). */
+      #storybook {
+        position: fixed;
+        inset: 0;
+        z-index: 55;
+        background: rgba(20, 30, 18, 0.92);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        cursor: pointer;
+      }
+      #storybook[hidden] {
+        display: none;
+      }
+      #storybookCard {
+        background: #243a20;
+        border: 2px solid #2b1d17;
+        border-radius: 6px;
+        max-width: min(94vw, 480px);
+        max-height: 90vh;
+        overflow: auto;
+        padding: 14px 16px;
+      }
+      #storyTitle {
+        margin: 0 0 2px;
+        font-size: 16px;
+        color: #ffd75e;
+      }
+      #storySubtitle {
+        opacity: 0.7;
+        margin-bottom: 10px;
+      }
+      .storyline {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .storypic {
+        width: 56px;
+        height: 40px;
+        flex-shrink: 0;
+        border: 1px solid #2b1d17;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+      .storyline span {
+        flex: 1;
+      }
+      .pagelist {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-width: min(90vw, 420px);
+      }
+      .pagelist button {
+        text-align: left;
+      }
       p {
         margin: 0;
         opacity: 0.75;
@@ -324,6 +385,7 @@
           <button id="saveNow" type="button">save now</button>
           <button id="saveText" type="button">save as text</button>
           <button id="newFarm" type="button">new farm</button>
+          <button id="earlierPages" type="button">earlier pages</button>
           <span id="saveNote" class="hint"></span>
         </div>
         <div class="bar">
@@ -338,6 +400,13 @@
         <p id="status">loading art…</p>
       </div>
       <div id="modal"><div id="modalBox"></div></div>
+      <div id="storybook" hidden>
+        <div id="storybookCard">
+          <h2 id="storyTitle"></h2>
+          <div id="storySubtitle" class="hint"></div>
+          <div id="storyLines"></div>
+        </div>
+      </div>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

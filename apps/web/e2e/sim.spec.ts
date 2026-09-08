@@ -3,7 +3,8 @@ import type { SheepcliffApi } from '../src/api';
 
 // The real sim in the app (#28): the world runs from packages/sim on the fixed accumulator, the
 // fixture only appears behind ?fixture=1, the farm saves itself and comes back after a reload
-// on the same day, and a long absence is caught up at actor resolution, capped at one sim-day.
+// on the same day, and an absence is caught up by the sim's own `catchUp` (#42) — actor
+// resolution under one sim-day, the Ledger fast path beyond it, uncapped.
 type WithApp = { sheepcliff: SheepcliffApi };
 const api = (page: Page) => page.evaluate(() => (window as unknown as WithApp).sheepcliff);
 
@@ -105,12 +106,14 @@ test('the farm saves every sim-minute and on visibilitychange, and a reload cont
   expect(errors).toEqual([]);
 });
 
-test('offline catch-up runs the time away, capped at one sim-day, and says so', async ({ page }) => {
+test('offline catch-up runs the time away with no one-day cap, and opens a storybook page for a real gap', async ({ page }) => {
   await open(page);
   // two hours away, written into the save as if by an earlier visit
   const text = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.save.text());
-  const env = JSON.parse(text) as { savedAt: number; save: { world: { clock: { tick: number; dayCount: number } } } };
+  const env = JSON.parse(text) as { savedAt: number; save: { world: { clock: { tick: number; dayCount: number; periodSec: number } } } };
   const tickBefore = env.save.world.clock.tick;
+  const dayBefore = env.save.world.clock.dayCount;
+  const dayMs = env.save.world.clock.periodSec * 1000;
   env.savedAt = Date.now() - 2 * 3600_000;
   // a QA seed stops the page saving, so the unload does not overwrite the planted save
   await page.evaluate((t) => {
@@ -120,13 +123,26 @@ test('offline catch-up runs the time away, capped at one sim-day, and says so', 
   await page.reload();
   await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
   const after = await snapshot(page);
-  // one sim-day is 180 s, 1800 ticks: the cap
-  expect(after.tick - tickBefore).toBeGreaterThanOrEqual(1800);
-  expect(after.tick - tickBefore).toBeLessThan(1900);
-  expect(after.day).toBe(env.save.world.clock.dayCount + 1);
-  await expect(page.locator('#say')).toContainText(/^while you were gone \(2 h 00 min, the farm ran one day of it\): .* · [☀☂❄☾] \d\d:\d\d  \d+ sheep  \d+ wool  \d+ coins  -?\d+°$/);
+  // two real hours is many sim-days at the default 180 s day length: the Ledger fast path (#42),
+  // not the old client-only catch-up's (#34) one-day cap — at least as many days as fit in the gap
+  expect(after.day).toBeGreaterThanOrEqual(dayBefore + Math.floor((2 * 3600_000) / dayMs));
+  expect(after.tick).toBeGreaterThan(tickBefore);
+  await expect(page.locator('#say')).toContainText('restored: back after 2 h 00 min');
 
-  // a shorter absence runs exactly that long
+  // whatever the storybook opened for this gap, every line on it traces to a real chronicle entry
+  // id (CLAUDE.md: "a line that is not backed by a chronicle entry is a bug"), and a two-hour real
+  // gap reads as "a night"
+  const page1 = await page.evaluate(() => {
+    const app = (window as unknown as WithApp).sheepcliff;
+    const sb = app.storybook.current();
+    if (!sb) return { shown: false, ok: true, title: '' };
+    const ids = new Set(app.sim().chronicle.entries.map((e) => e.id));
+    return { shown: true, ok: sb.lines.every((l) => ids.has(l.entryId)), title: sb.title };
+  });
+  expect(page1.ok).toBe(true);
+  if (page1.shown) expect(page1.title).toBe('a night');
+
+  // a shorter absence, under the day boundary, runs exactly that long at actor resolution
   const text2 = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.save.text());
   const env2 = JSON.parse(text2) as { savedAt: number; save: { world: { clock: { tick: number } } } };
   env2.savedAt = Date.now() - 30_000;
@@ -139,7 +155,7 @@ test('offline catch-up runs the time away, capped at one sim-day, and says so', 
   const after2 = await snapshot(page);
   expect(after2.tick - env2.save.world.clock.tick).toBeGreaterThanOrEqual(300);
   expect(after2.tick - env2.save.world.clock.tick).toBeLessThan(330);
-  await expect(page.locator('#say')).toContainText('while you were gone (30 s)');
+  await expect(page.locator('#say')).toContainText('restored: back after 30 s');
 });
 
 test('the save exports as text in the page and loads back from it', async ({ page }) => {
@@ -159,7 +175,7 @@ test('the save exports as text in the page and loads back from it', async ({ pag
   await page.locator('#modalBox button', { hasText: 'load this text' }).click();
   await expect(page.locator('#modal')).not.toHaveClass(/show/);
   // the text was taken a moment ago: a load under a second continues, over a second is a short absence
-  await expect(page.locator('#say')).toContainText(/loaded: the farm continues where it was|while you were gone \(\d s\)/);
+  await expect(page.locator('#say')).toContainText(/loaded: the farm continues where it was|loaded: back after \d+ s/);
   // an unreadable stored save is set aside, and a new farm starts
   await page.evaluate(() => {
     (window as unknown as WithApp).sheepcliff.qa.seed(1); // stop the page saving over the planted text on unload

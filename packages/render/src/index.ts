@@ -8,3 +8,4 @@ export * from './phase';
 export * from './weather';
 export * from './ui';
 export * from './scene';
+export * from './picture';

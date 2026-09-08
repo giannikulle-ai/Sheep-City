@@ -2,6 +2,8 @@
 // ?seed=9&t=0.7&weather=snow&season=winter&freeze=1&live=1     a fresh world, not saved
 // ?fixture=1&t=0.7&weather=snow&now=100000                     the frozen fixture still, for goldens
 // ?fresh=1                                                     forget the save and start a new farm
+// ?gap=10080                                                   QA: force a storybook page on a scratch world
+//                                                               (sim-minutes away; 1440 = one virtual day)
 import type { Season, Weather } from '@sheepcliff/render';
 
 export interface SceneParams {
@@ -23,11 +25,14 @@ export interface SceneParams {
   scratch: boolean;
   /** forget the saved farm and start again, saving as usual */
   fresh: boolean;
+  /** QA: force a storybook page on the fresh scratch world, this many sim-minutes away (?gap=),
+   * or null when absent. See storybook.ts's `simMinutesToMs`. */
+  gapMinutes: number | null;
 }
 
 const WEATHERS: readonly Weather[] = ['sun', 'rain', 'snow'];
 const SEASONS: readonly Season[] = ['spring', 'summer', 'autumn', 'winter'];
-const SCENE_KEYS = ['seed', 't', 'weather', 'season', 'temp', 'now', 'freeze', 'live', 'fixture'] as const;
+const SCENE_KEYS = ['seed', 't', 'weather', 'season', 'temp', 'now', 'freeze', 'live', 'fixture', 'gap'] as const;
 
 function pick<T extends string>(v: string | null, allowed: readonly T[], fallback: T): T {
   return v && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
@@ -60,5 +65,6 @@ export function parseSceneParams(search: string): SceneParams {
     fixture: q.get('fixture') === '1',
     scratch: SCENE_KEYS.some((k) => q.has(k)),
     fresh: q.get('fresh') === '1',
+    gapMinutes: q.has('gap') ? num(q.get('gap'), 0) : null,
   };
 }

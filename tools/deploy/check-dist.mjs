@@ -8,7 +8,10 @@
 //   - the page requests anything from another origin (the build must be self-contained),
 //   - the page throws, logs a console error, or sets body[data-error],
 //   - body[data-ready] never becomes "1" (the app never finished loading its art),
-//   - no image under assets/ was fetched (relative asset paths did not resolve).
+//   - no image under assets/ was fetched with a 2xx status (relative asset paths
+//     did not resolve). Checked per-response as responses arrive, not by pattern-
+//     matching the request log after the fact, so it doesn't care which response
+//     happens to finish last (issue #91).
 // The last two are the Vite `base: './'` contract: index.html and the JS bundle
 // must reach their assets through relative URLs, whatever path the host mounts.
 import { spawn } from 'node:child_process';
@@ -81,8 +84,11 @@ for (;;) {
   await new Promise((r) => setTimeout(r, 100));
 }
 
+const IMAGE_ASSET_RE = /\/assets\/.*\.(png|gif|jpe?g|webp)$/;
+
 const problems = [];
 const requests = [];
+let sawImageAsset = false;
 const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
 try {
   const page = await browser.newPage({ viewport: { width: 640, height: 520 }, deviceScaleFactor: 1 });
@@ -94,6 +100,15 @@ try {
     const rel = url.startsWith(origin) ? url.slice(origin.length) : url;
     requests.push(`${res.status()} ${rel}`);
     if (res.status() < 200 || res.status() >= 300) problems.push(`HTTP ${res.status()} for ${rel}`);
+    // Checked per-response, not with a regex over the joined request log: the old
+    // check anchored on the END of that joined string, so it only passed when an
+    // image asset happened to be the LAST response to complete. Which response
+    // finishes last is a network race between the parallel fetch()/Image() asset
+    // loads and the server's connection limit -- not something the app or the
+    // build controls -- and it shifted under a newer Chromium build (issue #91),
+    // failing builds where every asset genuinely returned 2xx. Track hits directly
+    // instead, regardless of arrival order.
+    if (res.status() >= 200 && res.status() < 300 && IMAGE_ASSET_RE.test(rel)) sawImageAsset = true;
   });
   page.on('requestfailed', (req) => problems.push(`request failed: ${req.url()} (${req.failure()?.errorText ?? 'unknown'})`));
   page.on('pageerror', (e) => problems.push(`page error: ${String(e)}`));
@@ -118,7 +133,7 @@ try {
   // Give the first animation frames a moment so lazy asset fetches show up.
   await page.waitForTimeout(500);
   const title = await page.title();
-  if (!/assets\/.*\.(png|gif|jpe?g|webp)$/.test(requests.join('\n'))) {
+  if (!sawImageAsset) {
     problems.push('no image under assets/ was fetched; relative asset URLs did not resolve');
   }
   if (screenshot) {

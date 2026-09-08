@@ -63,17 +63,19 @@ Cap: no more than three needs-owner-pin PRs open at once.
 ## Sprint 2026-09-08, started 09:15 UTC on the owner's "go"
 Seven workers on Sonnet, run as subagents inside the Foreman session in isolated git worktrees (remote child sessions could not start: the Foreman session's permission mode is default, and a child cannot be more permissive than its parent). Each pushes its branch and leaves a PR body in the Foreman's scratchpad; the Foreman opens the PR, runs a Verifier on a stronger model, and merges sim PRs one at a time (later ones merge trunk before their PR).
 
-| Ticket | Lane | Branch |
-|---|---|---|
-| #59 cards v2 schema | world | lane/world/59-cards-v2-schema |
-| #60 chronicle and tell | sim | lane/sim/60-chronicle |
-| #61 DL invariant test | sim | lane/sim/61-dl-invariant |
-| #43 deity intents | sim | lane/sim/43-deity-intents |
-| #62 region map design document | client | lane/client/62-region-map-design |
-| #64 art direction document | art | lane/art/64-art-direction |
-| #55 e2e on the sim clock | client | lane/client/55-e2e-sim-clock |
+| Ticket | Lane | Branch | PR | Gate | Status at 13:10 UTC |
+|---|---|---|---|---|---|
+| #59 cards v2 schema | world | lane/world/59-cards-v2-schema | #70 | low | Verifier: changes requested (6 findings); fix round running |
+| #60 chronicle and tell | sim | lane/sim/60-chronicle | #71 | medium | Verifier: changes requested (5 findings; per-tick deep copy is the blocker); fix round running |
+| #61 DL invariant test | sim | lane/sim/61-dl-invariant | #72 | medium | Verifier: changes requested (3 blocking holes in the guard); fix round running |
+| #43 deity intents | sim | lane/sim/43-deity-intents | #73 | medium, pin on feel | Verifier: changes requested (call from the barn teleports her; tuft leak); fix round running |
+| #62 region map design document | client | lane/client/62-region-map-design | #69 | high, pin | Round 2 pushed (sketches palette-clean); Verifier re-check running |
+| #64 art direction document | art | lane/art/64-art-direction | #74 | high, pin | Verifier: changes requested (7 factual corrections); fix round running |
+| #55 e2e on the sim clock | client | lane/client/55-e2e-sim-clock | #75 | low | Verifier: changes requested (two comments over-claim); fix round running |
 
-Sim merge order: #60 first (save v6), then #43 and #61 after merging trunk. #40 the engine starts as soon as #59 and #60 land; #63 after #60. Check-ins hourly during the sprint, back to four-hourly when it is merged.
+All seven workers delivered by 12:00 UTC; the seven PRs were open by 12:42 UTC with CI green on every head. Every first-round Verifier verdict was changes requested, none approved. Fix rounds run on Sonnet on the same branches; Verifiers re-check on a stronger model before any merge.
+
+Sim merge order: #60 first (save v6), then #43 and #61 after merging trunk. #40 the engine starts as soon as #59 and #60 land; #63 after #60. Check-ins hourly during the sprint, back to four-hourly when it is merged. Pins open: #69, #74, #73 (the cap of three).
 
 ## Health note 2026-09-08 07:15 UTC
 The owner merged the plan rewrite (PR #58) and the check-in routine is re-enabled. The interrupted #40 session was archived (the ticket is rewritten); the interrupted post-merge audit of PR #57 was resumed by a poke. Starting the #59 worker failed: this Foreman session is in plan permission mode after the planning pass, and a child cannot be more permissive than its parent; the owner switches the session back to auto and the worker starts on the next check-in or on request.

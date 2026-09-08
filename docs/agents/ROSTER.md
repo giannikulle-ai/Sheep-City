@@ -63,7 +63,7 @@ Cap: no more than three needs-owner-pin PRs open at once.
 ## Sprint 2026-09-08, started 09:15 UTC on the owner's "go"
 Seven workers on Sonnet, run as subagents inside the Foreman session in isolated git worktrees (remote child sessions could not start: the Foreman session's permission mode is default, and a child cannot be more permissive than its parent). Each pushes its branch and leaves a PR body in the Foreman's scratchpad; the Foreman opens the PR, runs a Verifier on a stronger model, and merges sim PRs one at a time (later ones merge trunk before their PR).
 
-| Ticket | Lane | Branch | PR | Gate | Status at 13:50 UTC |
+| Ticket | Lane | Branch | PR | Gate | Status at 13:55 UTC |
 |---|---|---|---|---|---|
 | #59 cards v2 schema | world | lane/world/59-cards-v2-schema | #70 | low | **Merged 13:27 UTC** after round 2 (six fixes) and a re-check |
 | #60 chronicle and tell | sim | lane/sim/60-chronicle | #71 | medium | Round 2 pushed (shallow clone with frozen entries, first flag, sample floor, respawn keeps the log); re-check running; merges first among sim PRs |
@@ -76,6 +76,9 @@ Seven workers on Sonnet, run as subagents inside the Foreman session in isolated
 All seven workers delivered by 12:00 UTC; the seven PRs were open by 12:42 UTC with CI green on every head. Every first-round Verifier verdict was changes requested, none approved; four of six found a PR-body claim the diff did not back. Fix rounds ran on Sonnet on the same branches; a Verifier on a stronger model re-checks every round before any merge, and two re-checks found one small residual each, fixed by the Foreman with a measurement. Sonnet fix rounds cost 65k to 260k tokens each.
 
 Sim merge order: #60 first (save v6), then #43 and #61 after merging trunk. #40 the engine starts as soon as #59 and #60 land; #63 after #60. Check-ins hourly during the sprint, back to four-hourly when it is merged. Pins open: #69, #74, #73 (the cap of three).
+
+## Health note 2026-09-08 13:55 UTC
+At 13:50:42 to 13:50:45 UTC every open sprint PR (#69, #71, #72, #73, #74) was closed without merging from the owner's account, one per second, with no comment. The Foreman did not close them and does not reopen a PR the owner closed. The two round-3 fix workers (#60 chronicle, #61 DL invariant) were stopped; their branches and the three other lane branches are intact on origin at their last heads (`lane/sim/60-chronicle` d084d55, `lane/sim/61-dl-invariant` 598883a, `lane/sim/43-deity-intents` ba2ac0c, `lane/client/62-region-map-design` ae5360e, `lane/art/64-art-direction` c9f6e12). The sprint check-in is cancelled; the four-hourly routine continues. Nothing else runs until the owner says what the closes mean: a stop, a reset, or a slip. Merged before the closes: #75 (#55) and #70 (#59).
 
 ## Health note 2026-09-08 07:15 UTC
 The owner merged the plan rewrite (PR #58) and the check-in routine is re-enabled. The interrupted #40 session was archived (the ticket is rewritten); the interrupted post-merge audit of PR #57 was resumed by a poke. Starting the #59 worker failed: this Foreman session is in plan permission mode after the planning pass, and a child cannot be more permissive than its parent; the owner switches the session back to auto and the worker starts on the next check-in or on request.

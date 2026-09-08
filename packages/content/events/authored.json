@@ -87,8 +87,8 @@
           { "on": "season", "op": "eq", "value": "winter" },
           { "on": "weather", "op": "eq", "value": "snow" }
         ],
-        "cooldownSimDays": 303,
-        "comment": "Re-derived for #83's calendar (a season is now ~91 real days nominal, not 9): scaling the old 30-sim-day cooldown by the same ratio, 30 * (91 / 9) ≈ 303. Comfortably under a full four-season year (4 * 91 = 364 sim days), so the predicates can hold again before next winter is due, but the cooldown still spans most of a year, keeping this the first snow of the current winter rather than a second flurry days later."
+        "cooldownSimDays": 60000,
+        "comment": "Fixed for #83's calendar review: a sim day is not a real day. At outsideRules.clock.periodSec = 180 (packages/sim/src/clock.ts:35), one real day = 86400 / 180 = 480 sim days, so the nominal 91-real-day season is 43,680 sim days and a four-season year is about 174,720, not '4 * 91 = 364 sim days' as the old comment here said. cooldownSimDays = 60,000 sits above the longest a winter can realistically run under outsideRules.seasons.calendar (about 109 real days from the anchor gaps plus drift, ≈52,320 sim days — comfortably over even the old naive 101-day/48,480-sim-day estimate) and well under the shortest possible gap to the next winter (about 345 real days, ≈165,600 sim days), so the predicate can lapse and re-arm exactly once each winter, not once every ~15 hours of watched play like the old 30 (and un-rescaled 303) did."
       },
       "variables": {
         "flakeBurst": 24

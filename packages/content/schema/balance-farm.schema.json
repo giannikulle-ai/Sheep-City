@@ -213,7 +213,7 @@
       "required": ["value", "comment"], "additionalProperties": false
     },
     "monthDay": {
-      "description": "A real calendar date, month and day only (no year): matches the authored-events schema's `realDate` trigger shape.",
+      "description": "A real calendar date, month and day only (no year), used here for each season's anchor. authored-events.schema.json's `realDate` trigger has the same month/day bounds at the top level rather than nested under a `monthDay` object (it also carries `kind` and an optional `windowSimMinutes`), so it $refs this def's `properties/month` and `properties/day` directly rather than the whole object.",
       "type": "object",
       "properties": {
         "month": { "type": "integer", "minimum": 1, "maximum": 12 },

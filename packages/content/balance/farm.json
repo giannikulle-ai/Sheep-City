@@ -52,11 +52,11 @@
         "comment": "SEASON_ODDS: per weather roll, chance of snow then rain, in season mode."
       },
       "calendar": {
-        "comment": "New for #83, the owner's calendar decision (2026-09-08, plan section 2 'Time' and section 11 decision 10): seasons follow the real year instead of a fixed nine-day cycle. Proposed to the sim lane on #84 as outsideRules.seasons.calendar, sitting beside rules.season.realDays above until #84 retires that field.",
-        "nominalRealDays": { "value": 91, "comment": "Nominal length of one season in real days: 365 real days / 4 seasons ≈ 91, a quarter of a real year. The actual length in any run drifts from this by lengthDriftRealDays below, so seasons are 'roughly a quarter but not exactly' as the plan says." },
+        "comment": "New for #83, the owner's calendar decision (2026-09-08, plan section 2 'Time' and section 11 decision 10): seasons follow the real year instead of a fixed nine-day cycle. Proposed to the sim lane on #84 as outsideRules.seasons.calendar, sitting beside rules.season.realDays above until #84 retires that field. Rule for #84 to implement exactly: anchors plus startOffsetDriftRealDays fix each season's start date (each season's offset drawn independently); a season's length is derived as the gap from its own start to the next season's start, never sampled on its own, so drift can never make two seasons overlap or invert (see lengthDriftRealDays below).",
+        "nominalRealDays": { "value": 91, "comment": "Nominal length of one season in real days: 365 real days / 4 seasons ≈ 91, a quarter of a real year — a reference average (e.g. for scaling other tunables), not itself the value that drives a season's realized length; see the rule above." },
         "lengthDriftRealDays": {
-          "value": [-10, 10],
-          "comment": "A season's real length for one cycle is nominalRealDays plus a value seeded (by the world's RNG seed) uniformly from this [min, max] range of real days, so a season can run from about 81 to about 101 real days and no two years are identical."
+          "value": [-22, 22],
+          "comment": "Derived, not independently drawn: with the anchors' true real-calendar gaps (93, 93, 90, 89 real days spring→summer→autumn→winter→spring, not a uniform 91) and each season's start independently offset by up to ±10 real days (startOffsetDriftRealDays below), a season's realized length — the gap from its own start to the next season's start — lands about 69 to 113 real days across the year, i.e. about −22 to +22 around the nominal 91. This field documents that derived spread for anyone reading the numbers; it is not itself sampled to produce a length."
         },
         "startOffsetDriftRealDays": {
           "value": [-10, 10],

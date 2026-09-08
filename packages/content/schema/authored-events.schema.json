@@ -27,7 +27,7 @@
   "additionalProperties": false,
   "$defs": {
     "trigger": {
-      "description": "How this event becomes eligible. Three shapes, picked by `kind`, matching the issue's three: a predicate list (every entry in `all` must hold, same predicate shape a card's `conditions` uses); a fixed point in the season calendar; or a Ledger stock crossing a threshold. `predicates` and `stockThreshold` both carry their own `cooldownSimDays` because, unlike a card, an authored event has no `limits` block — a predicate list or a stock level can stay true for a long time (a whole drought, a whole winter), and without a cooldown the event would fire again the very next sim-minute.",
+      "description": "How this event becomes eligible. Four shapes, picked by `kind`: a predicate list (every entry in `all` must hold, same predicate shape a card's `conditions` uses); a fixed point in the season calendar (`simDate`); a Ledger stock crossing a threshold (`stockThreshold`); or a fixed real calendar date (`realDate`, added #83). `predicates` and `stockThreshold` both carry their own `cooldownSimDays` because, unlike a card, an authored event has no `limits` block — a predicate list or a stock level can stay true for a long time (a whole drought, a whole winter), and without a cooldown the event would fire again the very next sim-minute.",
       "oneOf": [
         {
           "type": "object",
@@ -70,8 +70,8 @@
           "description": "New for #83: a fixed point in the real calendar, independent of the sim's season cycle — for something that means the same real date every year regardless of which sim season a given world's calendar has it fall in (Digital Luna's birthday, December 15; plan section 2, 'Time'). Eligible once a real year, around the sim moment closest to that real date; `windowSimMinutes`, if given, is how many sim minutes either side of that moment still count as a match, so a slow-ticking or paused world does not miss the day entirely. PROPOSED to sim on #84 alongside the calendar model in balance/farm.json's outsideRules.seasons.calendar.",
           "properties": {
             "kind": { "const": "realDate" },
-            "month": { "type": "integer", "minimum": 1, "maximum": 12 },
-            "day": { "type": "integer", "minimum": 1, "maximum": 31 },
+            "month": { "$ref": "balance-farm.schema.json#/$defs/monthDay/properties/month" },
+            "day": { "$ref": "balance-farm.schema.json#/$defs/monthDay/properties/day" },
             "windowSimMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
             "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
           },

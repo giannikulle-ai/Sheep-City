@@ -308,13 +308,19 @@ cards (above) to keep the deck at fifteen.
 
 **The calendar (#83).** Seasons follow the real year — the owner's decision, 2026-09-08
 (plan section 2, "Time" and section 11 decision 10): a nominal length of about 91 real
-days per season, a quarter of 365, with a little seeded drift on both how long a season
-runs and when it starts, so no two years land on the same dates. All of it lives in
-`balance/farm.json`'s `outsideRules.seasons.calendar` — `nominalRealDays`,
-`lengthDriftRealDays`, `startOffsetDriftRealDays`, and the `anchors` each season begins
-around, northern hemisphere: spring the equinox around March 20, summer the solstice
-around June 21, autumn the equinox around September 22, winter the solstice around
-December 21. The old fixed nine-real-day season (`rules.season.realDays`) stays in the
+days per season, a quarter of 365, with a little seeded drift on when a season starts,
+so no two years land on the same dates. All of it lives in `balance/farm.json`'s
+`outsideRules.seasons.calendar` — `nominalRealDays`, `lengthDriftRealDays`,
+`startOffsetDriftRealDays`, and the `anchors` each season begins around, northern
+hemisphere: spring the equinox around March 20, summer the solstice around June 21,
+autumn the equinox around September 22, winter the solstice around December 21. The
+rule #84 must implement exactly: `anchors` plus `startOffsetDriftRealDays` fix each
+season's start date, each offset drawn independently; a season's length is then derived
+as the gap from its own start to the next season's start, never sampled on its own, so
+drift can never make two seasons overlap or invert — `lengthDriftRealDays` documents
+that derived spread (about −22 to +22 real days around the 91-day nominal, since the
+anchors' real gaps are 93, 93, 90, and 89 days, not a uniform 91), it is not itself
+sampled. The old fixed nine-real-day season (`rules.season.realDays`) stays in the
 data too, because the sim still reads it today; sim ticket #84 retires it once the sim
 reads the calendar instead. One consequence: because a season's real length now varies,
 a `simDate` trigger's `dayOfSeason` is no longer an absolute day count
@@ -391,14 +397,18 @@ looks up at the same moment. The lambs bounce. DL leaps at a flake, misses, and 
 again. Then everybody goes back to grazing with white on their backs, as if nothing
 happened.
 
-**Trigger.** `predicates`: season is winter and weather is snow, with a 303-sim-day
-cooldown, re-derived for #83's calendar from the old 30-sim-day cooldown by the same
-ratio the season length changed (30 * (91 / 9) ≈ 303) — under a full year (four ~91-day
-seasons ≈ 364 sim days), long enough to span most of a year so the predicates holding
-again the next snowy moment doesn't retrigger it, but short enough that the next
-winter's first snow isn't skipped. v1's card made this rare only with a 720-hour
-cooldown and said so was a proxy for a real "first"; the authored trigger's own cooldown
-is that fix.
+**Trigger.** `predicates`: season is winter and weather is snow, with a 60,000-sim-day
+cooldown. Fixed for #83's calendar review: a sim day is not a real day — at
+`outsideRules.clock.periodSec = 180` (`packages/sim/src/clock.ts:35`), one real day is
+86400 / 180 = 480 sim days, so the nominal 91-real-day season is 43,680 sim days and a
+four-season year is about 174,720, not "4 * 91 = 364 sim days" as an earlier version of
+this cooldown assumed. 60,000 sim days sits above the longest a winter can realistically
+run under `outsideRules.seasons.calendar` (about 109 real days from the anchor gaps
+plus drift, ≈52,320 sim days) and well under the shortest possible gap to the next
+winter (about 345 real days, ≈165,600 sim days), so the predicates can hold again before
+next winter is due but the event still fires at most once a winter. v1's card made this
+rare only with a 720-hour cooldown and said so was a proxy for a real "first"; the
+authored trigger's own cooldown is that fix.
 
 **Variables.** `flakeBurst` (24) — extra snowflake sprites for this one flurry, more
 than an ordinary snowy scene gets.

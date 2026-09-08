@@ -5,6 +5,8 @@ import {
   awayTitle,
   buildStorybookPage,
   EMPTY_PAGE_STORE,
+  gapSpansNight,
+  pagedEntryIds,
   pageId,
   pagesNewestFirst,
   parsePageStore,
@@ -12,6 +14,8 @@ import {
   simMinutesToMs,
   storybookGateMs,
   STORYBOOK_GATE_SIM_MINUTES,
+  unseenEntries,
+  type PageStore,
   type StorybookPage,
 } from './storybook';
 
@@ -39,19 +43,91 @@ describe('simMinutesToMs / storybookGateMs', () => {
   });
 });
 
+describe('gapSpansNight', () => {
+  const DAY = 86_400_000; // periodSec 86400: a world day exactly as long as a real day
+  const NIGHT_START = 0.52 * DAY; // RULES.clock.phases.night
+  const DAWN = 0.92 * DAY; // RULES.clock.phases.dawn
+
+  it('is false for a span that stays inside one day phase', () => {
+    expect(gapSpansNight(0, 2 * 3600_000, 86400)).toBe(false); // 2h, well before dusk
+  });
+
+  it('is true for a span that overlaps the night window', () => {
+    expect(gapSpansNight(NIGHT_START - 1_000_000, NIGHT_START + 5_000_000, 86400)).toBe(true);
+  });
+
+  it('is false right up to the night boundary, true from it', () => {
+    expect(gapSpansNight(0, NIGHT_START, 86400)).toBe(false); // ends exactly at night's first instant
+    expect(gapSpansNight(0, NIGHT_START + 1, 86400)).toBe(true);
+    expect(gapSpansNight(DAWN, DAY, 86400)).toBe(false); // dawn to midnight: day/dusk only
+  });
+
+  it('is true for any span a full day or longer, regardless of alignment', () => {
+    expect(gapSpansNight(0, DAY, 86400)).toBe(true);
+    expect(gapSpansNight(1_000, DAY + 500, 86400)).toBe(true);
+  });
+
+  it('is true across a day boundary even when neither half alone would cross it', () => {
+    // last 100ms of day 0 (day phase) into the first 100ms of day 1 (day phase) — no night in
+    // between unless the window is wide enough to reach the *next* day's night, which it is not
+    expect(gapSpansNight(DAY - 100, DAY + 100, 86400)).toBe(false);
+    // but a window spanning from before day 0's night into day 1's own night is still caught
+    expect(gapSpansNight(NIGHT_START - 1, DAY + NIGHT_START + 1, 86400)).toBe(true);
+  });
+});
+
 describe('awayTitle', () => {
-  it('says the time away in plain words, never units', () => {
-    expect(awayTitle(0)).toBe('a night');
-    expect(awayTitle(5_000)).toBe('a night');
-    expect(awayTitle(20 * 3600_000)).toBe('a night');
-    expect(awayTitle(2 * 24 * 3600_000)).toBe('two days');
-    expect(awayTitle(3 * 24 * 3600_000)).toBe('three days');
-    expect(awayTitle(6 * 24 * 3600_000)).toBe('six days');
-    expect(awayTitle(7 * 24 * 3600_000)).toBe('a week');
-    expect(awayTitle(9 * 24 * 3600_000)).toBe('over a week');
-    expect(awayTitle(20 * 24 * 3600_000)).toBe('3 weeks');
-    expect(awayTitle(NaN)).toBe('a night');
-    expect(awayTitle(-100)).toBe('a night');
+  // periodSec chosen so a real span of a few hours never brushes a night window on its own —
+  // isolates the minute/hour/day wording from the night override, which gapSpansNight covers above.
+  const NO_NIGHT_PERIOD_SEC = 1_000_000_000;
+
+  it('minutes under an hour, spelled out', () => {
+    expect(awayTitle(0, 0, 0, 180)).toBe('a minute'); // clamped to the smallest word, never "zero"
+    expect(awayTitle(5_000, 0, 5_000, 180)).toBe('a minute');
+    expect(awayTitle(6 * 60_000, 0, 6 * 60_000, 180)).toBe('six minutes');
+    expect(awayTitle(59 * 60_000, 0, 59 * 60_000, 180)).toBe('59 minutes');
+  });
+
+  it('hours under a day, when the gap does not span the world night', () => {
+    const ms = 2 * 3600_000;
+    expect(awayTitle(ms, 0, ms, NO_NIGHT_PERIOD_SEC)).toBe('two hours');
+    const ms23 = 23 * 3600_000; // just under a day: never rounds up to "a day"
+    expect(awayTitle(ms23, 0, ms23, NO_NIGHT_PERIOD_SEC)).toBe('23 hours');
+  });
+
+  it('"a night" when the gap actually spans the world\'s own night, not any gap under a day', () => {
+    const day = 86400; // periodSec: a world day as long as a real day
+    const nightStart = 0.52 * day * 1000;
+    const from = nightStart - 1_000_000;
+    const to = nightStart + 5_000_000;
+    expect(gapSpansNight(from, to, day)).toBe(true);
+    expect(awayTitle(to - from, from, to, day)).toBe('a night');
+    // the same length of time, positioned entirely in daytime, is never called "a night"
+    expect(awayTitle(to - from, 0, to - from, NO_NIGHT_PERIOD_SEC)).not.toBe('a night');
+  });
+
+  it('at the world\'s default (fast) day length, any hour-plus gap always spans a night', () => {
+    // periodSec 180 (the default): a farm day is 3 minutes, so any real gap over an hour is
+    // hundreds of farm days — always at least one night. Matches the real app's own behaviour.
+    expect(awayTitle(2 * 3600_000, 0, 2 * 3600_000, 180)).toBe('a night');
+  });
+
+  it('days, spelled out, and "a week" at exactly seven', () => {
+    expect(awayTitle(2 * 24 * 3600_000, 0, 0, 180)).toBe('two days');
+    expect(awayTitle(3 * 24 * 3600_000, 0, 0, 180)).toBe('three days');
+    expect(awayTitle(6 * 24 * 3600_000, 0, 0, 180)).toBe('six days');
+    expect(awayTitle(7 * 24 * 3600_000, 0, 0, 180)).toBe('a week');
+    expect(awayTitle(9 * 24 * 3600_000, 0, 0, 180)).toBe('over a week');
+    expect(awayTitle(20 * 24 * 3600_000, 0, 0, 180)).toBe('3 weeks');
+  });
+
+  it('never overstates a day count by rounding: 6.9 days is still "six days"', () => {
+    expect(awayTitle(6.9 * 24 * 3600_000, 0, 0, 180)).toBe('six days');
+  });
+
+  it('clamps a non-finite or negative gap to the smallest true word', () => {
+    expect(awayTitle(NaN, 0, 0, 180)).toBe('a minute');
+    expect(awayTitle(-100, 0, 0, 180)).toBe('a minute');
   });
 });
 
@@ -97,7 +173,7 @@ describe('pageId', () => {
 describe('buildStorybookPage', () => {
   it('builds a page from the selected lines, titled by the time away', () => {
     const entries = [entry({ id: 'c1', line: '3 wool banked', picture: 'wool', notability: 0.9 })];
-    const page = buildStorybookPage(entries, 2 * 24 * 3600_000, 0, 1000, 5000);
+    const page = buildStorybookPage(entries, 2 * 24 * 3600_000, 0, 1000, 5000, 180);
     expect(page).toEqual({
       id: pageId(['c1']),
       title: 'two days',
@@ -110,7 +186,36 @@ describe('buildStorybookPage', () => {
   });
 
   it('returns null for an empty range: no invented "nothing happened" line', () => {
-    expect(buildStorybookPage([], 5000, 0, 1000, 5000)).toBeNull();
+    expect(buildStorybookPage([], 5000, 0, 1000, 5000, 180)).toBeNull();
+  });
+});
+
+describe('pagedEntryIds / unseenEntries', () => {
+  const page = (id: string, entryIds: string[]): StorybookPage => ({
+    id,
+    title: 'a night',
+    createdAt: 0,
+    awayMs: 1000,
+    fromMs: 0,
+    toMs: 1000,
+    lines: entryIds.map((entryId) => ({ entryId, line: entryId, picture: 'wool' })),
+  });
+
+  it('collects every entry id told across every stored page', () => {
+    const store: PageStore = { p1: page('p1', ['c0', 'c1']), p2: page('p2', ['c2']) };
+    expect(pagedEntryIds(store)).toEqual(new Set(['c0', 'c1', 'c2']));
+    expect(pagedEntryIds(EMPTY_PAGE_STORE)).toEqual(new Set());
+  });
+
+  it('filters out entries already told on a stored page (fix round 1, #42: F1)', () => {
+    const store: PageStore = { p1: page('p1', ['c0', 'c1']) };
+    const entries = [entry({ id: 'c0' }), entry({ id: 'c1' }), entry({ id: 'c8' })];
+    expect(unseenEntries(entries, store).map((e) => e.id)).toEqual(['c8']);
+  });
+
+  it('is the identity when nothing has been shown yet', () => {
+    const entries = [entry({ id: 'c0' }), entry({ id: 'c1' })];
+    expect(unseenEntries(entries, EMPTY_PAGE_STORE)).toEqual(entries);
   });
 });
 

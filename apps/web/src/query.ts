@@ -3,7 +3,9 @@
 // ?fixture=1&t=0.7&weather=snow&now=100000                     the frozen fixture still, for goldens
 // ?fresh=1                                                     forget the save and start a new farm
 // ?gap=10080                                                   QA: force a storybook page on a scratch world
-//                                                               (sim-minutes away; 1440 = one virtual day)
+//                                                               (real minutes away; 10080 = a week — the
+//                                                               same unit the real load/wake path's awayMs
+//                                                               is in, never the gate's day-scaled minutes)
 import type { Season, Weather } from '@sheepcliff/render';
 
 export interface SceneParams {
@@ -25,8 +27,8 @@ export interface SceneParams {
   scratch: boolean;
   /** forget the saved farm and start again, saving as usual */
   fresh: boolean;
-  /** QA: force a storybook page on the fresh scratch world, this many sim-minutes away (?gap=),
-   * or null when absent. See storybook.ts's `simMinutesToMs`. */
+  /** QA: force a storybook page on the fresh scratch world, this many real (wall-clock) minutes
+   * away (?gap=), or null when absent — the same unit `awayMs` is in on the real load/wake path. */
   gapMinutes: number | null;
 }
 

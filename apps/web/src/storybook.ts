@@ -4,14 +4,17 @@
 // and the catch-up's own numbers, and never invents a line of its own. The DOM side (the overlay,
 // drawing each line's picture) is storybook-overlay.ts; persistence (the page store's place in the
 // save envelope) is save.ts.
-import type { ChronicleEntry } from '@sheepcliff/sim';
+import { RULES, type ChronicleEntry } from '@sheepcliff/sim';
 
 /** Sim ms in one virtual day, the same unit `dayMs(sim)` (packages/sim) is in: `periodSec * 1000`
  * of the clock's own `nowMs`, one full dawn-to-dawn cycle. */
 const SIM_MINUTES_PER_DAY = 24 * 60;
 
-/** `?gap=` (sim-minutes) and the "gap over ten sim-minutes" gate both need the same conversion: a
- * world's own day length turned into a sim-ms-per-sim-minute rate. */
+/** Only the gate (`storybookGateMs`) uses this: "ten sim-minutes" is a fraction of the world's own
+ * day (`periodSec`), so a fast day and a slow day feel the same wait before a page can open. The
+ * title (`awayTitle`) and the catch-up amount are never in this unit — see fix round 1 on #42: they
+ * are real (wall-clock) milliseconds, one to one with sim ms (the host's own mapping, `catchUp`'s
+ * doc comment, packages/sim/src/ledger/catch-up.ts), so `?gap=` must feed those, not this. */
 export function simMinutesToMs(periodSec: number, minutes: number): number {
   return (periodSec * 1000 * minutes) / SIM_MINUTES_PER_DAY;
 }
@@ -23,24 +26,70 @@ export function storybookGateMs(periodSec: number): number {
   return simMinutesToMs(periodSec, STORYBOOK_GATE_SIM_MINUTES);
 }
 
+const MIN_MS = 60_000;
+const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * 3600_000;
-const DAY_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six'];
+
+/** Small counts spelled out ("six"), the way a person would say them; a numeral past that stays
+ * true without needing a word for every number. */
+const SMALL_WORDS = [
+  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty',
+];
+function spellSmall(n: number): string {
+  return SMALL_WORDS[n] ?? String(n);
+}
+
+const SINGULAR: Record<'minute' | 'hour' | 'day', string> = { minute: 'a minute', hour: 'an hour', day: 'a day' };
+function countWord(n: number, unit: 'minute' | 'hour' | 'day'): string {
+  return n === 1 ? SINGULAR[unit] : `${spellSmall(n)} ${unit}s`;
+}
 
 /**
- * The time away in plain words, from real (wall-clock) milliseconds: "a night" under a day, small
- * counts spelled out ("three days"), "a week" at exactly seven, "over a week" short of two, and a
- * rounded week count beyond that. Never a number of hours or minutes — that is `awayLabel`'s job
- * (save.ts) for the finer-grained line, not the title.
+ * True if the real (sim, one-to-one) millisecond span `[fromMs, toMs)` crosses the world's own
+ * night phase (`phaseOf`, whose boundaries are content data, `RULES.clock.phases`) at least once.
+ * `periodSec` is the world's own day length (`Clock.periodSec`) — a farm can run a fast day, so
+ * whether "a night" happened is checked against the real phase the clock passed through, never
+ * guessed from a fixed real-time span. A gap of a full day or more always contains a night.
  */
-export function awayTitle(awayMs: number): string {
+export function gapSpansNight(fromMs: number, toMs: number, periodSec: number): boolean {
+  const dayLenMs = Math.max(1, periodSec) * 1000;
+  const lo = Math.min(fromMs, toMs);
+  const hi = Math.max(fromMs, toMs);
+  if (hi <= lo) return false;
+  if (hi - lo >= dayLenMs) return true;
+  const nightStart = RULES.clock.phases.night;
+  const nightEnd = RULES.clock.phases.dawn;
+  const k0 = Math.floor(lo / dayLenMs) - 1;
+  const k1 = Math.floor(hi / dayLenMs) + 1;
+  for (let k = k0; k <= k1; k++) {
+    const start = (k + nightStart) * dayLenMs;
+    const end = (k + nightEnd) * dayLenMs;
+    if (lo < end && hi > start) return true;
+  }
+  return false;
+}
+
+/**
+ * The time away in plain words, true to the real gap `[fromMs, toMs)` (sim ms, one to one with
+ * wall-clock ms — see `gapSpansNight`): minutes under an hour ("six minutes"), hours under a day
+ * ("two hours") — unless the gap actually spans the world's own night, in which case "a night" —
+ * then days ("three days"), "a week" at exactly seven, "over a week" short of two, and a rounded
+ * week count beyond that. Never a word the gap does not support: nothing here rounds up across a
+ * bucket boundary (a 23-hour gap never becomes "a day").
+ */
+export function awayTitle(awayMs: number, fromMs: number, toMs: number, periodSec: number): string {
   const ms = Number.isFinite(awayMs) && awayMs > 0 ? awayMs : 0;
-  if (ms < DAY_MS) return 'a night';
-  const days = Math.round(ms / DAY_MS);
-  if (days <= 1) return 'a night';
+  if (ms < HOUR_MS) return countWord(Math.max(1, Math.floor(ms / MIN_MS)), 'minute');
+  if (ms < DAY_MS) {
+    if (gapSpansNight(fromMs, toMs, periodSec)) return 'a night';
+    return countWord(Math.floor(ms / HOUR_MS), 'hour');
+  }
+  const days = Math.floor(ms / DAY_MS);
   if (days === 7) return 'a week';
   if (days > 7 && days < 14) return 'over a week';
   if (days >= 14) return `${Math.round(days / 7)} weeks`;
-  return `${DAY_WORDS[days] ?? days} days`;
+  return countWord(days, 'day');
 }
 
 export interface StorybookLine {
@@ -92,8 +141,11 @@ export function pageId(entryIds: readonly string[]): string {
 /**
  * One storybook page for a gap, or null when the chronicle has nothing to tell for it — the
  * storybook only tells, so a quiet gap gets no page rather than an invented "nothing happened"
- * line. `entries` should be `chronicleBetween(state, fromMs, toMs)`'s result (most notable first,
- * unlimited so `selectLines` can look past the top five for a non-card line).
+ * line. `entries` should be `unseenEntries(chronicleBetween(state, fromMs, toMs), pageStore)` —
+ * the gap's own chronicle window, with anything a stored page already told filtered out (fix round
+ * 1 on #42: the sim's `tellLedgerDiff` stamps every entry of a gap at the instant the gap ends, the
+ * same clock instant the next load's window starts from, so the raw window can repeat a previous
+ * page's entries — the page store, not the timestamps, is what says what has already been shown).
  */
 export function buildStorybookPage(
   entries: readonly ChronicleEntry[],
@@ -101,11 +153,12 @@ export function buildStorybookPage(
   fromMs: number,
   toMs: number,
   createdAt: number,
+  periodSec: number,
 ): StorybookPage | null {
   const chosen = selectLines(entries);
   if (chosen.length === 0) return null;
   const lines: StorybookLine[] = chosen.map((e) => ({ entryId: e.id, line: e.line, picture: e.picture }));
-  return { id: pageId(lines.map((l) => l.entryId)), title: awayTitle(awayMs), createdAt, awayMs, fromMs, toMs, lines };
+  return { id: pageId(lines.map((l) => l.entryId)), title: awayTitle(awayMs, fromMs, toMs, periodSec), createdAt, awayMs, fromMs, toMs, lines };
 }
 
 /** The page store: every page ever shown, kept and reopenable, keyed by `pageId` (issue #42's
@@ -118,6 +171,24 @@ export const EMPTY_PAGE_STORE: PageStore = {};
 export function addPage(store: PageStore, page: StorybookPage): PageStore {
   if (store[page.id]) return store;
   return { ...store, [page.id]: page };
+}
+
+/** Every chronicle entry id already told on some stored page. The store, not the chronicle's own
+ * timestamps, is the record of what the player has already been shown (fix round 1 on #42). */
+export function pagedEntryIds(store: PageStore): Set<string> {
+  const ids = new Set<string>();
+  for (const page of Object.values(store)) {
+    for (const line of page.lines) ids.add(line.entryId);
+  }
+  return ids;
+}
+
+/** `entries` with anything already told on a stored page removed, so a new gap's page is built only
+ * from entries no page has shown before — never a repeat of an earlier page, and never missing an
+ * entry that truly is new to this gap. */
+export function unseenEntries(entries: readonly ChronicleEntry[], store: PageStore): ChronicleEntry[] {
+  const seen = pagedEntryIds(store);
+  return entries.filter((e) => !seen.has(e.id));
 }
 
 /** Every stored page, newest first — the farm bar's "earlier pages" list. */

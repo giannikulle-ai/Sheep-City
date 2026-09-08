@@ -3,23 +3,30 @@ import { expect, test } from '@playwright/test';
 import type { SheepcliffApi } from '../src/api';
 import { e2eDir, expectGolden } from './lib/golden';
 
-// The storybook page (issue #42). ?gap=<sim-minutes> (query.ts) forces a catch-up on a fresh
-// scratch world, deterministically, so these two cases stand in for "a night" and "a week": every
-// number here (seed, gap) was picked by running the app and reading back window.sheepcliff.storybook
-// until a case with more than one picture kind turned up, so the golden shows the renderer handling
-// more than one chronicle picture key. See storybook.ts for the sim-minutes-to-ms conversion; the
-// current chronicle only ever writes 'ledger' entries (births, growth, weather, season — see
-// packages/sim/src/chronicle/ledger-diff.ts), so that is what both pages are made of today.
+// The storybook page (issue #42). ?gap=<minutes> (query.ts) forces a catch-up on a fresh scratch
+// world of that many real (wall-clock) minutes, deterministically — the same unit the real load/wake
+// path's awayMs is in (fix round 1: F2 — `?gap=` used to feed a day-length-scaled "sim minutes" unit
+// into a title that reads wall-clock ms, so a golden picked to read "a week" was really 3,360 sim-days
+// mislabelled; now the query and the real path agree, so a real week away really is `?gap=10080`).
+// These two cases stand in for "a night" and "a week": every number here (seed, gap) was picked by
+// running the app and reading back window.sheepcliff.storybook until a case with more than one
+// picture kind turned up, so the golden shows the renderer handling more than one chronicle picture
+// key. The current chronicle only ever writes 'ledger' entries (births, growth, weather, season —
+// see packages/sim/src/chronicle/ledger-diff.ts), so that is what both pages are made of today.
 type WithApp = { sheepcliff: SheepcliffApi };
 
 interface Case {
   name: string;
   seed: number;
   gapMinutes: number;
+  title: string;
 }
 
-const NIGHT: Case = { name: 'night', seed: 42, gapMinutes: 2880 }; // 2 sim-days ≈ 6 real minutes: "a night"
-const WEEK: Case = { name: 'week', seed: 17, gapMinutes: 4_838_400 }; // exactly 7 real days: "a week"
+// 2 real hours, at the default (fast) day length, is hundreds of farm days — always spans the
+// world's own night many times over, so `awayTitle` reads it as "a night" (storybook.ts).
+const NIGHT: Case = { name: 'night', seed: 17, gapMinutes: 120, title: 'a night' };
+// exactly 7 real days: `awayTitle` reads day counts, and 7 is the one number that reads "a week".
+const WEEK: Case = { name: 'week', seed: 17, gapMinutes: 10_080, title: 'a week' };
 
 function goldenPath(name: string): string {
   return path.join(e2eDir, 'golden', 'app', `storybook-${name}.png`);
@@ -49,6 +56,9 @@ for (const c of [NIGHT, WEEK]) {
       return { ok: bad.length === 0, reason: bad.length ? `unknown entry ids: ${bad.map((l) => l.entryId).join(',')}` : '', title: sb.title, lineCount: sb.lines.length };
     });
     expect(result.ok, result.reason).toBe(true);
+    // the title is the one line the client composes itself (fix round 1, #42: F2) — it must read
+    // exactly what this case's real gap supports, not a word the gap does not.
+    expect(result.title).toBe(c.title);
     testInfo.annotations.push({ type: 'storybook', description: `${result.title}, ${result.lineCount} line(s)` });
 
     const buf = await card.screenshot();

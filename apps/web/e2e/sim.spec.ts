@@ -129,18 +129,22 @@ test('offline catch-up runs the time away with no one-day cap, and opens a story
   expect(after.tick).toBeGreaterThan(tickBefore);
   await expect(page.locator('#say')).toContainText('restored: back after 2 h 00 min');
 
-  // whatever the storybook opened for this gap, every line on it traces to a real chronicle entry
-  // id (CLAUDE.md: "a line that is not backed by a chronicle entry is a bug"), and a two-hour real
-  // gap reads as "a night"
+  // a two-hour real gap opens a storybook page — this reproduces deterministically, so the
+  // assertion is unconditional (fix round 1, #42: F3 — a conditional assertion here would let a
+  // regression that stops the page appearing on a real gap go green) — and every line on it traces
+  // to a real chronicle entry id (CLAUDE.md: "a line that is not backed by a chronicle entry is a
+  // bug"). A two-hour real gap, at the default (fast) day length, always spans the world's own
+  // night many times over, so it reads as "a night".
   const page1 = await page.evaluate(() => {
     const app = (window as unknown as WithApp).sheepcliff;
     const sb = app.storybook.current();
-    if (!sb) return { shown: false, ok: true, title: '' };
+    if (!sb) return { shown: false, ok: false, title: '', ids: [] as string[] };
     const ids = new Set(app.sim().chronicle.entries.map((e) => e.id));
-    return { shown: true, ok: sb.lines.every((l) => ids.has(l.entryId)), title: sb.title };
+    return { shown: true, ok: sb.lines.every((l) => ids.has(l.entryId)), title: sb.title, ids: sb.lines.map((l) => l.entryId) };
   });
+  expect(page1.shown, 'a page must open for a real two-hour gap').toBe(true);
   expect(page1.ok).toBe(true);
-  if (page1.shown) expect(page1.title).toBe('a night');
+  expect(page1.title).toBe('a night');
 
   // a shorter absence, under the day boundary, runs exactly that long at actor resolution
   const text2 = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.save.text());
@@ -156,6 +160,52 @@ test('offline catch-up runs the time away with no one-day cap, and opens a story
   expect(after2.tick - env2.save.world.clock.tick).toBeGreaterThanOrEqual(300);
   expect(after2.tick - env2.save.world.clock.tick).toBeLessThan(330);
   await expect(page.locator('#say')).toContainText('restored: back after 30 s');
+});
+
+test('two consecutive real absences each get their own page: the second never repeats the first (fix round 1, #42: F1)', async ({ page }) => {
+  // Reproduces the Verifier's finding: `tellLedgerDiff` stamps every entry of a gap at the instant
+  // the gap ends, the same clock instant a `load` save is written at and the next gap's window
+  // starts from — so an inclusive-both-ends `chronicleBetween` read the first gap's own entries
+  // again as if they were the second gap's. The page store (`unseenEntries`, storybook.ts) is the
+  // fix: a page only ever tells entries no stored page has told before.
+  await open(page);
+
+  async function plantGapAndReload(hoursAgo: number): Promise<void> {
+    const text = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.save.text());
+    const env = JSON.parse(text) as { savedAt: number };
+    env.savedAt = Date.now() - hoursAgo * 3600_000;
+    await page.evaluate((t) => {
+      (window as unknown as WithApp).sheepcliff.qa.seed(1); // stop the unload save clobbering the planted text
+      localStorage.setItem('sheepcliff-save', t);
+    }, JSON.stringify(env));
+    await page.reload();
+    await expect(page.locator('body')).toHaveAttribute('data-ready', '1', { timeout: 15_000 });
+  }
+
+  const readPage = () =>
+    page.evaluate(() => {
+      const app = (window as unknown as WithApp).sheepcliff;
+      const sb = app.storybook.current();
+      return sb ? { shown: true as const, ids: sb.lines.map((l) => l.entryId) } : { shown: false as const, ids: [] as string[] };
+    });
+
+  await plantGapAndReload(2);
+  const page1 = await readPage();
+  expect(page1.shown, 'the first absence must open a page').toBe(true);
+
+  await plantGapAndReload(2);
+  const page2 = await readPage();
+  expect(page2.shown, 'the second absence must open a page of its own').toBe(true);
+
+  // page 2 must differ from page 1 outright...
+  expect(page2.ids).not.toEqual(page1.ids);
+  // ...and specifically: none of page 2's lines repeat an entry page 1 already told
+  const repeated = page2.ids.filter((id) => page1.ids.includes(id));
+  expect(repeated, `page 2 repeats page 1's entries: ${repeated.join(', ')}`).toEqual([]);
+
+  // both pages are kept, never merged or dropped for colliding on the same story
+  const pageCount = await page.evaluate(() => (window as unknown as WithApp).sheepcliff.storybook.pages().length);
+  expect(pageCount).toBe(2);
 });
 
 test('the save exports as text in the page and loads back from it', async ({ page }) => {

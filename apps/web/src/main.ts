@@ -32,8 +32,8 @@ import {
   buildStorybookPage,
   EMPTY_PAGE_STORE,
   pagesNewestFirst,
-  simMinutesToMs,
   storybookGateMs,
+  unseenEntries,
   type PageStore,
 } from './storybook';
 import { earlierPagesList, StorybookOverlay } from './storybook-overlay';
@@ -146,8 +146,12 @@ async function main(): Promise<void> {
    */
   function tellGap(state: SimState, before: { clock: { nowMs: number } }, after: { clock: { nowMs: number } }, awayMs: number): void {
     if (awayMs < storybookGateMs(state.clock.periodSec)) return;
-    const entries = chronicleBetween(state, before.clock.nowMs, after.clock.nowMs);
-    const page = buildStorybookPage(entries, awayMs, before.clock.nowMs, after.clock.nowMs, Date.now());
+    // The raw window can repeat an earlier page's entries (fix round 1 on #42, see storybook.ts's
+    // `unseenEntries`): the sim stamps every entry of a gap at the instant the gap ends, the same
+    // clock instant the next load's window opens from, so only entries no stored page has told yet
+    // are ever eligible for a new one.
+    const entries = unseenEntries(chronicleBetween(state, before.clock.nowMs, after.clock.nowMs), pageStore);
+    const page = buildStorybookPage(entries, awayMs, before.clock.nowMs, after.clock.nowMs, Date.now(), state.clock.periodSec);
     if (!page) return;
     pageStore = addPage(pageStore, page);
     storybook.show(page);
@@ -243,10 +247,13 @@ async function main(): Promise<void> {
     save('load');
   } else noteSave(params.fixture ? 'fixture still (not saved)' : 'scratch world from the URL (not saved)');
 
-  // QA: ?gap=<sim-minutes> forces a catch-up on the fresh scratch world, so goldens and e2e can
-  // drive a one-night and a one-week storybook page deterministically (issue #42).
+  // QA: ?gap=<minutes> forces a catch-up on the fresh scratch world, so goldens and e2e can drive a
+  // storybook page deterministically (issue #42). `minutes` is real (wall-clock) minutes — the same
+  // unit the real load and wake paths use for `awayMs` (sim ms, one to one with wall ms, `catchUp`'s
+  // own doc comment) — never the gate's day-scaled "sim minutes" (`simMinutesToMs`), so a `?gap=`
+  // page's title reads exactly as the real path's would for the same length of time away.
   if (params.gapMinutes !== null) {
-    const gapMs = simMinutesToMs(game.sim.clock.periodSec, params.gapMinutes);
+    const gapMs = params.gapMinutes * 60_000;
     const c = catchUp(game.sim, gapMs);
     game.load(c.state);
     tellGap(c.state, c.before, c.after, gapMs);

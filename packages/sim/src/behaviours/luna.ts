@@ -572,6 +572,18 @@ export const walk: LunaBehaviour = {
   },
 };
 
+/**
+ * Every value her own chain ever assigns to `l.anim` (`Luna.anim` stays a plain `string` in
+ * state.ts, not this union: `intents.ts` writes a wider `LunaAction` into it for the button holds
+ * and the walk/stick actions, and narrowing the field would break that assignment). Added for #61,
+ * the "nothing can harm Digital Luna" invariant test: it is the one thing that test needed from
+ * `src` and didn't already have, so an unexpected `anim` (one an event, a bug, or a future card
+ * lands on her) has a set to be caught against. Keep this in step with every `l.anim = '...'` in
+ * the package (this file, intents.ts, npcs.ts, life.ts, ledger/respawn.ts).
+ */
+export const LUNA_ANIMS = ['sit', 'tilt', 'pant', 'flop', 'sleep', 'stretch', 'run', 'stick', 'nibble'] as const;
+export type LunaAnim = (typeof LUNA_ANIMS)[number];
+
 // ---------------------------------------------------------------------------------------------
 // The registry, in the owner's order.
 // ---------------------------------------------------------------------------------------------

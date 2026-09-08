@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepcliff.com/content/schema/authored-events.schema.json",
+  "title": "Authored events",
+  "description": "The punctuation the cards don't do: a seasonal festival, a storm, DL's birthday (plan section 2, 'Layer 3: the event engine'). Where a card is drawn under a pacing target, an authored event becomes eligible when its own `trigger` is met, and while it runs it takes priority over any card named in `priorityOver` so a small random card never steps on something with a more interesting result. Reuses the card schema's `hooks`, `storybook`, `moment`, `beat` blocks and predicate shape (events.schema.json) rather than redefining them.",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "source": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+    "district": { "$ref": "_defs.schema.json#/$defs/id" },
+    "timeScale": {
+      "type": "object",
+      "description": "Same shape and meaning as events.schema.json's timeScale; repeated here so this file is self-contained and does not need farm.json open beside it to make sense of durationSimMinutes.",
+      "properties": {
+        "simMinutesPerDay": { "type": "integer", "const": 1440 },
+        "simHoursPerDay": { "type": "integer", "const": 24 },
+        "realSecondsPerSimDayWatching": { "type": "number", "exclusiveMinimum": 0 },
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+      },
+      "required": ["simMinutesPerDay", "simHoursPerDay", "realSecondsPerSimDayWatching", "comment"],
+      "additionalProperties": false
+    },
+    "events": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/authoredEvent" } }
+  },
+  "required": ["source", "comment", "district", "timeScale", "events"],
+  "additionalProperties": false,
+  "$defs": {
+    "trigger": {
+      "description": "How this event becomes eligible. Three shapes, picked by `kind`, matching the issue's three: a predicate list (every entry in `all` must hold, same predicate shape a card's `conditions` uses); a fixed point in the season calendar; or a Ledger stock crossing a threshold. `predicates` and `stockThreshold` both carry their own `cooldownSimDays` because, unlike a card, an authored event has no `limits` block — a predicate list or a stock level can stay true for a long time (a whole drought, a whole winter), and without a cooldown the event would fire again the very next sim-minute.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "predicates" },
+            "all": { "type": "array", "minItems": 1, "items": { "$ref": "events.schema.json#/$defs/condition" } },
+            "cooldownSimDays": { "type": "number", "exclusiveMinimum": 0 },
+            "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+          },
+          "required": ["kind", "all", "cooldownSimDays"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "A specific day in the nine-sim-day season cycle (balance/farm.json outsideRules.season.realDays; clock.dayCount mod 9, PROPOSED to sim on #40 same as v1 proposed recentWeather — there is no calendar concept in the sim yet, only the four-season wheel and a running day count). Recurs every time that season comes round.",
+          "properties": {
+            "kind": { "const": "simDate" },
+            "season": { "$ref": "events.schema.json#/$defs/season" },
+            "dayOfSeason": { "type": "integer", "minimum": 1, "maximum": 9 },
+            "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+          },
+          "required": ["kind", "season", "dayOfSeason"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "stockThreshold" },
+            "on": { "$ref": "events.schema.json#/$defs/conditionOn" },
+            "op": { "$ref": "events.schema.json#/$defs/conditionOp" },
+            "value": { "type": "number" },
+            "cooldownSimDays": { "type": "number", "exclusiveMinimum": 0 },
+            "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+          },
+          "required": ["kind", "on", "op", "value", "cooldownSimDays"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "variables": {
+      "type": "object",
+      "description": "Authored parameters a card does not get (plan section 2): named values this event's own hooks and storybook read, that no other event shares. Deliberately open — unlike the rest of this schema, `additionalProperties` is not false here, because every authored event needs a different bag of them. Documented per event in docs/content/EVENT_DECK.md.",
+      "minProperties": 1
+    },
+    "priorityOver": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "_defs.schema.json#/$defs/id" },
+      "description": "Card ids, or bare parameter names such as a hook target (`mood`, `weather`), this event outranks while it runs: a named card does not fire, and a named parameter is not touched by any other card's hooks, until this event ends."
+    },
+    "authoredEvent": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "_defs.schema.json#/$defs/id" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
+        "trigger": { "$ref": "#/$defs/trigger" },
+        "variables": { "$ref": "#/$defs/variables" },
+        "priorityOver": { "$ref": "#/$defs/priorityOver" },
+        "durationSimMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+        "hooks": { "$ref": "events.schema.json#/$defs/hooks" },
+        "storybook": { "$ref": "events.schema.json#/$defs/storybook" },
+        "moment": { "$ref": "events.schema.json#/$defs/moment" },
+        "beat": { "$ref": "events.schema.json#/$defs/beat" }
+      },
+      "required": ["id", "title", "comment", "trigger", "variables", "priorityOver", "durationSimMinutes", "hooks", "storybook", "moment", "beat"],
+      "additionalProperties": false
+    }
+  }
+}

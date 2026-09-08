@@ -2,6 +2,7 @@
 // The JSON is the source of truth; this module gives the sim and the client typed handles on it.
 
 import farmEvents from '../events/farm.json';
+import authoredEvents from '../events/authored.json';
 
 export const CONTENT_PACKAGE = '@sheepcliff/content';
 
@@ -9,13 +10,13 @@ export const CONTENT_PACKAGE = '@sheepcliff/content';
 export const DISTRICT_IDS = ['farm', 'village-green', 'cliff-harbour', 'wildwood'] as const;
 export type DistrictId = (typeof DISTRICT_IDS)[number];
 
-// ---- Event deck (events/farm.json, schema/events.schema.json, #41) ----
+// ---- Event deck v2 (events/farm.json, events/authored.json, schema/events.schema.json, #59) ----
 
 export type SeasonName = 'spring' | 'summer' | 'autumn' | 'winter';
 export type WeatherName = 'sun' | 'rain' | 'snow';
 export type PhaseName = 'dawn' | 'day' | 'dusk' | 'night';
 
-/** The hook vocabulary the Director implements (#40). Keep in step with the schema's `hook` oneOf. */
+/** The hook vocabulary the engine implements (#40). Keep in step with the schema's `hook` oneOf. */
 export const EVENT_HOOK_OPS = ['setVisibility', 'spawn', 'mood', 'coins', 'flag'] as const;
 export type EventHookOp = (typeof EVENT_HOOK_OPS)[number];
 
@@ -29,39 +30,66 @@ export type EventHook =
   | { op: 'coins'; delta: number; comment?: string }
   | { op: 'flag'; name: string; value: boolean; comment?: string };
 
-export type EventPreconditions = {
-  season?: SeasonName[];
-  weather?: WeatherName[];
-  timeOfDay?: PhaseName[];
-  flockSize?: { min?: number; max?: number };
-  merchantPresent?: boolean;
-  lambPresent?: boolean;
-  /** Proposed in #41: `kind` was the weather at some point in the last `withinSimMinutes`. */
-  recentWeather?: { kind: WeatherName; withinSimMinutes: number };
+/** What a v2 predicate reads. See schema/events.schema.json's `conditionOn` for the plain-word source. */
+export const CONDITION_ON = [
+  'season', 'weather', 'timeOfDay', 'simMinutesSinceRain',
+  'ledger.wool', 'ledger.coins', 'ledger.grass', 'ledger.flock',
+  'lambFarFromMother', 'dlFarFromFlock', 'flockScattered',
+  'merchantPresent', 'lambPresent', 'farmerPresent',
+] as const;
+export type ConditionOn = (typeof CONDITION_ON)[number];
+
+export const CONDITION_OPS = ['eq', 'ne', 'in', 'not-in', 'gte', 'lte', 'gt', 'lt'] as const;
+export type ConditionOp = (typeof CONDITION_OPS)[number];
+
+/** One predicate over world state, `{ on, op, value }` (v2 replaces v1's fixed `preconditions` allow-list). */
+export type EventCondition = {
+  on: ConditionOn;
+  op: ConditionOp;
+  value: unknown;
+  comment?: string;
 };
 
-/** Watch-test moment kinds (tools/qa/README.md). */
+/** A live multiplier: `base` times every `multipliers` entry whose `when` holds at the draw. */
+export type EventWeight = {
+  base: number;
+  multipliers: Array<{ when: EventCondition; times: number; comment?: string }>;
+  comment?: string;
+};
+
+/** How often and how much of a card the engine allows (v2; v1 had a bare card-level `cooldownSimHours`). */
+export type EventLimits = {
+  concurrent: number;
+  minGapSimMinutes: number;
+  cooldownSimHours: number;
+  comment?: string;
+};
+
+/** Watch-test moment kinds (tools/qa/README.md). `bird`/`rabbit` are reserved for small life, not cards. */
 export type MomentKind = 'bubble' | 'npc-arrival' | 'weather' | 'dl-trick' | 'lamb' | 'phase' | 'bird' | 'rabbit';
 
 /** Placeholders a storybook line may carry; the client fills them from the event log. */
 export const STORYBOOK_PLACEHOLDERS = ['dl', 'lamb', 'sheep', 'farmer', 'merchant', 'coins', 'flock'] as const;
 export type StorybookPlaceholder = (typeof STORYBOOK_PLACEHOLDERS)[number];
 
+export type EventStorybook = { line: string; picture: string; notability: number };
+export type EventMoment = { kind: MomentKind; detail: string };
+export type EventBeat = { start: string; end: string };
+export type EventHooks = { start: EventHook[]; end: EventHook[] };
+
 export type EventCard = {
   id: string;
   title: string;
-  comment?: string;
-  /** Relative draw weight among cards whose preconditions hold. 10 is ordinary. */
-  weight: number;
-  /** In-world hours after the card ends before it may fire again. */
-  cooldownSimHours: number;
-  preconditions: EventPreconditions;
+  comment: string;
+  conditions: EventCondition[];
+  weight: EventWeight;
+  limits: EventLimits;
   /** In-world minutes; 1440 per day, 0.125 real seconds each when watching. */
   durationSimMinutes: number;
-  hooks: { start: EventHook[]; end: EventHook[] };
-  storybook: { line: string; picture: string };
-  moment: { kind: MomentKind; detail: string };
-  beat: { start: string; end: string };
+  hooks: EventHooks;
+  storybook: EventStorybook;
+  moment: EventMoment;
+  beat: EventBeat;
 };
 
 export type EventDeck = {
@@ -70,11 +98,48 @@ export type EventDeck = {
   events: EventCard[];
 };
 
-/** The farm's fifteen cards, straight from the JSON. The JSON's own `$schema`, `source`, `comment` keys are dropped. */
+/** The farm's fifteen v2 cards, straight from the JSON. The JSON's own `$schema`, `source`, `comment` keys are dropped. */
 export const FARM_EVENT_DECK: EventDeck = {
   district: farmEvents.district as DistrictId,
   timeScale: farmEvents.timeScale,
-  events: farmEvents.events as EventCard[],
+  events: farmEvents.events as unknown as EventCard[],
+};
+
+/** How an authored event becomes eligible: a predicate list, a fixed day in the season calendar, or a Ledger stock crossing a threshold. */
+export type AuthoredTrigger =
+  | { kind: 'predicates'; all: EventCondition[]; cooldownSimDays: number; comment?: string }
+  | { kind: 'simDate'; season: SeasonName; dayOfSeason: number; comment?: string }
+  | { kind: 'stockThreshold'; on: ConditionOn; op: ConditionOp; value: number; cooldownSimDays: number; comment?: string };
+
+/** Authored parameters a card does not get. Deliberately open: every authored event carries a different bag. */
+export type AuthoredVariables = Record<string, unknown>;
+
+export type AuthoredEvent = {
+  id: string;
+  title: string;
+  comment: string;
+  trigger: AuthoredTrigger;
+  variables: AuthoredVariables;
+  /** Card ids, or bare parameter names (e.g. `mood`, `weather`), this event outranks while it runs. */
+  priorityOver: string[];
+  durationSimMinutes: number;
+  hooks: EventHooks;
+  storybook: EventStorybook;
+  moment: EventMoment;
+  beat: EventBeat;
+};
+
+export type AuthoredDeck = {
+  district: DistrictId;
+  timeScale: { simMinutesPerDay: number; simHoursPerDay: number; realSecondsPerSimDayWatching: number };
+  events: AuthoredEvent[];
+};
+
+/** The farm's three reference authored events, straight from the JSON. */
+export const FARM_AUTHORED_EVENTS: AuthoredDeck = {
+  district: authoredEvents.district as DistrictId,
+  timeScale: authoredEvents.timeScale,
+  events: authoredEvents.events as unknown as AuthoredEvent[],
 };
 
 /** Look a card up by id, or throw: a misspelt id is a bug, not a missing feature. */
@@ -82,6 +147,13 @@ export function eventCard(id: string, deck: EventDeck = FARM_EVENT_DECK): EventC
   const card = deck.events.find((e) => e.id === id);
   if (!card) throw new Error(`no event card "${id}" in the ${deck.district} deck`);
   return card;
+}
+
+/** Look an authored event up by id, or throw. */
+export function authoredEvent(id: string, deck: AuthoredDeck = FARM_AUTHORED_EVENTS): AuthoredEvent {
+  const event = deck.events.find((e) => e.id === id);
+  if (!event) throw new Error(`no authored event "${id}" in the ${deck.district} deck`);
+  return event;
 }
 
 /** In-world minutes to sim milliseconds at the watching rate (the clock's 180-second day). */

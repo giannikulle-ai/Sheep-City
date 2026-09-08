@@ -17,6 +17,7 @@ export const FILES = [
   ["farm/names.json",    "schema/names.schema.json"],
   ["balance/farm.json",  "schema/balance-farm.schema.json"],
   ["events/farm.json",   "schema/events.schema.json"],
+  ["events/authored.json", "schema/authored-events.schema.json"],
 ];
 
 let failed = 0;

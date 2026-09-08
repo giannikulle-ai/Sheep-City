@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sheepcliff.com/content/schema/events.schema.json",
-  "title": "Event deck",
-  "description": "A deck of event cards the Director draws from. A card is data only: when it may fire (preconditions), how often (weight, cooldown), how long (duration), what the sim does at its start and end (hooks from a fixed vocabulary), how the storybook tells it, and which watch-test moment it produces. Times are in-world: 1 sim day = 24 sim hours = 1440 sim minutes = 180 real seconds when watching.",
+  "title": "Event deck (v2)",
+  "description": "A deck of event cards the engine draws from (#40; the word Director is retired, plan section 2). A card is data only: `conditions` it needs held to be eligible, a `weight` that is a live multiplier so real causes make it more likely, `limits` on how often and how much, how long it runs, what the sim does at its start and end (hooks from a fixed vocabulary), how the storybook tells it, and which watch-test moment it produces. Times are in-world: 1 sim day = 24 sim hours = 1440 sim minutes = 180 real seconds when watching. v1 kept a fixed `preconditions` allow-list and a bare `weight` number; v2 replaces both so a card can read the Ledger and the actors, not only the clock and the weather.",
   "type": "object",
   "properties": {
     "$schema": { "type": "string" },
@@ -30,30 +30,78 @@
     "weather": { "type": "string", "enum": ["sun", "rain", "snow"] },
     "phase":   { "type": "string", "enum": ["dawn", "day", "dusk", "night"] },
     "shortLine": { "type": "string", "minLength": 1, "maxLength": 140 },
-    "preconditions": {
+
+    "conditionOn": {
+      "type": "string",
+      "description": "What a predicate reads. A clock or weather field (`season`, `weather`, `timeOfDay`); one proposed weather-history field carried over from v1's `recentWeather`, now shaped as an ordinary predicate instead of a bespoke object (`simMinutesSinceRain`, flagged to sim on #40 same as v1 flagged `recentWeather`); a Ledger stock, read the way `packages/sim/src/ledger/ledger.ts` already reads it today (`ledger.wool` and `ledger.grass` are the flock's mean level 0 to 1 — `meanOf`; `ledger.coins` is the bank; `ledger.flock` is sheep plus lambs — `ledgerFlock`); or a named actor predicate the engine computes from the actors (`lambFarFromMother`, `dlFarFromFlock`, `flockScattered`, `merchantPresent`, `lambPresent`, `farmerPresent`). Plain-word meanings for every one of these are in docs/content/EVENT_DECK.md.",
+      "enum": [
+        "season", "weather", "timeOfDay", "simMinutesSinceRain",
+        "ledger.wool", "ledger.coins", "ledger.grass", "ledger.flock",
+        "lambFarFromMother", "dlFarFromFlock", "flockScattered",
+        "merchantPresent", "lambPresent", "farmerPresent"
+      ]
+    },
+    "conditionOp": {
+      "type": "string",
+      "description": "`eq`/`ne` compare one value (a season, a weather kind, a phase, a boolean). `in`/`not-in` take an array `value`, the v1 preconditions' allow-list in predicate shape. `gte`/`lte`/`gt`/`lt` compare a number (a Ledger stock, or `simMinutesSinceRain`).",
+      "enum": ["eq", "ne", "in", "not-in", "gte", "lte", "gt", "lt"]
+    },
+    "condition": {
       "type": "object",
-      "description": "Every listed condition must hold at the moment of the draw. An absent key means no constraint. `season`, `weather`, `timeOfDay` are allow-lists (any listed value passes).",
+      "description": "One predicate over world state, true or false the moment the engine looks.",
       "properties": {
-        "season":    { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": { "$ref": "#/$defs/season" } },
-        "weather":   { "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": { "$ref": "#/$defs/weather" } },
-        "timeOfDay": { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": { "$ref": "#/$defs/phase" }, "description": "The band of the day the card may start in, as clock phases (balance/farm.json outsideRules.clock.phases)." },
-        "flockSize": {
-          "type": "object",
-          "description": "Sheep plus lambs on the field, inclusive bounds. Max defaults to the flock cap.",
-          "properties": { "min": { "type": "integer", "minimum": 0 }, "max": { "type": "integer", "minimum": 0 } },
-          "minProperties": 1, "additionalProperties": false
-        },
-        "merchantPresent": { "type": "boolean", "description": "true: the merchant must be on the field. false: the merchant must be away." },
-        "lambPresent":     { "type": "boolean", "description": "true: at least one lamb on the field. false: none." },
-        "recentWeather": {
-          "type": "object",
-          "description": "PROPOSED beyond the issue's list (see the PR): passes when `kind` was the weather at any point in the last `withinSimMinutes`. Pair with `weather` to say 'sun now, rain a moment ago'.",
-          "properties": { "kind": { "$ref": "#/$defs/weather" }, "withinSimMinutes": { "type": "integer", "minimum": 1 } },
-          "required": ["kind", "withinSimMinutes"], "additionalProperties": false
-        }
+        "on": { "$ref": "#/$defs/conditionOn" },
+        "op": { "$ref": "#/$defs/conditionOp" },
+        "value": {},
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
       },
+      "required": ["on", "op", "value"],
       "additionalProperties": false
     },
+
+    "preconditions": {
+      "type": "array",
+      "description": "v2 name: `conditions` on the card. Every listed predicate must hold at the moment of the draw; an empty or absent list means no constraint.",
+      "items": { "$ref": "#/$defs/condition" }
+    },
+
+    "weight": {
+      "type": "object",
+      "description": "A live multiplier: `base` (10 is ordinary, same scale as v1's bare number) times every entry in `multipliers` whose `when` holds at the draw. A lost lamb is not \"needs a lamb, weight 3\"; it is \"needs a lamb, and far likelier when the flock is scattered, DL is far from it, and it is near dusk\" (plan section 2).",
+      "properties": {
+        "base": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+        "multipliers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "when": { "$ref": "#/$defs/condition" },
+              "times": { "type": "number", "exclusiveMinimum": 0, "maximum": 10, "description": "How much `when` scales the base weight. Under 1 makes the card less likely; over 1, more." },
+              "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+            },
+            "required": ["when", "times"],
+            "additionalProperties": false
+          }
+        },
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+      },
+      "required": ["base", "multipliers"],
+      "additionalProperties": false
+    },
+
+    "limits": {
+      "type": "object",
+      "description": "How often and how much of this card the engine allows. v1 had a bare `cooldownSimHours` on the card; v2 groups it with the pacing knobs the plan names (concurrency, a minimum gap between draws).",
+      "properties": {
+        "concurrent": { "type": "integer", "minimum": 1, "maximum": 9, "description": "How many copies of this card may be running at once. 1 for almost everything; a card that never sets a flag or spawns something exclusive could allow more." },
+        "minGapSimMinutes": { "type": "integer", "minimum": 1, "description": "Minimum sim-minutes between one draw of this card starting and the next, start to start. Always at least the card's own durationSimMinutes, since a card cannot be redrawn while still running." },
+        "cooldownSimHours": { "type": "number", "minimum": 0, "description": "In-world hours after the card ends before it may fire again. Same field and meaning as v1's card-level `cooldownSimHours`." },
+        "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+      },
+      "required": ["concurrent", "minGapSimMinutes", "cooldownSimHours"],
+      "additionalProperties": false
+    },
+
     "hook": {
       "description": "One named effect the sim implements. `op` picks the effect; the other keys are its arguments.",
       "oneOf": [
@@ -112,16 +160,17 @@
     },
     "storybook": {
       "type": "object",
-      "description": "How 'while you were gone' tells the card. One past-tense line under 90 characters; placeholders in braces are filled by the client from the event log.",
+      "description": "How 'while you were gone' tells the card. One past-tense line under 90 characters; placeholders in braces are filled by the client from the event log. v2 adds `notability`.",
       "properties": {
         "line": { "type": "string", "minLength": 1, "maxLength": 89, "pattern": "^[^{}]*(\\{(dl|lamb|sheep|farmer|merchant|coins|flock)\\}[^{}]*)*$" },
-        "picture": { "$ref": "_defs.schema.json#/$defs/id" }
+        "picture": { "$ref": "_defs.schema.json#/$defs/id" },
+        "notability": { "type": "number", "minimum": 0, "maximum": 1, "description": "How much this line deserves a spot in a storybook page (plan section 2): 0 ordinary background, 1 a first or the rarest high point. Deviation-from-normal and firsts drive selection, not this number alone, but it is the card author's own read on where a moment sits." }
       },
-      "required": ["line", "picture"], "additionalProperties": false
+      "required": ["line", "picture", "notability"], "additionalProperties": false
     },
     "moment": {
       "type": "object",
-      "description": "The watch-test moment the card's start produces (tools/qa/README.md). Distinctness is kind:detail, so pick a detail no ordinary moment uses.",
+      "description": "The watch-test moment the card's start produces (tools/qa/README.md). Distinctness is kind:detail, so pick a detail no ordinary moment uses. `bird`/`rabbit` are reserved for the small-life system's own ambient arrivals (tools/qa/README.md), not for cards.",
       "properties": {
         "kind": { "type": "string", "enum": ["bubble", "npc-arrival", "weather", "dl-trick", "lamb", "phase", "bird", "rabbit"] },
         "detail": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
@@ -140,16 +189,16 @@
         "id":    { "$ref": "_defs.schema.json#/$defs/id" },
         "title": { "type": "string", "minLength": 1, "maxLength": 40 },
         "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
-        "weight": { "type": "number", "exclusiveMinimum": 0, "maximum": 100, "description": "Relative draw weight among the cards whose preconditions hold. 10 is ordinary." },
-        "cooldownSimHours": { "type": "number", "minimum": 0, "description": "In-world hours after the card ends before it may fire again." },
-        "preconditions": { "$ref": "#/$defs/preconditions" },
+        "conditions": { "$ref": "#/$defs/preconditions" },
+        "weight": { "$ref": "#/$defs/weight" },
+        "limits": { "$ref": "#/$defs/limits" },
         "durationSimMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
         "hooks": { "$ref": "#/$defs/hooks" },
         "storybook": { "$ref": "#/$defs/storybook" },
         "moment": { "$ref": "#/$defs/moment" },
         "beat": { "$ref": "#/$defs/beat" }
       },
-      "required": ["id", "title", "weight", "cooldownSimHours", "preconditions", "durationSimMinutes", "hooks", "storybook", "moment", "beat"],
+      "required": ["id", "title", "comment", "conditions", "weight", "limits", "durationSimMinutes", "hooks", "storybook", "moment", "beat"],
       "additionalProperties": false
     }
   }

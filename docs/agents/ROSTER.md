@@ -60,6 +60,21 @@ Art: #64 art direction document (any time; owner pin); #46 social frames (after 
 Qa: #49 last. Phase 2 (#65 farmer rework, #66 shear readability, #67 DL animation set, #68 harbour gauge) after #62 is pinned.
 Cap: no more than three needs-owner-pin PRs open at once.
 
+## Sprint 2026-09-08, started 09:15 UTC on the owner's "go"
+Seven workers on Sonnet, run as subagents inside the Foreman session in isolated git worktrees (remote child sessions could not start: the Foreman session's permission mode is default, and a child cannot be more permissive than its parent). Each pushes its branch and leaves a PR body in the Foreman's scratchpad; the Foreman opens the PR, runs a Verifier on a stronger model, and merges sim PRs one at a time (later ones merge trunk before their PR).
+
+| Ticket | Lane | Branch |
+|---|---|---|
+| #59 cards v2 schema | world | lane/world/59-cards-v2-schema |
+| #60 chronicle and tell | sim | lane/sim/60-chronicle |
+| #61 DL invariant test | sim | lane/sim/61-dl-invariant |
+| #43 deity intents | sim | lane/sim/43-deity-intents |
+| #62 region map design document | client | lane/client/62-region-map-design |
+| #64 art direction document | art | lane/art/64-art-direction |
+| #55 e2e on the sim clock | client | lane/client/55-e2e-sim-clock |
+
+Sim merge order: #60 first (save v6), then #43 and #61 after merging trunk. #40 the engine starts as soon as #59 and #60 land; #63 after #60. Check-ins hourly during the sprint, back to four-hourly when it is merged.
+
 ## Health note 2026-09-08 07:15 UTC
 The owner merged the plan rewrite (PR #58) and the check-in routine is re-enabled. The interrupted #40 session was archived (the ticket is rewritten); the interrupted post-merge audit of PR #57 was resumed by a poke. Starting the #59 worker failed: this Foreman session is in plan permission mode after the planning pass, and a child cannot be more permissive than its parent; the owner switches the session back to auto and the worker starts on the next check-in or on request.
 

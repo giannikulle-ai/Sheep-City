@@ -64,10 +64,10 @@ Cap: no more than three needs-owner-pin PRs open at once.
 ## Sprint 2026-09-08, started 09:15 UTC on the owner's "go"
 Seven workers on Sonnet, run as subagents inside the Foreman session in isolated git worktrees (remote child sessions could not start: the Foreman session's permission mode is default, and a child cannot be more permissive than its parent). Each pushes its branch and leaves a PR body in the Foreman's scratchpad; the Foreman opens the PR, runs a Verifier on a stronger model, and merges sim PRs one at a time (later ones merge trunk before their PR).
 
-| Ticket | Lane | Branch | PR | Gate | Status at 14:15 UTC |
+| Ticket | Lane | Branch | PR | Gate | Status at 14:45 UTC, sprint complete |
 |---|---|---|---|---|---|
 | #59 cards v2 schema | world | lane/world/59-cards-v2-schema | #70 | low | **Merged 13:27 UTC** after round 2 (six fixes) and a re-check |
-| #60 chronicle and tell | sim | lane/sim/60-chronicle | #71 | medium | Round 2 pushed (shallow clone with frozen entries, first flag, sample floor, respawn keeps the log); re-check running; merges first among sim PRs |
+| #60 chronicle and tell | sim | lane/sim/60-chronicle | #71 | medium | **Merged by the owner 14:20 UTC** at the round-3 head (trunk merged in; the invariant fuzz now scripts the deity intents); the round-3 Verifier's report, if it finds anything, becomes a follow-up |
 | #61 DL invariant test | sim | lane/sim/61-dl-invariant | #72 | medium | **Merged by the owner 14:00 UTC** at the round-2 head; the Verifier's two remaining holes go to a follow-up PR on `lane/sim/61-invariant-fence` |
 | #43 deity intents | sim | lane/sim/43-deity-intents | #73 | medium, pin on feel | **Pinned: merged by the owner 14:00 UTC** after round 2 and a re-check (startle on DL is a head-tilt; treat is a heart only) |
 | #62 region map design document | client | lane/client/62-region-map-design | #69 | high, pin | **Pinned: merged by the owner 14:00 UTC** |
@@ -76,7 +76,7 @@ Seven workers on Sonnet, run as subagents inside the Foreman session in isolated
 
 All seven workers delivered by 12:00 UTC; the seven PRs were open by 12:42 UTC with CI green on every head. Every first-round Verifier verdict was changes requested, none approved; four of six found a PR-body claim the diff did not back. Fix rounds ran on Sonnet on the same branches; a Verifier on a stronger model re-checks every round before any merge, and two re-checks found one small residual each, fixed by the Foreman with a measurement. Sonnet fix rounds cost 65k to 260k tokens each.
 
-Sim merge order: #60 first (save v6), then #43 and #61 after merging trunk. #40 the engine starts as soon as #59 and #60 land; #63 after #60. Check-ins hourly during the sprint, back to four-hourly when it is merged. Pins closed: #74 13:52 UTC, #73 and #69 14:00 UTC; the owner also merged #72 at its round-2 head. Only #71 is open; it merges trunk (now carrying #73 and #72) before landing. Phase 2 may start once #71 lands, since #62 is pinned.
+Sim merge order: #60 first (save v6), then #43 and #61 after merging trunk. #40 the engine starts as soon as #59 and #60 land; #63 after #60. Check-ins hourly during the sprint, back to four-hourly when it is merged. All seven sprint PRs are on trunk (615 sim tests green at 55f7e72). Follow-ups: #77 the invariant fence (branch `lane/sim/61-invariant-fence`, merging trunk, PR next), #76 manual-mode showers. Started 14:45 UTC under the model rules: #40 the event engine on Opus (High-gate sim core, branch `lane/sim/40-event-engine`). Next, one sim worker at a time: #63 disposition of farm builds (Sonnet) after #40, then #45 social graph, #48 crows. Phase 2 is open since #62 is pinned.
 
 ## Health note 2026-09-08 14:00 UTC
 At 13:50:42 UTC every open sprint PR (#69, #71, #72, #73, #74) was closed without merging from the owner's account, one per second, and at 13:51:06 all five were reopened the same way. GitHub delivered the closes first and the reopens a few minutes later, so the Foreman stopped the two round-3 fix workers and cancelled the sprint check-in in between; both were relaunched at 14:00 once the reopens were confirmed against the live PR list. About ten minutes of worker time lost, no branch touched. Rule kept: a close from the owner's account halts spending at once, and nothing is reopened by the Foreman; a reopen resumes it.

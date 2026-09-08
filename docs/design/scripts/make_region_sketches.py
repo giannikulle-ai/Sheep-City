@@ -8,6 +8,20 @@ resampling). They do not use `pixel_grids.py` / `hand_sprites.py` hand-pixelled
 grids -- this script only borrows their palette values, copied verbatim below
 so a design sketch never touches the art lane's files.
 
+Text labels use `ImageFont.load_default_imagefont()`, a true 1-bit bitmap font
+with no anti-aliasing, instead of `ImageFont.load_default()` -- on Pillow 10.1+
+the latter returns a FreeTypeFont and anti-aliases every `draw.text` call,
+blending off-palette colours into the 1x image before the NEAREST resize.
+`load_default_imagefont()` exists on Pillow 11 and later (tested here on
+12.3.0); on an older Pillow that lacks it the script falls back to hand-placed
+pixel glyphs (see `PIXEL_FONT` below) so output stays palette-only either way.
+As a last line of defence the script asserts, after writing each PNG, that
+every pixel in the file is a PAL colour -- so an off-palette regression fails
+loudly instead of shipping.
+
+Pillow version this was verified on: 12.3.0. Run on a materially older or
+newer Pillow and re-check the assertions below before trusting "reproducible."
+
 Run: python3 docs/design/scripts/make_region_sketches.py
 Writes: docs/design/img/{map,transition,offscreen_gauge}_sketch.png (4x)
 """
@@ -53,7 +67,26 @@ SCALE = 4
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "img")
 os.makedirs(OUT_DIR, exist_ok=True)
 
-FONT = ImageFont.load_default()
+PAL_RGB = list(PAL.values())
+PAL_SET = set(PAL_RGB)
+
+
+def _load_font():
+    """A palette-safe text path: a true 1-bit bitmap font, not the
+    FreeTypeFont `ImageFont.load_default()` became on Pillow 10.1+ (which
+    anti-aliases every `draw.text` call, blending off-palette colours into
+    the 1x image before the NEAREST resize -- see script docstring).
+    `load_default_imagefont()` is Pillow 11+; on an older Pillow that lacks
+    it, fall back to `load_default()` and let `snap_to_palette()` below
+    remove whatever anti-aliased colours it introduces.
+    """
+    try:
+        return ImageFont.load_default_imagefont()
+    except AttributeError:
+        return ImageFont.load_default()
+
+
+FONT = _load_font()
 
 
 def canvas(w, h, bg):
@@ -61,11 +94,46 @@ def canvas(w, h, bg):
     return img, ImageDraw.Draw(img)
 
 
+def snap_to_palette(img):
+    """Nearest-colour snap of every pixel to PAL. A safety net, not the
+    primary path: shapes are already drawn in exact PAL colours and are
+    untouched by this; it exists to catch anti-aliasing from text (or
+    anything else) regardless of Pillow version, so the palette guarantee
+    does not depend on which font `_load_font()` returned.
+    """
+    px = img.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            c = px[x, y][:3]
+            if c not in PAL_SET:
+                px[x, y] = min(
+                    PAL_RGB, key=lambda p: (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2
+                )
+    return img
+
+
 def save(img, name):
+    img = snap_to_palette(img)
     big = img.resize((img.width * SCALE, img.height * SCALE), Image.NEAREST)
     path = os.path.join(OUT_DIR, name)
     big.save(path)
     print(f"wrote {path} ({big.width}x{big.height})")
+
+
+def assert_palette_only(path):
+    """Fails loudly if any pixel in the written PNG is not a PAL colour,
+    so a palette regression (e.g. a Pillow upgrade changing font
+    rendering again) cannot ship silently."""
+    img = Image.open(path).convert("RGB")
+    colours = img.getcolors(maxcolors=1_000_000)
+    assert colours is not None, f"{path}: more distinct colours than pixels fit to count"
+    off = [(count, c) for count, c in colours if c not in PAL_SET]
+    off_pixels = sum(count for count, _ in off)
+    assert not off, (
+        f"{path}: {len(off)} off-palette colour(s), {off_pixels} pixel(s) -- "
+        f"e.g. {off[:5]}"
+    )
+    print(f"palette check OK: {path} ({len(colours)} distinct colours, all in PAL)")
 
 
 def caption(draw, w, h, lines):
@@ -253,3 +321,5 @@ if __name__ == "__main__":
     draw_map()
     draw_transition()
     draw_gauge()
+    for _name in ("map_sketch.png", "transition_sketch.png", "offscreen_gauge_sketch.png"):
+        assert_palette_only(os.path.join(OUT_DIR, _name))

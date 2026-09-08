@@ -27,7 +27,10 @@ function centreLuna(s: SimState): SimState {
 
 describe('the registry holds DL in the owner’s order', () => {
   it('the riding pre-pass, then fetch > manual > ride, then the routine chain, then the movement pass', () => {
-    expect(LUNA_BEHAVIOURS.chains()).toEqual(['riding', 'fetch', 'command', 'routine', 'move']);
+    // `act` (#43, the deity direct action) is a chain of its own after `move`: it adds a new
+    // reaction gated on being free (not held, ridden, mounted, fetching, or in a busy routine); it
+    // does not reorder any of the owner's chains above.
+    expect(LUNA_BEHAVIOURS.chains()).toEqual(['riding', 'fetch', 'command', 'routine', 'move', 'act']);
     expect(LUNA_BEHAVIOURS.behaviours('riding').map((b) => b.id)).toEqual(['riding']);
     expect(LUNA_BEHAVIOURS.get('riding')?.exclusive).toBeFalsy();
     expect(LUNA_BEHAVIOURS.behaviours('fetch').map((b) => b.id)).toEqual(['fetch']);
@@ -45,6 +48,7 @@ describe('the registry holds DL in the owner’s order', () => {
       'sleepFix',
     ]);
     expect(LUNA_BEHAVIOURS.behaviours('move').map((b) => b.id)).toEqual(['walk']);
+    expect(LUNA_BEHAVIOURS.behaviours('act').map((b) => b.id)).toEqual(['act']);
     const priorities = LUNA_BEHAVIOURS.behaviours('routine').map((b) => b.priority);
     expect([...priorities].sort((a, b) => b - a)).toEqual(priorities);
   });

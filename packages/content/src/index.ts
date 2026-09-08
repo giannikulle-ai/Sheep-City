@@ -105,11 +105,18 @@ export const FARM_EVENT_DECK: EventDeck = {
   events: farmEvents.events as unknown as EventCard[],
 };
 
-/** How an authored event becomes eligible: a predicate list, a fixed day in the season calendar, or a Ledger stock crossing a threshold. */
+/**
+ * How an authored event becomes eligible: a predicate list, a fixed point in the sim's own season
+ * cycle (`dayOfSeason` a fraction 0..1 of however long the current season turns out to be, since
+ * #83's calendar gives seasons a seeded, varying real length), a Ledger stock crossing a
+ * threshold, or a fixed real calendar date independent of the sim's season (`realDate`, #83 —
+ * Digital Luna's birthday is December 15 regardless of which sim season that date falls in).
+ */
 export type AuthoredTrigger =
   | { kind: 'predicates'; all: EventCondition[]; cooldownSimDays: number; comment?: string }
   | { kind: 'simDate'; season: SeasonName; dayOfSeason: number; comment?: string }
-  | { kind: 'stockThreshold'; on: ConditionOn; op: ConditionOp; value: number; cooldownSimDays: number; comment?: string };
+  | { kind: 'stockThreshold'; on: ConditionOn; op: ConditionOp; value: number; cooldownSimDays: number; comment?: string }
+  | { kind: 'realDate'; month: number; day: number; windowSimMinutes?: number; comment?: string };
 
 /** Authored parameters a card does not get. Deliberately open: every authored event carries a different bag.
  *  Never put a `comment` key in here — an engine reading `Object.keys(variables)` would see it as a phantom

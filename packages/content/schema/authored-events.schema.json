@@ -27,7 +27,7 @@
   "additionalProperties": false,
   "$defs": {
     "trigger": {
-      "description": "How this event becomes eligible. Three shapes, picked by `kind`, matching the issue's three: a predicate list (every entry in `all` must hold, same predicate shape a card's `conditions` uses); a fixed point in the season calendar; or a Ledger stock crossing a threshold. `predicates` and `stockThreshold` both carry their own `cooldownSimDays` because, unlike a card, an authored event has no `limits` block — a predicate list or a stock level can stay true for a long time (a whole drought, a whole winter), and without a cooldown the event would fire again the very next sim-minute.",
+      "description": "How this event becomes eligible. Four shapes, picked by `kind`: a predicate list (every entry in `all` must hold, same predicate shape a card's `conditions` uses); a fixed point in the season calendar (`simDate`); a Ledger stock crossing a threshold (`stockThreshold`); or a fixed real calendar date (`realDate`, added #83). `predicates` and `stockThreshold` both carry their own `cooldownSimDays` because, unlike a card, an authored event has no `limits` block — a predicate list or a stock level can stay true for a long time (a whole drought, a whole winter), and without a cooldown the event would fire again the very next sim-minute.",
       "oneOf": [
         {
           "type": "object",
@@ -42,11 +42,11 @@
         },
         {
           "type": "object",
-          "description": "A specific day in the nine-sim-day season cycle (balance/farm.json outsideRules.season.realDays; clock.dayCount mod 9, PROPOSED to sim on #40 same as v1 proposed recentWeather — there is no calendar concept in the sim yet, only the four-season wheel and a running day count). Recurs every time that season comes round.",
+          "description": "A point in the sim's own season cycle, given as a fraction of however long the current season turns out to be (#83: since balance/farm.json's outsideRules.seasons.calendar gives each season a seeded, varying real length, a season no longer has a fixed day count to point at). PROPOSED to sim on #40 and again on #84 same as v1 proposed recentWeather — there is no calendar concept in the sim yet, only the four-season wheel and a running day count. Recurs every time that season comes round. Not used by any of the three reference authored events today (dlBirthday moved to `realDate` on #83, a real calendar date being a better fit for a birthday); kept for a future event that should land at, say, the start or the midpoint of a season regardless of the season's actual length that year.",
           "properties": {
             "kind": { "const": "simDate" },
             "season": { "$ref": "events.schema.json#/$defs/season" },
-            "dayOfSeason": { "type": "integer", "minimum": 1, "maximum": 9 },
+            "dayOfSeason": { "type": "number", "minimum": 0, "exclusiveMaximum": 1, "description": "0 is the first moment of the season, up to (not including) 1 at the season's end; e.g. 0.5 is the season's midpoint whether that season ran 81 real days or 101." },
             "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
           },
           "required": ["kind", "season", "dayOfSeason"],
@@ -63,6 +63,19 @@
             "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
           },
           "required": ["kind", "on", "op", "value", "cooldownSimDays"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "New for #83: a fixed point in the real calendar, independent of the sim's season cycle — for something that means the same real date every year regardless of which sim season a given world's calendar has it fall in (Digital Luna's birthday, December 15; plan section 2, 'Time'). Eligible once a real year, around the sim moment closest to that real date; `windowSimMinutes`, if given, is how many sim minutes either side of that moment still count as a match, so a slow-ticking or paused world does not miss the day entirely. PROPOSED to sim on #84 alongside the calendar model in balance/farm.json's outsideRules.seasons.calendar.",
+          "properties": {
+            "kind": { "const": "realDate" },
+            "month": { "$ref": "balance-farm.schema.json#/$defs/monthDay/properties/month" },
+            "day": { "$ref": "balance-farm.schema.json#/$defs/monthDay/properties/day" },
+            "windowSimMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+            "comment": { "$ref": "_defs.schema.json#/$defs/comment" }
+          },
+          "required": ["kind", "month", "day"],
           "additionalProperties": false
         }
       ]

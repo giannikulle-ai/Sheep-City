@@ -40,6 +40,7 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 - The Fable weekly window is spent until Monday 11:00 Central. New workers and Verifiers run on Opus (claude-opus-5) until then, and every PR from an Opus worker gets a Verifier pass whatever its gate. "We better be watching closely."
 - The two Fable workers already running (#39 Ledger, #20 jump-to) finish on their own; they are not restarted on credits if they stall. (Both landed 23:05 UTC.)
 - 2026-09-02 23:15 UTC: the owner gave the event-layer direction; #40 was stopped and is rewritten; nothing runs until the owner reads the plan PR. The check-in routine is disabled until then.
+- 2026-09-08 14:40 UTC, model rules (the owner's "okay"; full text in docs/AGENT_FRAMEWORK.md section 2): Fable is the Foreman only, never a worker or Verifier. Opus verifies every PR every round and builds only High-gate sim tickets on DL's chain, the save schema, or the engine core. Sonnet builds everything else and runs every fix round. Two Sonnet fix rounds per PR, then Opus, then the owner, never Fable. Workers check their PR body against their diff before pushing. At most five Sonnet workers and two Opus Verifiers at once. This replaces the "Opus until Monday" rule above.
 
 ## Phase 0 ticket order
 #2 scaffold (landed) → #4 clock/RNG (landed) → #5 behaviour registry (both parts landed) and #8 save v1 (landed)

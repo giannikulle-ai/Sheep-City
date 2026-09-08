@@ -13,8 +13,9 @@ with no anti-aliasing, instead of `ImageFont.load_default()` -- on Pillow 10.1+
 the latter returns a FreeTypeFont and anti-aliases every `draw.text` call,
 blending off-palette colours into the 1x image before the NEAREST resize.
 `load_default_imagefont()` exists on Pillow 11 and later (tested here on
-12.3.0); on an older Pillow that lacks it the script falls back to hand-placed
-pixel glyphs (see `PIXEL_FONT` below) so output stays palette-only either way.
+12.3.0); on an older Pillow that lacks it the script falls back to
+`load_default()` and relies on `snap_to_palette()` below, so output stays
+palette-only either way.
 As a last line of defence the script asserts, after writing each PNG, that
 every pixel in the file is a PAL colour -- so an off-palette regression fails
 loudly instead of shipping.

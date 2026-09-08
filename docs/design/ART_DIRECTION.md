@@ -1,7 +1,7 @@
 # Sheepcliff art direction
 
-One page for what Sheepcliff looks like, so a new district or creature is drawn to it rather than to the
-artist's guess. Distilled from `docs/STYLE_GUIDE.md`, the HANDOFF, and measurements off
+One page for what Sheepcliff looks like, so a new district or creature is drawn to it, not to a
+guess. Distilled from `docs/STYLE_GUIDE.md`, the HANDOFF, and measurements off
 `tools/art/pixel_grids.py`, `hand_sprites.py`, `farm_v3.py` and the built `spritesheet.json` — a number not
 in the source is marked **proposed**. This is the owner's taste; nothing here overrides `CLAUDE.md`.
 
@@ -173,10 +173,10 @@ the same pixel density as the cast standing on them.
   `V.ANIMS`, `V.frame_svg`, `V.background`, `V.FIELD`, `V.GRASS_A/B` — the vector-rasterised-character
   approach the HANDOFF says was tried and rejected, left with nothing marking it dead.
 - **`farm_vectors.py`'s builders aren't dead, just outside the v3 build.** `sheep()`, `lamb()`, `luna()`,
-  `rabbit()` are called from `scene()` (`farm_vectors.py:258-266`) and listed in `ASSETS` (line 280 — there
-  is no `SCENES` dict; that name is nowhere in the repo). Its `__main__` calls both and writes SVGs, so
+  `rabbit()` are called from `scene()` (`farm_vectors.py:258-266`) and listed in `ASSETS` (line 280; there
+  is no `SCENES` dict). Its `__main__` calls both and writes SVGs, so
   `python3 tools/art/farm_vectors.py` runs the lot, and `render.py:27` imports the module — a live v2
-  comparison tool the v3 build never runs, worth flagging before anyone deletes it as dead weight.
+  comparison tool the v3 build never runs, worth knowing before anyone deletes it.
 - **DL's "shadow" colour isn't a shadow** in the sheep's sense — see Light, above. Pinned as-is, but copying
   her *b*-as-selout convention onto a new character won't automatically give correct top-left shading.
 - **Villager and cat scale are both proposed, not pinned.** Farmer/merchant were never called out as "the

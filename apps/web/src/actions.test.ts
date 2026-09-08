@@ -22,26 +22,44 @@ describe('the action catalogue', () => {
     }
   });
 
-  it('gives one sheep its own pet, shear and tasks', () => {
+  it('gives one sheep its own pet, shear, tasks, and the deity act verbs (#44)', () => {
     const verbs = verbsFor('sheep-2');
-    expect(verbs.map((v) => v.id)).toEqual(['pet', 'shear', 'graze', 'rest', 'scatter', 'wool', 'lamb']);
+    expect(verbs.map((v) => v.id)).toEqual(['pet', 'shear', 'graze', 'rest', 'scatter', 'wool', 'lamb', 'call', 'calm', 'startle', 'treat']);
     expect(verbs[0]?.intent).toEqual({ type: 'pet', target: 'sheep-2' });
     expect(verbs[1]?.intent).toEqual({ type: 'shear', target: 'sheep-2' });
     expect(verbs[2]?.intent).toEqual({ type: 'sheepAction', action: 'graze', target: 'sheep-2' });
+    const byId = new Map(verbs.map((v) => [v.id, v.intent]));
+    expect(byId.get('call')).toEqual({ type: 'callTarget', target: 'sheep-2' });
+    expect(byId.get('calm')).toEqual({ type: 'act', target: 'sheep-2', verb: 'calm' });
+    expect(byId.get('startle')).toEqual({ type: 'act', target: 'sheep-2', verb: 'startle' });
+    expect(byId.get('treat')).toEqual({ type: 'act', target: 'sheep-2', verb: 'treat' });
   });
 
-  it('maps the Sheep group to the flock, and pet/shear to their own verbs', () => {
-    const byId = new Map(verbsFor('flock').map((v) => [v.id, v.intent]));
+  it('maps the Sheep group to the flock, and pet/shear to their own verbs; no act verbs for the whole flock', () => {
+    const verbs = verbsFor('flock');
+    const byId = new Map(verbs.map((v) => [v.id, v.intent]));
     expect(byId.get('petAll')).toEqual({ type: 'pet', target: 'flock' });
     expect(byId.get('shearAll')).toEqual({ type: 'shear', target: 'flock' });
     expect(byId.get('lamb')).toEqual({ type: 'sheepAction', action: 'lamb', target: 'flock' });
+    expect(verbs.map((v) => v.id)).not.toEqual(expect.arrayContaining(['call', 'calm', 'startle', 'treat']));
   });
 
-  it('sends DL actions as dlAction and her pet as pet', () => {
+  it('sends DL actions as dlAction, her pet as pet, and the deity act verbs (#44)', () => {
     const byId = new Map(verbsFor('luna').map((v) => [v.id, v.intent]));
     expect(byId.get('pet')).toEqual({ type: 'pet', target: 'luna' });
     expect(byId.get('flop')).toEqual({ type: 'dlAction', action: 'flop' });
     expect(byId.get('bed')).toEqual({ type: 'dlAction', action: 'bed' });
+    expect(byId.get('call')).toEqual({ type: 'callTarget', target: 'luna' });
+    expect(byId.get('calm')).toEqual({ type: 'act', target: 'luna', verb: 'calm' });
+    expect(byId.get('startle')).toEqual({ type: 'act', target: 'luna', verb: 'startle' });
+    expect(byId.get('treat')).toEqual({ type: 'act', target: 'luna', verb: 'treat' });
+  });
+
+  it('gives the sky its five deity weather chips with a default hold (#44)', () => {
+    const byId = new Map(verbsFor('sky').map((v) => [v.id, v.intent]));
+    for (const kind of ['sun', 'rain', 'snow', 'fog', 'clear'] as const) {
+      expect(byId.get(kind), kind).toEqual({ type: 'weather', kind, holdSimMinutes: expect.any(Number) });
+    }
   });
 
   it('jumps to phase midpoints, outside the crossfade bands (#20)', () => {

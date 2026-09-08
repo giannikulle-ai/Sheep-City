@@ -5,6 +5,18 @@ import type { FarmView, Season } from './state';
 
 export const RAIN_WASH = 'rgba(60,80,110,.28)';
 
+/**
+ * Fog (issue #44): the sim's `weather.foggy` flag has no dedicated visual yet (PR #73's own weak
+ * spot — "nothing reads it yet"). Rather than invent a colour for it, this is the same flat wash
+ * rain already draws over the composited scene, at the same opacity: a plain "harder to see",
+ * reusing `RAIN_WASH` exactly rather than a new rgba value. It layers under rain and snow, which
+ * still draw their own streaks and flakes above it.
+ */
+export function drawFogDim(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+  ctx.fillStyle = RAIN_WASH;
+  ctx.fillRect(0, 0, W, H);
+}
+
 /** Rain streaks. Same 90 diagonal lines the prototype draws, scrolled by `now`. */
 export function drawRain(ctx: CanvasRenderingContext2D, W: number, H: number, now: number): void {
   ctx.strokeStyle = 'rgba(220,235,255,.55)';

@@ -68,6 +68,8 @@ export interface SheepView {
   lambs: LambView[];
   /** true when DL is riding this sheep; draws the `ride` sprite instead */
   ridden: boolean;
+  /** deity `act` flourish (issue #44): a small ring shows at her feet until this render-clock ms */
+  ringUntil?: number;
 }
 
 export interface LunaView {
@@ -85,6 +87,8 @@ export interface LunaView {
   tagUntil: number;
   /** until this render-clock ms, `run` draws as `bound` */
   forceBound: number;
+  /** deity `act` flourish (issue #44): a small ring shows at her feet until this render-clock ms */
+  ringUntil?: number;
 }
 
 export interface NpcView {
@@ -132,6 +136,8 @@ export interface FarmView {
   season: Season;
   /** live-location weather mode: winter no longer forces snow on the ground */
   liveWeather: boolean;
+  /** the deity `weather` intent's `fog` flag (issue #44): dims the scene */
+  foggy?: boolean;
   sheep: SheepView[];
   luna: LunaView;
   rabbit: SmallLife | null;
@@ -149,6 +155,8 @@ export interface FarmView {
   owned: string[];
   woolBank: number;
   coins: number;
+  /** deity `weather` flourish (issue #44): a sky ripple shows until this render-clock ms */
+  skyRippleUntil?: number;
 }
 
 /** `woolLevel` from farm.js: which of the three wool frames a fleece shows. */

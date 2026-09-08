@@ -22,7 +22,7 @@ import { BACKGROUND_URLS, SHEET_META_URL, SHEET_URL } from './assets';
 import { buildFixture } from './fixture';
 import { Game, MAX_FRAME_MS } from './game';
 import { hitTest, type SpriteSizes } from './hit';
-import { describeIntent, type ClientIntent } from './intents';
+import { describeIntent, type ClientIntent, type Target } from './intents';
 import { emitMoment } from './moments';
 import { PinOverlay } from './pin-overlay';
 import { parseSceneParams } from './query';
@@ -159,6 +159,11 @@ async function main(): Promise<void> {
     trayToggle.textContent = open ? 'close' : 'tray';
   });
 
+  // The deity `call` verb (issue #44): tapped from the tray, it asks the stage for a point rather
+  // than sending anything itself. Set while waiting, cleared by the stage tap that resolves it or
+  // by any other intent going out in the meantime.
+  let awaitingCall: Target | null = null;
+
   function send(intent: ClientIntent) {
     if (intent.type === 'farmAction' && intent.action === 'reset') {
       const rec = game.dispatch(intent);
@@ -169,6 +174,15 @@ async function main(): Promise<void> {
       } else tray.say('kept the farm');
       return rec;
     }
+    if (intent.type === 'callTarget') {
+      awaitingCall = intent.target;
+      stage.classList.add('awaiting-call');
+      const rec = game.dispatch(intent);
+      tray.say(describeIntent(intent, flockNames()), true);
+      return rec;
+    }
+    awaitingCall = null;
+    stage.classList.remove('awaiting-call');
     const rec = game.dispatch(intent);
     tray.say(describeIntent(intent, flockNames()) + (rec.sim ? '' : ' · waiting for the sim'), !rec.sim);
     return rec;
@@ -258,6 +272,15 @@ async function main(): Promise<void> {
     const r = stage.getBoundingClientRect();
     const wx = ((e.clientX - r.left) * WORLD_W) / r.width;
     const wy = ((e.clientY - r.top) * WORLD_H) / r.height;
+    // the deity `call` verb (issue #44) claims the next stage tap as its point, wherever it lands;
+    // no hit test, the same as a thrown stick aims at the raw tap, not what is under it
+    if (awaitingCall) {
+      const target = awaitingCall;
+      awaitingCall = null;
+      stage.classList.remove('awaiting-call');
+      send({ type: 'act', target, verb: 'call', x: wx, y: wy });
+      return;
+    }
     // the sim hit-tests the tap itself (DL first, then sheep, then grass for a stick); the client's
     // hit test only follows it in the tray
     const hit = hitTest(currentView(), wx, wy, sizes);

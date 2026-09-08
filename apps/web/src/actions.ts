@@ -1,7 +1,8 @@
 // The prototype's ACTIONS list, regrouped per creature so the owner can tell one creature to do
 // one thing. Every prototype id is here (actions.test.ts checks), as an intent rather than a
 // function: the sim runs it, the client only asks.
-import { DL_ACTIONS, sheepId, type ClientIntent, type SheepId } from './intents';
+import { ACT_VERBS, DEITY_WEATHER_KINDS, type ActVerb, type DeityWeatherKind } from '@sheepcliff/sim';
+import { DL_ACTIONS, sheepId, type ClientIntent, type SheepId, type Target } from './intents';
 import { JUMP_T } from './jump';
 
 /** The "jump to" clock values (see jump.ts): phase midpoints, the same values the goldens use (#20). */
@@ -40,6 +41,39 @@ const DL_LABELS: Record<(typeof DL_ACTIONS)[number], string> = {
   bed: 'go to bed',
 };
 
+/** The sky tray's deity weather chips (issue #44), in the sim's own order. */
+const WEATHER_LABELS: Record<DeityWeatherKind, string> = {
+  sun: '☀ sun',
+  rain: '☂ rain',
+  snow: '❄ snow',
+  fog: '🌫 fog',
+  clear: '✕ clear',
+};
+
+/** The tray's default hold for a deity weather tap, in sim-minutes (`applyWeather`'s unit). */
+export const DEITY_WEATHER_HOLD_MIN = 3;
+
+/** Labels for the deity `act` verbs (issue #44), `call` excluded: it needs a point, so it is built
+ * separately in `actVerbs` below as a `callTarget` verb, not an `act` one. */
+const ACT_LABELS: Record<Exclude<ActVerb, 'call'>, string> = {
+  calm: 'calm',
+  startle: 'startle (gently)',
+  treat: 'give a treat',
+};
+
+/**
+ * The deity `act` verbs for one creature (issue #44), appended under a chip's own verbs: `call`
+ * asks the stage for a point next (the tray has none yet), the rest send straight through. Luna
+ * and one sheep both get these; `flock` does not, since `act` targets one named creature.
+ */
+function actVerbs(target: Target): Verb[] {
+  return ACT_VERBS.map((verb): Verb =>
+    verb === 'call'
+      ? { id: 'call', label: 'call here', intent: { type: 'callTarget', target } }
+      : { id: verb, label: ACT_LABELS[verb], intent: { type: 'act', target, verb } },
+  );
+}
+
 /** The chips along the top of the tray: DL, each sheep, then the collective targets. */
 export function whoList(names: readonly string[], colors: readonly string[]): Who[] {
   const out: Who[] = [{ id: 'luna', label: 'Digital Luna', color: '#d33a2f' }];
@@ -54,6 +88,7 @@ export function verbsFor(who: WhoId): Verb[] {
     return [
       { id: 'pet', label: 'pet her', intent: { type: 'pet', target: 'luna' } },
       ...DL_ACTIONS.map((action): Verb => ({ id: action, label: DL_LABELS[action], intent: { type: 'dlAction', action } })),
+      ...actVerbs('luna'),
     ];
   }
   if (who === 'flock') {
@@ -79,9 +114,12 @@ export function verbsFor(who: WhoId): Verb[] {
   }
   if (who === 'sky') {
     return [
-      { id: 'sun', label: '☀ sun', intent: { type: 'setWeather', weather: 'sun' } },
-      { id: 'rain', label: '☂ rain', intent: { type: 'setWeather', weather: 'rain' } },
-      { id: 'snow', label: '❄ snow', intent: { type: 'setWeather', weather: 'snow' } },
+      // The deity weather power (issue #44): a tap sends the sim's `weather` intent with the
+      // tray's default hold. A second tap on the same chip is handled by the tray (tray.ts), which
+      // sends this list's `clear` entry instead of tapping it a second time itself.
+      ...DEITY_WEATHER_KINDS.map(
+        (kind): Verb => ({ id: kind, label: WEATHER_LABELS[kind], intent: { type: 'weather', kind, holdSimMinutes: DEITY_WEATHER_HOLD_MIN } }),
+      ),
       { id: 'spring', label: 'spring', intent: { type: 'setSeason', season: 'spring' } },
       { id: 'summer', label: 'summer', intent: { type: 'setSeason', season: 'summer' } },
       { id: 'autumn', label: 'autumn', intent: { type: 'setSeason', season: 'autumn' } },
@@ -109,5 +147,6 @@ export function verbsFor(who: WhoId): Verb[] {
     { id: 'scatter', label: 'wander off', intent: { type: 'sheepAction', action: 'scatter', target: who } },
     { id: 'wool', label: 'grow wool', intent: { type: 'sheepAction', action: 'wool', target: who } },
     { id: 'lamb', label: 'have a lamb', intent: { type: 'sheepAction', action: 'lamb', target: who } },
+    ...actVerbs(who),
   ];
 }

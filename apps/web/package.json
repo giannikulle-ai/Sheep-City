@@ -17,6 +17,7 @@
     "golden:app:update": "SHEEPCLIFF_GOLDEN_TARGET=app SHEEPCLIFF_GOLDEN_UPDATE=1 playwright test e2e/golden.spec.ts && node ../../tools/qa/contact-sheet.mjs e2e/golden/app",
     "golden:compare": "node scripts/compare-goldens.mjs",
     "screenshots": "node scripts/screenshots.mjs",
+    "screenshots:deity": "node scripts/deity-screenshots.mjs",
     "watch-test": "node ../../tools/qa/watch-test.mjs",
     "watch-test:app": "node ../../tools/qa/watch-test.mjs --serve dist --adapter app"
   },

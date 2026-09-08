@@ -10,7 +10,7 @@
 // straight through; the client only resolves its `sheep-<index>` chip ids to the sim's actor ids.
 // Two verbs still have no sim rule: the bird (not ported yet, #33) and reset (a new world, which
 // the client makes itself). Those return no sim intent and the status line says "waiting for the sim".
-import type { Intent, SeasonName, SimState, WeatherKind } from '@sheepcliff/sim';
+import type { ActVerb, DeityWeatherKind, Intent, SeasonName, SimState, WeatherKind } from '@sheepcliff/sim';
 
 export type SheepId = `sheep-${number}`;
 /** Who a verb is for: Digital Luna, one sheep, or the whole flock. */
@@ -41,7 +41,23 @@ export type ClientIntent =
   | { type: 'setSeason'; season: SeasonName | null }
   | { type: 'setClock'; t: number }
   | { type: 'pauseClock'; paused: boolean }
-  | { type: 'setPeriod'; periodSec: number };
+  | { type: 'setPeriod'; periodSec: number }
+  /**
+   * A deity weather power (issue #44): the sky tray's sun/rain/snow/fog/clear. Distinct from the
+   * prototype's `setWeather` above (which the clock/season controls still use) because the sim's
+   * `weather` intent carries a hold and can lay fog over whatever `kind` already is.
+   */
+  | { type: 'weather'; kind: DeityWeatherKind; holdSimMinutes: number }
+  /**
+   * A deity direct action on one creature (issue #44): calm, startle, treat send straight through;
+   * `call` needs a point, which the tray does not have yet when the verb is tapped — see
+   * `callTarget` below, which the stage's next tap turns into this.
+   */
+  | { type: 'act'; target: Target; verb: Exclude<ActVerb, 'call'> }
+  | { type: 'act'; target: Target; verb: 'call'; x: number; y: number }
+  /** The tray's `call` verb, before the stage tap that gives it a point. The sim has no rule for
+   * this by itself — it is a client-only "now tap the stage" mode switch. */
+  | { type: 'callTarget'; target: Target };
 
 export type ClientIntentType = ClientIntent['type'];
 
@@ -99,6 +115,15 @@ export function toSimIntents(intent: ClientIntent, sim: SimState | null = null):
       // no bird in the sim yet (#33); reset is a new world, which the client makes itself
       if (intent.action === 'bird' || intent.action === 'reset') return [];
       return [{ type: 'farmAction', action: intent.action }];
+    case 'weather':
+      return [{ type: 'weather', kind: intent.kind, holdSimMinutes: intent.holdSimMinutes }];
+    case 'act':
+      return intent.verb === 'call'
+        ? [{ type: 'act', target: simTarget(sim, intent.target), verb: 'call', x: intent.x, y: intent.y }]
+        : [{ type: 'act', target: simTarget(sim, intent.target), verb: intent.verb }];
+    case 'callTarget':
+      // a client-only mode switch: the sim has no rule for "wait for a point"
+      return [];
     default: {
       const never: never = intent;
       throw new Error(`unknown intent ${JSON.stringify(never)}`);
@@ -143,6 +168,14 @@ export function describeIntent(intent: ClientIntent, names: readonly string[]): 
       return intent.paused ? 'clock paused' : 'clock running';
     case 'setPeriod':
       return `day length: ${intent.periodSec} s`;
+    case 'weather':
+      return `sky: ${intent.kind}`;
+    case 'act':
+      return intent.verb === 'call'
+        ? `${targetName(intent.target, names)}: come to (${Math.round(intent.x)}, ${Math.round(intent.y)})`
+        : `${targetName(intent.target, names)}: ${intent.verb}`;
+    case 'callTarget':
+      return `tap the stage for ${targetName(intent.target, names)} to walk to`;
     default: {
       const never: never = intent;
       throw new Error(`unknown intent ${JSON.stringify(never)}`);

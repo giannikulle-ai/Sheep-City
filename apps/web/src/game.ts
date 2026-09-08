@@ -4,8 +4,8 @@
 import type { FarmView } from '@sheepcliff/render';
 import { applyIntent, cloneState, createInitialState, step, TICK_MS, type Intent, type SimState } from '@sheepcliff/sim';
 import { toSimIntents, type ClientIntent } from './intents';
-import { diffMoments, type Moment } from './moments';
-import { applyReactions, emptyReactions, prune, react, type Reactions } from './reactions';
+import { deityMoment, diffMoments, type Moment } from './moments';
+import { applyReactions, emptyReactions, flourish, prune, react, type Reactions } from './reactions';
 import { renderClock, simView, tickAlpha } from './view';
 
 export interface IntentRecord {
@@ -89,6 +89,12 @@ export class Game {
     if (this.log.length > LOG_CAP) this.log.splice(0, this.log.length - LOG_CAP);
     // the sim answers its own intents at the next tick boundary, within 100 ms; the rest get a cue
     if (!rec.sim) this.reactions = react(this.reactions, intent, this.current(), this.renderNow);
+    // deity flourish (issue #44): every weather tap and act, regardless of whether the cue above fired
+    this.reactions = flourish(this.reactions, intent, this.renderNow);
+    if (this.opts.onMoment) {
+      const m = deityMoment(intent, this.sim.clock.t);
+      if (m) this.opts.onMoment(m);
+    }
     return rec;
   }
 

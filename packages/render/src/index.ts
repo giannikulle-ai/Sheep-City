@@ -6,5 +6,6 @@ export * from './sheet';
 export * from './state';
 export * from './phase';
 export * from './weather';
+export * from './flourish';
 export * from './ui';
 export * from './scene';

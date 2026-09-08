@@ -573,11 +573,76 @@ export const walk: LunaBehaviour = {
 };
 
 // ---------------------------------------------------------------------------------------------
+// Chain `act`: a deity direct action (issue #43). Its own chain, registered after `move`, so the
+// owner's priority order above (fetch > manual > riding > rain shepherd > bed and dawn > idle
+// play, #5) is untouched — this adds a new reaction, it does not reorder DL's existing one. The
+// condition stands in for "above idle, below danger": it only fires when she is not already held
+// by a command, a ride, a mount, a fetch, or a busy routine (rain shelter, bedtime, asleep), so a
+// queued command waits rather than pulling her out of any of those; it does win over idle play
+// (flop, stick zoomies, nibble, the rabbit chase), the same way a command intent already would.
+//
+// Digital Luna cannot be harmed: `calm` and `startle` on her are a no-op or a friendly reaction,
+// never a forced state. `calm` here is a plain no-op beyond acknowledging the tap (nothing on her
+// needs calming — she is never scattering); `startle` is a friendly head-tilt she recovers from on
+// her own via `tiltRecover`, never a scatter. Only `call` moves her, and only by walking, the same
+// as the `come` button already does at an arbitrary point instead of `SPOT.front`.
+// ---------------------------------------------------------------------------------------------
+
+/** How much a treat's mood bump raises the nearest tuft: `moodOf` reads mean grass level (ledger.ts). */
+const TREAT_TUFT_BUMP = 0.2;
+
+export const act: LunaBehaviour = {
+  id: 'act',
+  chain: 'act',
+  priority: 5,
+  condition: (_, l) =>
+    l.actCmd != null && l.manual === null && l.riding === null && l.mounting === null && l.stick === null && !BUSY_ROUTINES.includes(l.routine),
+  tick: ({ state, now }, l) => {
+    const cmd = l.actCmd as NonNullable<Luna['actCmd']>;
+    l.actCmd = null;
+    switch (cmd.verb) {
+      case 'call':
+        if (cmd.x !== undefined && cmd.y !== undefined) {
+          l.manual = 'walk';
+          l.anim = 'run';
+          l.target = { x: cmd.x, y: cmd.y };
+        }
+        return;
+      case 'calm':
+        // DL cannot be forced: nothing on her needs calming, so this is a no-op beyond a friendly
+        // acknowledgement that the tap landed.
+        petLuna(l, now);
+        return;
+      case 'startle':
+        // DL cannot be harmed: a friendly head-tilt, not a scatter. `tiltRecover` (priority 70,
+        // above this chain's placement) settles her back to a pant on its own.
+        bubble(l, 'startle', 900, now);
+        l.anim = 'tilt';
+        l.t0Ms = now;
+        return;
+      case 'treat': {
+        petLuna(l, now);
+        const t = nearestTuft(state.tufts, foot(l), 0);
+        if (t !== null) {
+          const tuft = state.tufts[t] as Tuft;
+          tuft.level = Math.min(1, tuft.level + TREAT_TUFT_BUMP);
+        }
+        return;
+      }
+      default: {
+        const never: never = cmd.verb;
+        throw new Error(`unknown act verb ${String(never)}`);
+      }
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------------------------
 // The registry, in the owner's order.
 // ---------------------------------------------------------------------------------------------
 
 export const LUNA_BEHAVIOURS = createRegistry<LunaContext, Luna>();
-for (const b of [riding, fetch, manual, ride, tiltRecover, pantRest, rainShepherd, bedtime, hotPant, idlePlay, flopUp, nibble, sleepFix, walk]) {
+for (const b of [riding, fetch, manual, ride, tiltRecover, pantRest, rainShepherd, bedtime, hotPant, idlePlay, flopUp, nibble, sleepFix, walk, act]) {
   LUNA_BEHAVIOURS.register(b);
 }
 

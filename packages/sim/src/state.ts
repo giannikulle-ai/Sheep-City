@@ -4,7 +4,7 @@
 
 import { createClock, createSeason, type Clock, type Season } from './clock';
 import { FLOWERS, inBarn, LFOOT, randomDir, randomFoot, SFOOT, type Point } from './geometry';
-import type { Intent } from './intents';
+import type { ActCmd, Intent } from './intents';
 import { cloneLedger, summarise, type Ledger } from './ledger/ledger';
 import { createRng, nextFloat, type Rng } from './rng';
 import { RULES } from './rules';
@@ -19,6 +19,12 @@ import { createWeather, type Weather } from './weather';
  * `icon`, `iconUntilMs`); v4 (#33) adds `ground` (snow footprints, mud patches, `wasSnowy`) and the
  * per-walker stamp fields `lastStamp` and `stampSide` on each sheep and on Digital Luna; v5 (#39)
  * adds `ledger` (the district's numbers as the Ledger path last wrote them) and `lastLedgerAt`.
+ *
+ * PR #43 (deity intents) adds `actCmd` to `Sheep` and `Luna`, and `holdUntilMs` / `foggy` to
+ * `Weather`, all as optional fields with no stored default: absent means what it always meant
+ * (no queued deity command, no hold, no fog), so no migration and no version bump. Do not follow
+ * this pattern for a field that needs a real default; it works here only because "absent" was
+ * already the correct old behaviour.
  */
 export const SAVE_VERSION = 5;
 
@@ -80,6 +86,8 @@ export interface Sheep extends Point, Stamper {
   tagUntilMs: number;
   wet: number;
   snow: number;
+  /** A queued deity `act` intent, consumed by the `act` behaviour. See `ActCmd` (PR #43). */
+  actCmd?: ActCmd | null;
 }
 
 /** A thrown stick: where it landed, where DL was when it was thrown, and which leg she is on. */
@@ -121,6 +129,8 @@ export interface Luna extends Point, Stamper {
   tagUntilMs: number;
   /** The trundle button: sim time until which a run is drawn as a bound. */
   forceBoundUntilMs: number;
+  /** A queued deity `act` intent, consumed by the `act` behaviour. See `ActCmd` (PR #43). */
+  actCmd?: ActCmd | null;
 }
 
 export type NpcJob = { job: string; at?: Point };
@@ -421,6 +431,9 @@ export function cloneState(state: SimState): SimState {
       wp: state.luna.wp ? { ...state.luna.wp } : null,
       stick: state.luna.stick ? { ...state.luna.stick } : null,
       lastStamp: state.luna.lastStamp ? { ...state.luna.lastStamp } : null,
+      // Deep-copy only when set: an absent `actCmd` must stay absent, not become a stored `null`,
+      // so a state nothing ever queued a deity command on hashes exactly as it did before #43.
+      ...(state.luna.actCmd ? { actCmd: { ...state.luna.actCmd } } : {}),
     },
     npcs: {
       ...state.npcs,
@@ -451,6 +464,9 @@ function cloneSheep(s: Sheep): Sheep {
     path: s.path.map((p) => ({ ...p })),
     lambs: s.lambs.map((l) => ({ ...l })),
     lastStamp: s.lastStamp ? { ...s.lastStamp } : null,
+    // Deep-copy only when set: an absent `actCmd` must stay absent, not become a stored `null`, so
+    // a sheep nothing ever queued a deity command on hashes exactly as it did before #43.
+    ...(s.actCmd ? { actCmd: { ...s.actCmd } } : {}),
   };
 }
 

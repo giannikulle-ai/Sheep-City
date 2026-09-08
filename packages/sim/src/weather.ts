@@ -20,6 +20,18 @@ export interface Weather {
   rollAtMs: number;
   /** Sim time when rain or snow clears, or 0 while sunny. */
   untilMs: number;
+  /**
+   * Sim time (`clock.nowMs`) a deity `weather` intent's hold ends and control hands back to the
+   * season. Undefined outside a hold. Optional (PR #43) so a save from before it needs no
+   * migration: absent means "no hold", the same as it meant before this field existed.
+   */
+  holdUntilMs?: number;
+  /**
+   * A visibility flag set by the deity `weather` intent's `fog` kind; independent of `kind`, so
+   * fog can sit over sun, rain, or snow. The engine ticket reads this to dim the scene. Optional
+   * (PR #43) for the same reason as `holdUntilMs`: absent means "no fog".
+   */
+  foggy?: boolean;
 }
 
 export function createWeather(): Weather {
@@ -51,9 +63,20 @@ export function tickWeather(weather: Weather, clock: Clock, season: Season, rng:
   const name = currentSeason(season);
   const k = RULES.tempBlendPerTick;
   let next: Weather = { ...weather, temp: weather.temp * (1 - k) + tempTarget(name, clock.t, weather.kind) * k };
-  if (next.mode !== 'season') return next;
 
   const now = clock.nowMs;
+  // A deity `weather` intent's hold (PR #43): overrides while it lasts, then hands back to the
+  // season with a clean slate, exactly as if the sky had cleared on its own, so the season's own
+  // roll schedule is never left stuck mid-override.
+  if (next.mode === 'manual' && next.holdUntilMs !== undefined && now >= next.holdUntilMs) {
+    next = setWeather(next, 'sun');
+    next.mode = 'season';
+    next.foggy = false;
+    delete next.holdUntilMs;
+  }
+
+  if (next.mode !== 'season') return next;
+
   if (next.kind === 'sun' && now > next.rollAtMs) {
     const [rollLo, rollHi] = RULES.rain.rollEveryMs;
     const [lenLo, lenHi] = RULES.rain.lengthMs;

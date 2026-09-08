@@ -85,6 +85,8 @@ export {
   LUNA_ACTIONS,
   FARM_ACTIONS,
   SHEEP_ACTIONS,
+  DEITY_WEATHER_KINDS,
+  ACT_VERBS,
   type Intent,
   type IntentType,
   type LunaAction,
@@ -92,6 +94,9 @@ export {
   type SheepAction,
   type SheepTarget,
   type PetTarget,
+  type DeityWeatherKind,
+  type ActVerb,
+  type ActCmd,
 } from './intents';
 export { createRegistry, DEFAULT_CHAIN, type Behaviour, type Registry } from './behaviours/registry';
 export {

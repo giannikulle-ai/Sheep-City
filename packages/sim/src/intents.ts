@@ -14,6 +14,30 @@ import { buyUpgrades, summonFarmer, summonMerchant } from './npcs';
 import type { ActorId, Luna, Sheep, SimState } from './state';
 import { setWeather, type WeatherKind, type WeatherMode } from './weather';
 
+/**
+ * The deity `weather` intent's kinds (issue #43): the three the sim already tracks as `kind`, plus
+ * `fog` (a visibility flag layered over whatever `kind` is) and `clear` (sun, and fog off). See
+ * `applyWeather` below.
+ */
+export const DEITY_WEATHER_KINDS = ['sun', 'rain', 'snow', 'fog', 'clear'] as const;
+export type DeityWeatherKind = (typeof DEITY_WEATHER_KINDS)[number];
+
+/** The deity `act` intent's verbs (issue #43): one named creature, one direct action. */
+export const ACT_VERBS = ['call', 'calm', 'startle', 'treat'] as const;
+export type ActVerb = (typeof ACT_VERBS)[number];
+
+/**
+ * A queued deity action on one actor, staged by the `act` intent and consumed by the `act`
+ * behaviour registered on that actor's registry (see `behaviours/sheep.ts` and
+ * `behaviours/luna.ts`). `x, y` are set only for `call`. Optional on `Sheep` and `Luna` (PR #43)
+ * so a save from before this ticket needs no migration.
+ */
+export interface ActCmd {
+  verb: ActVerb;
+  x?: number;
+  y?: number;
+}
+
 interface IntentBase {
   /**
    * Tick to apply at: the intent is applied at the boundary that begins that tick, so the state
@@ -97,7 +121,23 @@ export type Intent =
   /** One of the sheep actions for one sheep, or for every sheep (`flock`, the tray button). */
   | (IntentBase & { type: 'sheepAction'; action: SheepAction; target: SheepTarget })
   /** One of the sheep or farm actions. */
-  | (IntentBase & { type: 'farmAction'; action: FarmAction });
+  | (IntentBase & { type: 'farmAction'; action: FarmAction })
+  /**
+   * A deity weather power (issue #43): overrides the season for `holdSimMinutes` sim-minutes, then
+   * hands back to it. Rain and snow start their layers on the next tick, through the existing
+   * chains; fog only sets `weather.foggy`, kind untouched; `clear` is sun with fog off. See
+   * `applyWeather`.
+   */
+  | (IntentBase & { type: 'weather'; kind: DeityWeatherKind; holdSimMinutes: number })
+  /**
+   * A deity direct action on one named creature (issue #43): `target` is any actor id, `luna`
+   * included. `call` needs the point to walk to; the others carry none. No pick-up-and-move: every
+   * verb is a nudge the actor's own behaviours carry out, never a teleport. Digital Luna cannot be
+   * harmed: `calm` and `startle` on her are a friendly reaction or a no-op, never a forced state
+   * (see the `act` behaviour in `behaviours/luna.ts`).
+   */
+  | (IntentBase & { type: 'act'; target: ActorId; verb: 'call'; x: number; y: number })
+  | (IntentBase & { type: 'act'; target: ActorId; verb: Exclude<ActVerb, 'call'> });
 
 export type IntentType = Intent['type'];
 
@@ -117,6 +157,8 @@ export const INTENT_TYPES = [
   'dlAction',
   'sheepAction',
   'farmAction',
+  'weather',
+  'act',
 ] as const satisfies readonly IntentType[];
 
 // Compile-time guard: the list above must name every member of the union.
@@ -167,6 +209,12 @@ export function applyIntent(state: SimState, intent: Intent): SimState {
       return state;
     case 'farmAction':
       farmAction(state, intent.action);
+      return state;
+    case 'weather':
+      applyWeather(state, intent.kind, intent.holdSimMinutes);
+      return state;
+    case 'act':
+      applyAct(state, intent.target, intent.verb, intent.verb === 'call' ? intent.x : undefined, intent.verb === 'call' ? intent.y : undefined);
       return state;
     default: {
       const never: never = intent;
@@ -492,4 +540,46 @@ function sheepAction(state: SimState, act: SheepAction, target: SheepTarget): vo
       throw new Error(`unknown sheep action ${String(never)}`);
     }
   }
+}
+
+// ---- deity powers (issue #43) -------------------------------------------------------------
+
+/**
+ * The `weather` intent: overrides the season for `holdSimMinutes` sim-minutes, then hands back to
+ * it (`tickWeather` does the handing-back, reading `holdUntilMs`). `sun`, `rain`, and `snow` set
+ * `kind` at once, same as the player's `setWeather`, so the existing chains (rain shelter, the
+ * ground stamps, the sheep and DL reactions) pick it up on the very next tick with no new
+ * behaviour code. `fog` only sets the visibility flag, leaving `kind` as it was; `clear` is sun
+ * with fog off. A non-positive hold is treated as zero: the override still lands this tick, and
+ * hands back on the next.
+ */
+function applyWeather(state: SimState, kind: DeityWeatherKind, holdSimMinutes: number): void {
+  const holdUntilMs = state.clock.nowMs + Math.max(0, holdSimMinutes) * 60_000;
+  const w = state.weather;
+  if (kind === 'fog') {
+    state.weather = { ...w, mode: 'manual', foggy: true, holdUntilMs };
+    return;
+  }
+  if (kind === 'clear') {
+    state.weather = { ...setWeather(w, 'sun'), mode: 'manual', foggy: false, holdUntilMs };
+    return;
+  }
+  state.weather = { ...setWeather(w, kind), mode: 'manual', holdUntilMs };
+}
+
+/**
+ * The `act` intent: stages a command on the target actor for the `act` behaviour (registered in
+ * `behaviours/sheep.ts` and `behaviours/luna.ts`, priority above idle play and below anything a
+ * danger chain would claim) to carry out on a coming tick, exactly as `manual` and `tx/ty` already
+ * queue Digital Luna's and a sheep's other commands. An unknown target is a no-op, as every other
+ * targeted intent here treats a stale id.
+ */
+function applyAct(state: SimState, target: ActorId, verb: ActVerb, x: number | undefined, y: number | undefined): void {
+  const cmd: ActCmd = x !== undefined && y !== undefined ? { verb, x, y } : { verb };
+  if (target === LUNA_ID) {
+    state.luna.actCmd = cmd;
+    return;
+  }
+  const s = findSheep(state, target);
+  if (s) s.actCmd = cmd;
 }

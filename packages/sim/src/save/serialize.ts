@@ -7,7 +7,7 @@
 // save taken mid-frame resumes exactly where it stopped.
 
 import { SEASONS } from '../clock';
-import { FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type IntentType } from '../intents';
+import { ACT_VERBS, DEITY_WEATHER_KINDS, FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type IntentType } from '../intents';
 import { cloneState, SAVE_VERSION, type SimState } from '../state';
 import { isPlainObject, SAVE_FORMAT, SaveError, type SaveDoc, type SaveWorld } from './doc';
 import { migrateSave } from './migrations/index';
@@ -219,6 +219,9 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
       bool(s[flag], `${p}.${flag}`);
     }
     nullOr(s['lastStamp'], `${p}.lastStamp`, point);
+    // `actCmd` (PR #43) is optional: absent on every save from before the deity `act` intent
+    // existed, and on any sheep no queued command has ever touched.
+    if (s['actCmd'] !== undefined) nullOr(s['actCmd'], `${p}.actCmd`, actCmdShape);
   });
 
   const luna = point(w['luna'], 'world.luna');
@@ -242,6 +245,8 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
   num(luna['forceBoundUntilMs'], 'world.luna.forceBoundUntilMs');
   nullOr(luna['lastStamp'], 'world.luna.lastStamp', point);
   bool(luna['stampSide'], 'world.luna.stampSide');
+  // `actCmd` (PR #43) is optional: absent on every save from before the deity `act` intent existed.
+  if (luna['actCmd'] !== undefined) nullOr(luna['actCmd'], 'world.luna.actCmd', actCmdShape);
 
   const npcs = obj(w['npcs'], 'world.npcs');
   nullOr(npcs['farmer'], 'world.npcs.farmer', npc);
@@ -310,6 +315,20 @@ function weatherShape(value: unknown, path: string): void {
   oneOf(weather['mode'], `${path}.mode`, WEATHER_MODES);
   num(weather['rollAtMs'], `${path}.rollAtMs`);
   num(weather['untilMs'], `${path}.untilMs`);
+  // `holdUntilMs` and `foggy` (PR #43) are optional: absent on every save from before the deity
+  // weather intent existed, and on any save since where nothing ever queued a hold.
+  if (weather['holdUntilMs'] !== undefined) num(weather['holdUntilMs'], `${path}.holdUntilMs`);
+  if (weather['foggy'] !== undefined) bool(weather['foggy'], `${path}.foggy`);
+}
+
+/** A queued `act` command (PR #43), staged on a sheep or on Digital Luna by the `act` intent. */
+function actCmdShape(value: unknown, path: string): void {
+  const c = obj(value, path);
+  const verb = oneOf(c['verb'], `${path}.verb`, ACT_VERBS);
+  if (verb === 'call') {
+    num(c['x'], `${path}.x`);
+    num(c['y'], `${path}.y`);
+  }
 }
 
 function banksShape(value: unknown, path: string): void {
@@ -400,6 +419,19 @@ function intentShape(value: unknown, path: string): void {
     case 'farmAction':
       oneOf(it['action'], `${path}.action`, FARM_ACTIONS);
       return;
+    case 'weather':
+      oneOf(it['kind'], `${path}.kind`, DEITY_WEATHER_KINDS);
+      num(it['holdSimMinutes'], `${path}.holdSimMinutes`);
+      return;
+    case 'act': {
+      str(it['target'], `${path}.target`); // any actor id; a stale one is a no-op when applied
+      const verb = oneOf(it['verb'], `${path}.verb`, ACT_VERBS);
+      if (verb === 'call') {
+        num(it['x'], `${path}.x`);
+        num(it['y'], `${path}.y`);
+      }
+      return;
+    }
     default: {
       const never: never = type;
       throw new Error(`unknown intent type ${String(never satisfies IntentType)}`);

@@ -92,7 +92,10 @@ test('the farm saves every sim-minute and on visibilitychange, and a reload cont
   expect(after.sheep.map((s) => s[0])).toEqual(before.sheep.map((s) => s[0]));
   await expect(page.locator('#say')).toContainText('the farm continues where it was');
 
-  // a sim-minute later the save is fresh again
+  // a sim-minute later the save is fresh again. Wall time is the right clock for this poll (#55):
+  // the page is never put on the QA virtual clock in this test (only `setDayLength` is used, which
+  // just speeds up the sim's own day), so it is the real `requestAnimationFrame` loop, running at
+  // its own pace, that is under test here — the same autosave a real player's tab would see.
   await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.setDayLength(180));
   const stampBefore = stored.savedAt;
   await expect
@@ -174,12 +177,16 @@ test('the tray grows with the flock', async ({ page }) => {
   await expect(page.locator('#who .chip')).toHaveCount(5 + 5);
   const before = await api(page).then(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().sheep.length));
   expect(before).toBe(5);
+  // pin the world on the QA virtual clock (#55): `send` queues the intent for the next tick
+  // boundary, and a save taken before it lands does not hold the lamb, so the growth check below
+  // would only ever see whatever lamb the seed bears on its own. One `qa.step` tick, not a poll
+  // against the real clock, is what puts the lamb in the world before the save is taken. `qa.seed`
+  // replays `open`'s own boot intents (seed 1, sun), so the flock is unchanged by the reset.
+  await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.seed(1));
   // a lamb, then fast time until it grows up (lambGrowMs from the balance file)
   await page.evaluate(() => (window as unknown as WithApp).sheepcliff.send({ type: 'sheepAction', action: 'lamb', target: 'flock' }));
-  // `send` queues the intent for the next tick boundary, so wait for the lamb to be in the world
-  // before taking the save: a save taken in the same breath does not hold it, and the day below
-  // would then only ever grow whatever lamb the seed happens to bear on its own.
-  await expect.poll(() => page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().sheep.reduce((n, q) => n + q.lambs.length, 0))).toBe(1);
+  await page.evaluate(() => (window as unknown as WithApp).sheepcliff.qa.step(6));
+  expect(await page.evaluate(() => (window as unknown as WithApp).sheepcliff.sim().sheep.reduce((n, q) => n + q.lambs.length, 0))).toBe(1);
   const grown = await page.evaluate(() => {
     const w = window as unknown as WithApp;
     const day = w.sheepcliff.sim().clock.periodSec;
@@ -188,6 +195,9 @@ test('the tray grows with the flock', async ({ page }) => {
     const env = JSON.parse(text) as { savedAt: number };
     env.savedAt = Date.now() - day * 1000;
     w.sheepcliff.save.load(JSON.stringify(env));
+    // `save.load` only swaps the sim state in; draw one QA frame so the tray's chip list (built
+    // off the render loop, not the load itself) catches up with the grown flock before it's read
+    w.sheepcliff.qa.step(1);
     return w.sheepcliff.sim().sheep.length;
   });
   // the planted lamb grew up (90 s into a 180 s day); any lamb the flock had on its own is extra

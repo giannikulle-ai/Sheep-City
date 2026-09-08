@@ -6,6 +6,7 @@ import { LUNA_ID, bubble, findSheep, nearestTuft } from './actors';
 import { leaveBarn, petLuna } from './behaviours/luna';
 import { newLamb, setPath } from './behaviours/sheep';
 import type { SeasonName } from './clock';
+import { applyAuthoredIntent } from './engine/engine';
 import { LFOOT, LUNA_SIZE, SFOOT, SHEEP_SIZE, SPOT, insideField, randomFoot } from './geometry';
 import { landBird } from './life';
 import { nextFloat } from './rng';
@@ -21,6 +22,13 @@ import { setWeather, type WeatherKind, type WeatherMode } from './weather';
  */
 export const DEITY_WEATHER_KINDS = ['sun', 'rain', 'snow', 'fog', 'clear'] as const;
 export type DeityWeatherKind = (typeof DEITY_WEATHER_KINDS)[number];
+
+/**
+ * What the owner can do to an authored event through the `authored` intent (issue #40): start one
+ * whatever its own trigger says, or end it and clear its cooldown so it can happen again.
+ */
+export const AUTHORED_ACTIONS = ['trigger', 'reset'] as const;
+export type AuthoredAction = (typeof AUTHORED_ACTIONS)[number];
 
 /** The deity `act` intent's verbs (issue #43): one named creature, one direct action. */
 export const ACT_VERBS = ['call', 'calm', 'startle', 'treat'] as const;
@@ -137,7 +145,14 @@ export type Intent =
    * (see the `act` behaviour in `behaviours/luna.ts`).
    */
   | (IntentBase & { type: 'act'; target: ActorId; verb: 'call'; x: number; y: number })
-  | (IntentBase & { type: 'act'; target: ActorId; verb: Exclude<ActVerb, 'call'> });
+  | (IntentBase & { type: 'act'; target: ActorId; verb: Exclude<ActVerb, 'call'> })
+  /**
+   * The owner's hand on an authored event (issue #40): `trigger` starts it now, whatever its own
+   * trigger says; `reset` ends it and clears its cooldown so it can happen again. An id the deck
+   * does not carry, or one that names a card rather than an authored event, is a no-op — the same
+   * way a stale sheep id is for every other targeted intent here.
+   */
+  | (IntentBase & { type: 'authored'; id: string; action: AuthoredAction });
 
 export type IntentType = Intent['type'];
 
@@ -159,6 +174,7 @@ export const INTENT_TYPES = [
   'farmAction',
   'weather',
   'act',
+  'authored',
 ] as const satisfies readonly IntentType[];
 
 // Compile-time guard: the list above must name every member of the union.
@@ -221,6 +237,9 @@ export function applyIntent(state: SimState, intent: Intent): SimState {
       return state;
     case 'act':
       applyAct(state, intent.target, intent.verb, intent.verb === 'call' ? intent.x : undefined, intent.verb === 'call' ? intent.y : undefined);
+      return state;
+    case 'authored':
+      applyAuthoredIntent(state, intent.id, intent.action);
       return state;
     default: {
       const never: never = intent;

@@ -14,6 +14,10 @@
 // v6 (#60):              same envelope; `world` gains `chronicle` (the whole world's log, see
 //                        chronicle/store.ts): an append-only list of entries plus the rolling stats
 //                        `tell` judges a new number's notability against.
+// v7 (#40):              same envelope; `world` gains `events` (the event engine's own slice, see
+//                        engine/events.ts): what is running, what is on cooldown and when each id
+//                        last started, the flags, visibility and mood its hooks write, and the
+//                        engine's own generator. Each lamb may also carry an optional `lost`.
 
 import type { SimState } from '../state';
 

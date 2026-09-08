@@ -64,7 +64,9 @@ export function meanOf(values: readonly number[]): number {
  * Digital Luna's mood as the ledger reads it: the equal-weight mean of fair weather (sun or not),
  * grass (the mean tuft level), and company (the flock against its cap). The actors carry no mood
  * of their own yet, so this is a reading, not a stock: it follows the other numbers and needs
- * nothing of its own to round-trip. The Director ticket can turn it into a stock the events move.
+ * nothing of its own to round-trip. The event engine (#40) keeps its own mood offset on
+ * `state.events.mood`, where its `mood` hooks land; turning that into a real Ledger stock the
+ * events move — one that summarises, respawns, and diffs — is still its own ticket.
  */
 export function moodOf(ledger: Pick<Ledger, 'weather' | 'grass' | 'wool' | 'lambs'>): number {
   const fair = ledger.weather.kind === 'sun' ? 1 : 0;

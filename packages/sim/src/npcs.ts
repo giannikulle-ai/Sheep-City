@@ -63,6 +63,20 @@ export function summonFarmer(s: SimState): void {
   ]);
 }
 
+/**
+ * The farmer's market walk (#40's category action): up the lane at dawn, a stop at the outer gate
+ * to look the flock over, and on he goes. He never comes through the gate, so nothing on the field
+ * changes; `npcStep`'s inside/outside flip never fires for him either, the same way it never does
+ * for the merchant, who stops ten pixels past the same gate.
+ */
+export function summonFarmerToMarket(s: SimState): void {
+  if (s.npcs.farmer) return;
+  s.npcs.farmer = makeNpc('farmer', [
+    { job: 'market', at: { x: SPOT.gateOut.x - 6, y: SPOT.gateOut.y } },
+    { job: 'gone', at: { ...SPOT.offstage } },
+  ]);
+}
+
 /** The merchant: to just outside the gate, trade, gone. */
 export function summonMerchant(s: SimState): void {
   if (s.npcs.merchant) return;
@@ -156,7 +170,11 @@ export function tickNpcs(s: SimState): void {
       summonFarmer(s);
     }
   }
-  if (!s.npcs.merchant && now > s.npcs.merchantAtMs) summonMerchant(s);
+  // The merchant's fixed timer is the engine-off path. While the engine directs, the
+  // `merchantCaravan` card owns his arrival (#40) and this would double-book him; `merchantAtMs`
+  // is still kept up to date below, because the Ledger runs his visits off it while the district is
+  // off screen (ledger/advance.ts).
+  if (!s.events.enabled && !s.npcs.merchant && now > s.npcs.merchantAtMs) summonMerchant(s);
 
   const farmer = s.npcs.farmer;
   if (farmer) {

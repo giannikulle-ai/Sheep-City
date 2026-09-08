@@ -21,6 +21,7 @@
 
 import { LUNA_ID, bubble, findSheep, nearestTuft } from '../actors';
 import { type Phase, phaseOf } from '../clock';
+import { findLostLamb, releaseLostLamb } from '../engine/hooks';
 import { LFOOT, SFOOT, SPOT, randomFoot, type Point } from '../geometry';
 import { groundSnowy, stampGround } from '../ground';
 import { clampField, clampTarget, stepToward } from '../movement';
@@ -368,6 +369,77 @@ export const rainShepherd: LunaBehaviour = {
   },
 };
 
+/**
+ * How close her foot has to get to the lamb before she has it. 34 px is about a sheep's width:
+ * near enough to be nose to nose on screen, far enough that she never has to stand on it.
+ */
+export const FETCH_LAMB_REACH_PX = 34;
+
+/**
+ * Fetch the lost lamb (the `lostLamb` reference card, #40). The engine never writes to Digital
+ * Luna: it sets a lamb loose and leaves a marker on `state.events`, and this — her own behaviour,
+ * in her own chain — is what walks her out and brings the lamb home. She reaches it, the lamb goes
+ * back on its mother's trail, and the card ends early because the thing it was about has happened.
+ *
+ * Priority 55 in the `routine` chain: above `bedtime` (50), because a lamb out at dusk is a job and
+ * not a night in, and below `rainShepherd` (60), because a whole flock in the rain outranks one
+ * lamb — in a shower she shelters the flock and the lamb comes home on the card's own duration
+ * instead. The owner's order (fetch > manual > riding > rain shepherd > bed and dawn > idle play)
+ * is untouched: this is one new entry between the rain and the bed, not a reordering.
+ *
+ * She only ever walks: `manual = 'walk'` and a target, the same vehicle the `come` button and the
+ * deity `call` already use, so nothing here can teleport, hold, or force her. A player's button
+ * hold (`manual` anything else) keeps her, and the lamb waits.
+ */
+export const fetchLamb: LunaBehaviour = {
+  id: 'fetchLamb',
+  chain: 'routine',
+  priority: 55,
+  condition: ({ state }, l) =>
+    (state.events.lostLamb !== null || l.routine === 'fetchLamb') &&
+    l.riding === null &&
+    l.mounting === null &&
+    l.stick === null &&
+    !l.inBarn &&
+    !SHELTER_ROUTINES.includes(l.routine) &&
+    (l.manual === null || l.manual === 'walk'),
+  tick: ({ state, now }, l) => {
+    const found = findLostLamb(state);
+    if (!found) {
+      // The card ended, or the lamb grew up, while she was on her way: put her own fields back and
+      // let the rest of the routine chain have her again from the next tick.
+      if (l.routine === 'fetchLamb') {
+        l.routine = null;
+        l.manual = null;
+        l.target = null;
+        l.anim = 'sit';
+        l.t0Ms = now;
+      }
+      return;
+    }
+    // A lamb is drawn smaller than its mother but lives in the same coordinates; the sheep's own
+    // foot offset is close enough for a point to walk to.
+    const lx = found.lamb.x + SFOOT[0];
+    const ly = found.lamb.y + SFOOT[1];
+    if (Math.hypot(lx - (l.x + LFOOT[0]), ly - (l.y + LFOOT[1])) <= FETCH_LAMB_REACH_PX) {
+      releaseLostLamb(state);
+      bubble(l, 'heart', 1600, now);
+      l.routine = null;
+      l.manual = null;
+      l.target = null;
+      l.anim = 'pant';
+      l.t0Ms = now;
+      return;
+    }
+    // Every command of hers releases a claimed tuft before it walks her off (see the `act` chain).
+    releaseTuft(state, l);
+    l.routine = 'fetchLamb';
+    l.manual = 'walk';
+    l.anim = 'run';
+    l.target = { x: lx, y: ly + 4 };
+  },
+};
+
 /** Dusk: trot to the doorway, circle, sleep. Dawn: wake, stretch, sit. */
 export const bedtime: LunaBehaviour = {
   id: 'bedtime',
@@ -673,7 +745,7 @@ export const act: LunaBehaviour = {
 // ---------------------------------------------------------------------------------------------
 
 export const LUNA_BEHAVIOURS = createRegistry<LunaContext, Luna>();
-for (const b of [riding, fetch, manual, ride, tiltRecover, pantRest, rainShepherd, bedtime, hotPant, idlePlay, flopUp, nibble, sleepFix, walk, act]) {
+for (const b of [riding, fetch, manual, ride, tiltRecover, pantRest, rainShepherd, fetchLamb, bedtime, hotPant, idlePlay, flopUp, nibble, sleepFix, walk, act]) {
   LUNA_BEHAVIOURS.register(b);
 }
 

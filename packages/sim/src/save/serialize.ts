@@ -9,7 +9,7 @@
 import { SEASONS } from '../clock';
 import { freezeChronicleEntry } from '../chronicle/store';
 import { CHRONICLE_SOURCES } from '../chronicle/types';
-import { ACT_VERBS, DEITY_WEATHER_KINDS, FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type IntentType } from '../intents';
+import { ACT_VERBS, AUTHORED_ACTIONS, DEITY_WEATHER_KINDS, FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type IntentType } from '../intents';
 import { cloneState, SAVE_VERSION, type SimState } from '../state';
 import { isPlainObject, SAVE_FORMAT, SaveError, type SaveDoc, type SaveWorld } from './doc';
 import { migrateSave } from './migrations/index';
@@ -221,6 +221,8 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
       dir(l['dir'], `${p}.lambs[${j}].dir`);
       num(l['bornMs'], `${p}.lambs[${j}].bornMs`);
       bool(l['grown'], `${p}.lambs[${j}].grown`);
+      // `lost` (PR #40) is optional: absent on every lamb the `lostLamb` card has never touched.
+      if (l['lost'] !== undefined) bool(l['lost'], `${p}.lambs[${j}].lost`);
     });
     const tuft = nullOr(s['tuft'], `${p}.tuft`, num);
     if (tuft !== null && (!Number.isInteger(tuft) || tuft < 0 || tuft >= tufts.length)) fail(`${p}.tuft`, `a tuft index below ${tufts.length}`, tuft);
@@ -293,6 +295,45 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
   nonNegative(w['lastLedgerAt'], 'world.lastLedgerAt');
 
   chronicleShape(w['chronicle'], 'world.chronicle');
+  eventsShape(w['events'], 'world.events');
+}
+
+/**
+ * The event engine's slice (#40): its own generator, what is running, the two id-keyed maps
+ * (cooldowns and last starts), and the numbers its hooks write. The maps' values are checked, the
+ * keys are not: an id the deck no longer carries is stale data, not an invalid world — the engine
+ * looks every id up in the deck before it uses it and ignores one it does not know.
+ */
+export function eventsShape(value: unknown, path: string): void {
+  const e = obj(value, path);
+  bool(e['enabled'], `${path}.enabled`);
+  uint32(obj(e['rng'], `${path}.rng`)['s'], `${path}.rng.s`);
+  nonNegative(e['nextEvalMs'], `${path}.nextEvalMs`);
+  arr(e['running'], `${path}.running`).forEach((entry, i) => {
+    const p = `${path}.running[${i}]`;
+    const r = obj(entry, p);
+    str(r['id'], `${p}.id`);
+    oneOf(r['kind'], `${p}.kind`, ['card', 'authored']);
+    nonNegative(r['startedMs'], `${p}.startedMs`);
+    num(r['endsMs'], `${p}.endsMs`);
+  });
+  for (const key of ['cooldowns', 'starts'] as const) {
+    const map = obj(e[key], `${path}.${key}`);
+    for (const [id, at] of Object.entries(map)) num(at, `${path}.${key}.${id}`);
+  }
+  num(e['lastStartMs'], `${path}.lastStartMs`);
+  num(e['lastDrawMs'], `${path}.lastDrawMs`);
+  nullOr(e['lastMomentKind'], `${path}.lastMomentKind`, str);
+  const flags = obj(e['flags'], `${path}.flags`);
+  for (const [name, on] of Object.entries(flags)) bool(on, `${path}.flags.${name}`);
+  level(e['visibility'], `${path}.visibility`);
+  num(e['mood'], `${path}.mood`);
+  num(e['lastRainMs'], `${path}.lastRainMs`);
+  nullOr(e['lostLamb'], `${path}.lostLamb`, (v, p) => {
+    const lamb = obj(v, p);
+    str(lamb['sheep'], `${p}.sheep`);
+    num(lamb['bornMs'], `${p}.bornMs`);
+  });
 }
 
 function level(value: unknown, path: string): number {
@@ -479,6 +520,10 @@ function intentShape(value: unknown, path: string): void {
     case 'weather':
       oneOf(it['kind'], `${path}.kind`, DEITY_WEATHER_KINDS);
       num(it['holdSimMinutes'], `${path}.holdSimMinutes`);
+      return;
+    case 'authored':
+      str(it['id'], `${path}.id`); // any event id; one the deck does not carry is a no-op when applied
+      oneOf(it['action'], `${path}.action`, AUTHORED_ACTIONS);
       return;
     case 'act': {
       str(it['target'], `${path}.target`); // any actor id; a stale one is a no-op when applied

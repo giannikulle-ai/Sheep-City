@@ -7,6 +7,7 @@
 
 import { phaseOf } from '../clock';
 import { cloneChronicle, type Chronicle } from '../chronicle/store';
+import { cloneEvents, createEvents, type EventsState } from '../engine/events';
 import { FLOWERS, LFOOT, randomFoot, SFOOT, SPOT } from '../geometry';
 import { groundSnowy } from '../ground';
 import { createRng, nextFloat } from '../rng';
@@ -20,6 +21,13 @@ import { cloneLedger, type Ledger } from './ledger';
  * its snapshot, taken now. No NPC is on the field; the merchant's timer and the farmer's visit
  * key carry over so their schedules continue.
  *
+ * `events` is the outgoing state's engine slice, carried across the respawn the same way and for
+ * the same reason as `chronicle`: the Ledger holds none of it, so the caller says what the
+ * respawned world remembers of what was running and what is on cooldown. Its default is a fresh
+ * engine on the ledger's own seed and clock, which is what a district nobody has watched yet gets.
+ * Whatever was running when the district went off screen is ended by the engine's first look at
+ * the world on the other side, since its `endsMs` is by then long past.
+ *
  * `chronicle` is the outgoing state's log, carried across the respawn (a fresh district passes
  * `createChronicle()`). `respawn`'s own numbers hold nothing of a district's history — the Ledger
  * is exactly the numbers that survive with no actors in the room — so the caller must say what, if
@@ -28,7 +36,7 @@ import { cloneLedger, type Ledger } from './ledger';
  * own copy. `catchUp` is the caller on the plan's offline-catch-up path; it passes the state's own
  * chronicle and then tells the gap's diff onto the respawned world.
  */
-export function respawn(ledger: Ledger, chronicle: Chronicle, seed: number = ledger.seed): SimState {
+export function respawn(ledger: Ledger, chronicle: Chronicle, seed: number = ledger.seed, events?: EventsState): SimState {
   const rng = createRng(seed);
   const now = ledger.clock.nowMs;
   const phase = phaseOf(ledger.clock.t);
@@ -101,6 +109,7 @@ export function respawn(ledger: Ledger, chronicle: Chronicle, seed: number = led
     ledger: cloneLedger(ledger),
     lastLedgerAt: now,
     chronicle: cloneChronicle(chronicle),
+    events: events ? cloneEvents(events) : createEvents(ledger.seed, now),
   };
   state.ground.wasSnowy = groundSnowy(state);
   return state;

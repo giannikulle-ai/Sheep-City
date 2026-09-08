@@ -31,9 +31,10 @@
 //
 // One shape of kind 2 needs memory across ticks that a per-state `HarmCheck` cannot carry — a
 // `manual` value that never changes is indistinguishable, one tick at a time, from a value that is
-// legitimately about to change. `RideStuckGuard` below covers that one case (Round 3, review
-// finding R2-6); everything else in `HARM_CHECKS` stays a pure function of a single state, as the
-// fuzz's per-tick `harmIn` call expects.
+// legitimately about to change. `StuckManualGuard` below covers that (Round 3, review finding R2-6;
+// generalised past `'ride'` alone in Round 4, review finding F1 — see the class's own doc comment);
+// everything else in `HARM_CHECKS` stays a pure function of a single state, as the fuzz's per-tick
+// `harmIn` call expects.
 //
 // Round 3 also closed two checks that were narrower than their own doc comments or conditions
 // claimed: `riding-sheep-exists` now reads `mounting` as well as `riding` (R2-5), and
@@ -42,6 +43,7 @@
 import { findSheep } from '../../src/actors';
 import { LUNA_ANIMS } from '../../src/behaviours/luna';
 import { H, LFOOT, W } from '../../src/geometry';
+import { TICK_MS } from '../../src/rules';
 import type { Luna, SimState } from '../../src/state';
 
 const LUNA_ANIM_SET: ReadonlySet<string> = new Set(LUNA_ANIMS);
@@ -204,39 +206,76 @@ export const HARM_CHECKS: readonly HarmCheck[] = [
  * her sanctioned command surface never makes it anything else.
  */
 /**
- * Ticks a legitimate `manual === 'ride'` transient (mounting and riding both null — a mount that
- * just failed, waiting for the `manual` behaviour's own fallback to clear it next tick) may run for
- * before it counts as stuck rather than in-flight. Measured, not guessed: a full 50-seed fuzz (a
- * scripted day each, `ride` exercised by every seed via `LUNA_ACTIONS`) never saw this run past 1
- * tick. Set to 3 for margin — "more than a few ticks" per the review, not a hair trigger on the
- * measured number.
+ * Longest, in ticks, any `manual` value may legitimately stay set: `MAX_HOLD_MS` above (already
+ * derived, with margin, from `HOLD_MS.sleep` — 12 s, the longest entry in the `HOLD_MS` table in
+ * intents.ts — the longest real button-hold the sim has) divided by `TICK_MS`, i.e. 200 ticks (20 s)
+ * at the sim's 100 ms tick. Round 4, review finding F1: the previous guard watched only
+ * `manual === 'ride'`, so a writer that kept a *different* `TIMED_MANUAL` value set (e.g. `'sleep'`)
+ * by re-bumping `manualUntilMs` a few seconds into the future every tick sat under `boundedTimer`'s
+ * per-tick ceiling on every single tick it ran — always well inside `MAX_HOLD_MS` of `nowMs` — while
+ * never actually letting go, for a whole scripted day (1,800 ticks). A per-tick check cannot see
+ * that; only counting how many ticks in a row the same value has sat there can. A real `sleep` hold
+ * never runs past `HOLD_MS.sleep` (120 ticks); this threshold is comfortably above that, with the
+ * same margin `MAX_HOLD_MS` already carries, and nowhere near "a whole day".
  */
-export const RIDE_STUCK_AFTER_TICKS = 3;
+const MAX_LEGIT_MANUAL_HOLD_TICKS = Math.ceil(MAX_HOLD_MS / TICK_MS);
+
+/**
+ * `'ride'` gets its own, much shorter threshold: it is the one `TIMED_MANUAL`-adjacent value with no
+ * timed hold behind it at all (see `TIMED_MANUAL`'s doc comment) — the only legitimate way it is
+ * ever seen is the single tick between a failed mount and the `manual` behaviour's own fallback
+ * clearing it. Measured, not guessed: a full 50-seed fuzz (a scripted day each, `ride` exercised by
+ * every seed via `LUNA_ACTIONS`) never saw this run past 1 tick.
+ *
+ * Round 4, review finding F4: a plain consecutive-run counter resets to 0 on any gap tick, so a
+ * writer that ticks `manual = 'ride'` on only every other (or every third) tick holds her exactly as
+ * stuck and was never seen. Counted instead over a sliding window — more than `RIDE_STUCK_WINDOW_LIMIT`
+ * `'ride'` ticks anywhere in the last `RIDE_STUCK_WINDOW_TICKS` — so a duty cycle is caught the same
+ * as a solid run, and a single legitimate transient tick (well under the limit) still passes clean.
+ */
+export const RIDE_STUCK_WINDOW_TICKS = 8;
+export const RIDE_STUCK_WINDOW_LIMIT = 3;
 
 /**
  * Round 3, review finding R2-6 (the `TIMED_MANUAL` exemption): `manual-hold-bounded`'s "not already
  * stale" half exempts `'ride'` on purpose (see `TIMED_MANUAL`'s doc comment) because a failed mount
  * can legitimately leave it sitting on the default, already-stale `manualUntilMs` for one tick. That
  * makes a writer that pins `manual = 'ride'` for many ticks — with neither `mounting` nor `riding`
- * ever set — completely invisible to every check above: nothing about a *single* tick's state tells
- * the legitimate one-tick transient apart from a stuck one, only how many ticks in a row it has held.
- *
- * That needs memory across ticks, which the rest of `HARM_CHECKS` deliberately does not carry (each
- * entry is a pure function of one state) — so this is a small stateful tracker instead of a
- * `HarmCheck` entry, kept here so "what harm looks like" still lives in one file. Instantiate one
- * per run and feed it a tick at a time; the fuzz (the only test that ever exercises `ride`) does
- * this alongside `harmIn`. The static guard and the off-screen block never set `manual`, so they
- * have no need of it.
+ * ever set — invisible to every check above: nothing about a *single* tick's state tells the
+ * legitimate one-tick transient apart from a stuck one, only how many ticks in a row it has held.
+ * Round 4, review finding F1 widened the same blind spot: `manualUntilMs`'s upper-bound check is
+ * also only ever a single tick's snapshot, so a writer that keeps re-bumping it forward with any
+ * *other* `TIMED_MANUAL` value passes it every tick while never letting go. Both need memory across
+ * ticks, which the rest of `HARM_CHECKS` deliberately does not carry (each entry is a pure function
+ * of one state) — so this is a small stateful tracker instead of a `HarmCheck` entry, kept here so
+ * "what harm looks like" still lives in one file. It is keyed to elapsed ticks, not to which value
+ * `manual` holds — `'ride'` is a special case only in how short its threshold is, being the one
+ * value with no timed hold behind it at all. Instantiate one per run and feed it a tick at a time;
+ * the fuzz (the only test that drives `manual` tick by tick) does this alongside `harmIn`. The
+ * static guard and the off-screen block never set `manual`, so they have no need of it.
  */
-export class RideStuckGuard {
+export class StuckManualGuard {
+  private rideWindow: boolean[] = [];
+  private value: string | null = null;
   private run = 0;
 
-  /** Feed one tick's Luna in; returns a reason once the stuck run passes the threshold, else null. */
+  /** Feed one tick's Luna in; returns a reason once a stuck hold passes its threshold, else null. */
   next(l: Luna): string | null {
-    if (l.manual === 'ride' && l.riding === null && l.mounting === null) this.run++;
-    else this.run = 0;
-    if (this.run > RIDE_STUCK_AFTER_TICKS) {
-      return `manual has been "ride" for ${this.run} consecutive ticks with neither mounting nor riding set — a stuck hold, not a failed-mount transient (that clears within ${RIDE_STUCK_AFTER_TICKS})`;
+    const rideTick = l.manual === 'ride' && l.riding === null && l.mounting === null;
+    this.rideWindow.push(rideTick);
+    if (this.rideWindow.length > RIDE_STUCK_WINDOW_TICKS) this.rideWindow.shift();
+    const rideCount = this.rideWindow.filter(Boolean).length;
+    if (rideCount > RIDE_STUCK_WINDOW_LIMIT) {
+      return `manual has been "ride" for ${rideCount} of the last ${this.rideWindow.length} ticks with neither mounting nor riding set — a stuck hold, not a failed-mount transient`;
+    }
+
+    if (l.manual !== null && l.manual === this.value) this.run++;
+    else {
+      this.value = l.manual;
+      this.run = l.manual === null ? 0 : 1;
+    }
+    if (l.manual !== null && l.manual !== 'ride' && this.run > MAX_LEGIT_MANUAL_HOLD_TICKS) {
+      return `manual has been "${l.manual}" for ${this.run} consecutive ticks — past the ${MAX_LEGIT_MANUAL_HOLD_TICKS}-tick sane window (margin over the longest real hold), regardless of what manualUntilMs claims — a rolling timer that never lets go, not a real hold`;
     }
     return null;
   }

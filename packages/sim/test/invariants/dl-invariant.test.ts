@@ -23,12 +23,18 @@
 //      and position. The away-times are chosen, and checked, to actually reach a night ledger and a
 //      rain ledger — Round 3, review finding R2-1 caught the previous away-times never doing either,
 //      so `respawn`'s night branch ran zero times and the whole block was inert.
-//   4. A stuck-hold check on `manual === 'ride'`: the one `manual` value the bounded-hold check in
-//      part 5 exempts from its "not already stale" half, because a failed mount legitimately leaves
-//      it sitting on a stale `manualUntilMs` for one tick. Round 3, review finding R2-6 showed that
-//      exemption is not narrow enough — a writer that holds `manual = 'ride'` for many ticks with
-//      neither `mounting` nor `riding` ever set is stuck, and nothing catches it. This check is
-//      keyed to elapsed ticks, not to `manual`'s value, so it does not share the same hole.
+//   4. A stuck-hold check on `manual`, for every value it can take, not only `'ride'`. Round 3,
+//      review finding R2-6 first showed `'ride'` alone was invisible to the bounded-hold check in
+//      part 5, because a failed mount legitimately leaves it sitting on a stale `manualUntilMs` for
+//      one tick, so that check's "not already stale" half exempts it on purpose. Round 4, review
+//      finding F1 showed the same class of hole was still open for every *other* `manual` value: a
+//      writer that keeps re-bumping `manualUntilMs` a few seconds into the future every tick passes
+//      the bounded-hold check's per-tick snapshot forever without the hold ever actually ending, for
+//      a whole scripted day. This check is keyed to elapsed ticks, not to which value `manual`
+//      holds, so it does not share either hole — `'ride'` gets its own much shorter threshold only
+//      because it is the one value with no timed hold behind it at all (see `StuckManualGuard`'s own
+//      doc comment in dl-harm.ts), and Round 4, review finding F4 made that threshold tolerant of
+//      gaps (a sliding window, not a run that resets on any single clear tick).
 //   5. The harm predicate itself: one crafted state per `HARM_CHECKS` entry, each built to trip that
 //      one check, asserting `harmIn` names it — plus the exact list of names `HARM_CHECKS` must
 //      carry. Round 3, review finding R2-2: replacing `HARM_CHECKS`'s body with `[]` (the export
@@ -56,7 +62,7 @@ import { RULES, TICK_MS, TICK_SEC } from '../../src/rules';
 import { cloneState, createInitialState, type Luna, type SimState } from '../../src/state';
 import { step } from '../../src/step';
 import { tickWeather } from '../../src/weather';
-import { HARM_CHECKS, RideStuckGuard, harmIn } from './dl-harm';
+import { HARM_CHECKS, StuckManualGuard, harmIn } from './dl-harm';
 
 const TICKS_PER_DAY = 1800;
 const DAY_MS = RULES.clock.periodSec * 1000;
@@ -201,10 +207,11 @@ describe('fuzz: nothing in the sim can harm Digital Luna (#61)', () => {
     s = step(s, [{ type: 'farmAction', action: 'farmer' }, { type: 'farmAction', action: 'merchant' }], TICK_MS);
     let reasons = harmIn(s);
     expect(reasons, `seed ${seed} tick ${s.clock.tick}: ${reasons.join('; ')}`).toEqual([]);
-    // Round 3, review finding R2-6: a stateful companion to harmIn for the one harm shape a pure
-    // per-tick predicate cannot see — see RideStuckGuard's doc comment in dl-harm.ts.
-    const rideGuard = new RideStuckGuard();
-    let stuck = rideGuard.next(s.luna);
+    // Round 3, review finding R2-6, generalised Round 4 (F1, F4): a stateful companion to harmIn
+    // for the one harm shape a pure per-tick predicate cannot see — see StuckManualGuard's doc
+    // comment in dl-harm.ts.
+    const stuckGuard = new StuckManualGuard();
+    let stuck = stuckGuard.next(s.luna);
     expect(stuck, `seed ${seed} tick ${s.clock.tick}`).toBeNull();
 
     const intents = scriptedIntents(s);
@@ -215,7 +222,7 @@ describe('fuzz: nothing in the sim can harm Digital Luna (#61)', () => {
       for (const hook of EVENT_ENGINE_HOOKS) hook(s);
       reasons = harmIn(s);
       expect(reasons, `seed ${seed} tick ${s.clock.tick}: ${reasons.join('; ')}`).toEqual([]);
-      stuck = rideGuard.next(s.luna);
+      stuck = stuckGuard.next(s.luna);
       expect(stuck, `seed ${seed} tick ${s.clock.tick}`).toBeNull();
     }
     expect(s.clock.tick, `seed ${seed}`).toBe(TICKS_PER_DAY);
@@ -450,7 +457,7 @@ describe('this file is the DL invariant: it exists and is never skipped or narro
     expect(only.test(text)).toBe(false);
   });
 
-  it('no-skips.test.ts exists, applies no skip/only/todo modifier, and still contains its scan (Round 3, review finding R2-3)', () => {
+  it('no-skips.test.ts exists, applies no skip/only/todo modifier — plainly written, behind a comment, or through an alias — and still contains its scan (Round 3, review finding R2-3; hardened Round 4, review finding F3)', () => {
     // Round 2 made no-skips.test.ts the guard that catches every describe in *this* file being
     // skipped at once — a self-check inside the thing it guards cannot do that, only a second file
     // can. But the same gap sits one level out: skip no-skips.test.ts's own describe too (or delete
@@ -459,7 +466,7 @@ describe('this file is the DL invariant: it exists and is never skipped or narro
     // files' top-level describes gave `npx vitest run` in packages/sim a clean `25 passed | 2
     // skipped (27)`, exit 0 — the whole DL invariant gone, silently; deleting both files outright
     // gave an equally clean `25 passed (25)`. This check and no-skips.test.ts's matching check on
-    // *this* file (its "still carries its five describes" test) close the loop.
+    // *this* file (its "still carries its six describes" test) close the loop.
     //
     // The check below has to be more than a substring search: no-skips.test.ts's own source
     // legitimately spells the word it hunts for — in its header comment, and in its own pattern
@@ -470,8 +477,23 @@ describe('this file is the DL invariant: it exists and is never skipped or narro
     // way a real call reads — a bare mention in prose or inside another regex's own source does not
     // look like that. Built from parts, as the self-check above builds its own patterns, so this
     // file's own source — itself scanned by no-skips.test.ts — never contains the literal pattern.
+    //
+    // Round 4, review finding F3: the call-shape regex alone is defeated two ways, both reproduced
+    // against the pre-fix check and both left it silently green — a block comment sitting between
+    // the name and the dot before its modifier, and aliasing the name to another identifier first,
+    // then applying the modifier through that alias. Comments are stripped before matching (the same
+    // technique no-random.test.ts uses, and for the same reason: this file's own prose legitimately
+    // names the words being hunted for — the literal pattern would trip both this file's own check
+    // below and no-skips.test.ts's scan of this file, which is why it is never spelled out here
+    // either); an alias is flagged directly, on sight, rather than trying to follow it to a later
+    // call — no-skips.test.ts has no legitimate reason to bind `describe`, `it`, or `test` to another
+    // name, so the alias itself is the tell.
     expect(existsSync(noSkipsFile)).toBe(true);
-    const text = readFileSync(noSkipsFile, 'utf8');
+    const raw = readFileSync(noSkipsFile, 'utf8');
+    const text = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const alias = new RegExp('\\b(?:const|let|var)\\s+\\w+\\s*=\\s*(describe|it|test)\\b');
+    const aliasMatch = alias.exec(text);
+    expect(aliasMatch, `no-skips.test.ts aliases ${aliasMatch?.[1]} to another identifier`).toBeNull();
     const dot = '\\' + '.';
     for (const word of ['skip', 'only', 'todo']) {
       const appliedModifier = new RegExp('\\b(describe|it|test)\\s*' + dot + '\\s*' + word + '\\s*\\(');

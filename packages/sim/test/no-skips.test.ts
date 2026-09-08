@@ -66,7 +66,7 @@ describe('no test file in this package skips, narrows to .only, or leaves a .tod
   const invariantFile = join(testDir, 'invariants', 'dl-invariant.test.ts');
   const harmFile = join(testDir, 'invariants', 'dl-harm.ts');
 
-  it('the DL invariant test file exists and still carries its five describes', () => {
+  it('the DL invariant test file exists and still carries its six describes', () => {
     expect(existsSyncOrThrow(invariantFile)).toBe(true);
     const text = readFileSync(invariantFile, 'utf8');
     const describes = [
@@ -74,9 +74,20 @@ describe('no test file in this package skips, narrows to .only, or leaves a .tod
       'fuzz: nothing in the sim can harm Digital Luna (#61)',
       'static guard: nothing outside her own chain writes to Digital Luna',
       'off-screen: a respawned state never harms Digital Luna either (CLAUDE.md: "on screen or off")',
+      'harm predicate: every HARM_CHECKS entry actually fires, and the set cannot shrink silently',
       'this file is the DL invariant: it exists and is never skipped or narrowed',
     ];
     for (const d of describes) expect(text, `dl-invariant.test.ts is missing the describe: ${d}`).toContain(d);
+    // Round 4, review finding F2: the list above only proves the describes it names are present —
+    // it does not prove a *new* describe added to the file without a matching entry here would be
+    // caught. Every describe in dl-invariant.test.ts is written at column 0 (no nesting), so this
+    // counts them directly from the file's own source and checks the count matches the list, not
+    // just that the list's contents are a subset of what's there.
+    const actualCount = (text.match(/^describe\(/gm) ?? []).length;
+    expect(
+      actualCount,
+      `dl-invariant.test.ts has ${actualCount} top-level describe(s) but this list names ${describes.length} — a describe was added or removed without updating this list`,
+    ).toBe(describes.length);
   });
 
   it('its harm definition exists and still exports the shared predicate', () => {

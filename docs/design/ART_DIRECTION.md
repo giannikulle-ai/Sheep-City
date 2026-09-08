@@ -29,9 +29,9 @@ any frame builds.
 | `n` | 28,18,14 | 461 | DL nose/pupil; the crow's pupil and belly shadow |
 | `g` | 86,79,92 | 336 | face highlight; the crow's bill and back highlight |
 
-The core isn't exclusive. `hand_sprites.py` also puts 14 single-purpose extras (icon/clothing/prop colours)
+The core isn't exclusive. `hand_sprites.py` also puts 15 single-purpose extras (icon/clothing/prop colours)
 on the same sheet: `B`/`J` 372px, `H` 284, `S` 198, `F` 192, `y`/`Y` 167, `V` 132, `Z` 110, `Q` 100, `O` 72,
-`v` 54, `X` 54, `q`/`G` 39, `z` 28, `L` 24.
+`v` 54, `X` 54, `R` 44, `q`/`G` 39, `z` 28, `L` 24.
 
 Scenery is vector, not this palette — `farm_vectors.py` declares its own 29 module-level hex constants
 (`GRASS_A/B`, `BARN_R` family, `FENCE`, …) for gradients and SVG fills. The one deliberate seam: vector `INK`
@@ -78,7 +78,7 @@ differ because a canvas has to fit every pose a character strikes, not just the 
 |---|---|---|---|
 | Digital Luna | 44 × 40 | 27 × 39 sitting, 35 × 30 running | measured |
 | sheep | 32 × 27 | 29 × 27 standing | measured |
-| lamb | 21 × 16 | 18 × 16 mid-stride | measured |
+| lamb | 21 × 16 | 18 × 16 walking, 18 × 15 mid-stride | measured |
 | crow | 22 × 16 | 17 × 13 standing | measured — matches `CROW_BRIEF.md`'s own numbers exactly |
 | villager (farmer/merchant) | 16 × 21 | 12 × 21 / 11 × 21 walking | measured, but **not owner-pinned as the "villager" class** — treat as a scale anchor, not settled canon |
 | cat | ~20 × 14 | ~16 × 11 standing | **proposed** |
@@ -107,7 +107,7 @@ touches row 15, so the sheet builder trims all of them to the same 16 rows." Bou
 above the floor by design: of 108 cast frames (sheep, DL, lamb, rabbit, bird, butterfly, crow, farmer,
 merchant), 22 sit above their floor — `dl.trundle[0]`/`dl.bound[0]` 6px, `crow.fly[0]`/`crow.hop[0]`/
 `crow.takeoff[1]` 3px, `dl.run[0]`/`[2]` and `dl.stick[0]`/`[2]` 2px, 13 more 1px, mid-stride or mid-air.
-The contact sheet above shows each reference frame, which does touch its floor.
+On the contact sheet every reference frame touches its floor except the lamb's mid-stride, one pixel up.
 
 ## Animation rules
 
@@ -162,15 +162,14 @@ the same pixel density as the cast standing on them.
 ## Weak spots (measured)
 
 - **`sheep.graze`'s real notch is at the grass prop, not the neck.** Re-measured on the built frames:
-  `graze[2]` (`head_dxy=(0,8)`) has zero transparent pixels with 3+ opaque neighbours — no neck gap, contrary
-  to an earlier draft's claim. `graze[1]` has three, at (28,24)/(29,23)/(30,24) — the `GRASSBITE` extra
+  `graze[2]` (`head_dxy=(0,8)`) has zero transparent pixels with 3+ opaque neighbours — no neck gap. `graze[1]` has three, at (28,24)/(29,23)/(30,24) — the `GRASSBITE` extra
   pasted at (29,24), overlapping the mouth, not the neck seam.
 - **Legs are the least-finished part of every character.** Flat single-tone fill plus outline, no
   highlight/shadow split, on sheep, lambs, DL and the crow alike — the shading budget goes to bodies and
   faces.
 - **`farm_v3.py`'s vector-character builders are dead.** It still defines `sheep()`, `lamb()`,
-  `digital_luna_sit/run/flop/sleep/stretch/nibble()`, `rabbit()`. Grepping every call site confirms none is
-  invoked: `ANIMS` builds every character from `hand_sprites.py`'s grids, and `render_v3.py` only touches
+  `digital_luna_sit/run/flop/sleep/stretch/nibble()`, `rabbit()`. Nothing reachable calls them (only dead
+  siblings in the same file do): `ANIMS` builds every character from `hand_sprites.py`'s grids, and `render_v3.py` only touches
   `V.ANIMS`, `V.frame_svg`, `V.background`, `V.FIELD`, `V.GRASS_A/B` — the vector-rasterised-character
   approach the HANDOFF says was tried and rejected, left with nothing marking it dead.
 - **`farm_vectors.py`'s builders aren't dead, just outside the v3 build.** `sheep()`, `lamb()`, `luna()`,

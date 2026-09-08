@@ -27,9 +27,11 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { LUNA_ID } from '../../src/actors';
 import { advanceClock, advanceSeason, SEASONS } from '../../src/clock';
 import { tickSheep } from '../../src/behaviours/sheep';
-import { applyIntent, FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type Intent } from '../../src/intents';
+import { ACT_VERBS, applyIntent, DEITY_WEATHER_KINDS, FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type Intent } from '../../src/intents';
+import { createChronicle } from '../../src/chronicle/store';
 import { advanceLedger } from '../../src/ledger/advance';
 import { summarise } from '../../src/ledger/ledger';
 import { respawn } from '../../src/ledger/respawn';
@@ -82,6 +84,16 @@ function scriptedIntents(state: SimState): Intent[] {
   list.push({ type: 'dlAction', action: 'sit' }, { type: 'dlAction', action: 'run' });
   for (const action of SHEEP_ACTIONS) for (const target of ['flock', a] as const) list.push({ type: 'sheepAction', action, target });
   for (const action of FARM_ACTIONS) list.push({ type: 'farmAction', action });
+  // Deity intents (#43): a weather power for every kind, and every verb of a direct action —
+  // aimed at her and at a sheep, since `verb: 'call'` and 'act' targeting `luna` are exactly the
+  // sanctioned-write case the DL invariant has to let through (see `mayTouchLuna` below) while
+  // still asserting she is never harmed by it.
+  for (const kind of DEITY_WEATHER_KINDS) list.push({ type: 'weather', kind, holdSimMinutes: 15 });
+  for (const verb of ACT_VERBS) {
+    for (const target of [LUNA_ID, a] as const) {
+      list.push(verb === 'call' ? { type: 'act', target, verb, x: state.luna.x - 40, y: state.luna.y + 30 } : { type: 'act', target, verb });
+    }
+  }
   return list;
 }
 
@@ -95,6 +107,8 @@ function mayTouchLuna(intent: Intent): boolean {
       return true;
     case 'pet':
       return intent.target === 'luna';
+    case 'act': // a deity direct action (#43): calm/startle on her are a friendly reaction or a no-op, never forced
+      return intent.target === LUNA_ID;
     default:
       return false;
   }
@@ -257,7 +271,7 @@ describe('off-screen: a respawned state never harms Digital Luna either (CLAUDE.
       let ledger = summarise(createInitialState(seed));
       for (const awayMs of [0, Math.floor(DAY_MS * 0.3), Math.floor(DAY_MS * 0.7), 3 * DAY_MS, 9 * DAY_MS + 1234]) {
         ledger = advanceLedger(ledger, awayMs, rng);
-        const respawned = respawn(ledger);
+        const respawned = respawn(ledger, createChronicle());
         const reasons = harmIn(respawned);
         expect(reasons, `seed ${seed} away ${awayMs}ms: ${reasons.join('; ')}`).toEqual([]);
       }

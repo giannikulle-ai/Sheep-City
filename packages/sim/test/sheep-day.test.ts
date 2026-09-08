@@ -118,24 +118,25 @@ const EXPECTED = [
 
 /** Weather, visitors, DL's barn entry, and the bird on the same day, for the shape of the story. */
 const EVENTS = [
-  // The merchant's arrival and the two dawn lines are the event engine's (#40), not the sheep's:
-  // his visit is the `merchantCaravan` card now instead of the prototype's 45-second timer, and the
-  // farmer walks past to the market at dawn (tick 1333 to 1470) as a category action. The merchant's
-  // own tick moved twice since #40 first landed: 15/416 originally, 30/431 in Round 1's finding 2
-  // (`evalEverySimMinutes` 1 -> 2, shifting when a draw is attempted), 483/884 after Round 1's
-  // density retune (finding 2's follow-up, the owner's "about three per five real minutes": the
-  // global gap and weight both went up, so the whole deck — the merchant included — draws later and
-  // less often; see `PACING.minGapSimMinutes` and `PACING.weightForCertainDraw` in
-  // `engine/pacing.ts`, and "the shape of the day" test below for what that costs some seeds
-  // entirely). Every other line, and every sheep transition above, is exactly what this day was
-  // before the engine existed.
+  // The farmer's two dawn lines are the event engine's own category action (#40), not the sheep's:
+  // he walks past to the market at dawn (tick 1333 to 1470). This day's card draw moved three times
+  // since #40 first landed: 15/416 originally, 30/431 in Round 1's finding 2 (`evalEverySimMinutes`
+  // 1 -> 2, shifting when a draw is attempted), then 483/884, a `merchantCaravan` draw, after Round
+  // 1's density retune (the owner's "about three per five real minutes": the global gap and weight
+  // both went up, so the whole deck draws later and less often). Round 2 fixed `warmupSimMinutes`
+  // to the owner's actual "no draws in a fresh world's first minute" (480 sim-minutes, not the 60
+  // Round 1 shipped by a comment error — see `engine/pacing.ts`); the merchant only draws while
+  // `timeOfDay in [day, dusk]` (before tick 936, `t < .52`), and the corrected warm-up now eats more
+  // than half of that window (tick 600 of 936), so this seed's draw lands on a different card
+  // entirely: `windfall` (a coins card, no `timeOfDay` limit) fires once at tick 1558 instead. No
+  // line here is the merchant's any more — see "the shape of the day" test below for how much
+  // rarer he is now on a single day, across a wider sample. Every other line, and every sheep
+  // transition above, is exactly what this day was before the engine existed.
   '165 bird lands',
   '225 bird leaves',
   '361 farmer true',
-  '483 merchant true',
   '596 bird lands',
   '666 bird leaves',
-  '884 merchant false',
   '1103 bird lands',
   '1170 bird leaves',
   '1226 farmer false',
@@ -198,8 +199,8 @@ describe('scripted sheep day', () => {
     expect(events).toEqual(EVENTS);
     expect(transitions).toEqual(EXPECTED);
     expect(state.sheep.map((q) => q.name)).toEqual(['Clover', 'Daisy', 'Biscuit', 'Pepper', 'Maple', 'Willow']);
-    expect(state.banks.wool).toBe(5); // the farmer's afternoon shearing, sold on the merchant's next visit
-    expect(state.banks.coins).toBe(0);
+    expect(state.banks.wool).toBe(5); // the farmer's afternoon shearing; nothing sells it this day
+    expect(state.banks.coins).toBe(12); // the `windfall` card's purse (tick 1558), not a sale
     // The shower is still on at midnight: the walk to the barn left mud, and there is no snow to print.
     expect(state.ground.prints).toEqual([]);
     expect(state.ground.mud.length).toBe(MUD_AT_DAY_END);
@@ -210,17 +211,19 @@ describe('scripted sheep day', () => {
   // its v4 view to the hash from before. It moved again in #60 for the schema only (save v6:
   // `chronicle`, empty since nothing here calls `tell`); the lists above still did not, and
   // test/chronicle.test.ts pins this day on its v5 view to the hash from before. It moved a third
-  // time in #40, and this one is not schema-only: the engine draws cards on this day (the
-  // merchant's cart, a stray cat, a fog morning, and DL's birthday — see the chronicle) and its
-  // own slice is on the state. The *sheep* list above did not move by a single line; the events
-  // list moved by four, all of them the engine's, and test/engine-parity.test.ts pins this day
-  // with the engine off, on its v6 view, to the hash from before #40.
+  // time in #40, and this one is not schema-only: the engine draws cards on this day (a windfall, a
+  // stray cat, a fog morning, and DL's birthday — see the chronicle) and its own slice is on the
+  // state. It moved a fourth time in Round 2 (#82): the warm-up fix (`engine/pacing.ts`) changes
+  // which card this day draws (`windfall`, not the merchant — see `EVENTS`'s own comment above), so
+  // the state, and the hash, differ from what Round 1 shipped. The *sheep* list above did not move
+  // by a single line either time; test/engine-parity.test.ts pins this day with the engine off, on
+  // its v6 view, to the hash from before #40.
   it('seed 71 twice gives the same day and the same hash', () => {
     const a = scriptedDay(71);
     const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('14c453a177ba4c24');
+    expect(hashState(a.state)).toBe('92d20524eb199051');
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "the sheep's 91 transitions at seed 71 are
@@ -237,7 +240,6 @@ describe('scripted sheep day', () => {
   });
 
   it('the shape of the day holds for other seeds: needs by day, rest by night, in the barn in rain', () => {
-    let seedsWithMerchant = 0;
     const seeds = [1, 2, 3, 4, 8, 10];
     for (const seed of seeds) {
       const { transitions, events, state } = scriptedDay(seed);
@@ -253,24 +255,36 @@ describe('scripted sheep day', () => {
       }
       if (events.some((e) => /rain true/.test(e))) expect(text, `seed ${seed}`).toMatch(/^\d+ \w+ toBarn/m);
       expect(events, `seed ${seed}`).toContain('361 farmer true');
-      // The merchant's arrival is a card draw now (#40), not a stopwatch: it lands on a different
-      // tick on every seed (or, since Round 1's density retune on #82, not at all on some of them —
-      // see below), so the shape to hold is "he came at all", not "he came at 451".
-      if (events.some((e) => /merchant true/.test(e))) seedsWithMerchant++;
       // Prints only ever lie on snowy ground, and the flock walking in from a shower leaves mud.
       if (state.weather.kind !== 'snow') expect(state.ground.prints, `seed ${seed}`).toEqual([]);
     }
-    // Before Round 1's retune (#82 finding 2, owner note), a full sim-day (three real minutes) drew
-    // often enough that the merchant showed up on every one of these six seeds. The retune cut the
-    // draw rate roughly in half to hit the ticket's "about three per five real minutes"; measured
-    // over a wider sample (60 seeds) that leaves him showing up on about half of days, not all of
-    // them (seed 3 here is the miss). That is a real change in the farm's economy — no visit, no
-    // chance to sell wool that day — worth the owner's or the world lane's own look, not something
-    // this fix hides: this asserts what is actually true now (most days, not every day) rather than
-    // silently loosening back to "he came at all".
-    expect(seedsWithMerchant, `merchant seen on ${seedsWithMerchant}/${seeds.length} seeds`).toBeGreaterThanOrEqual(
-      Math.ceil(seeds.length / 2),
-    );
+  });
+
+  // Round 1's retune cut the merchant's draw rate to hit the ticket's "about three [starts] per
+  // five real minutes," and pinned him showing up on at least half of six sample seeds (measured
+  // 5/6 by the Round 2 verifier). Round 2 fixes `warmupSimMinutes` to the owner's actual ask — a
+  // real fresh-world minute, 480 sim-minutes, not the 60 Round 1's own comment miscounted (see
+  // `engine/pacing.ts`) — and that is a much bigger cut for THIS card specifically: `merchantCaravan`
+  // only draws while `timeOfDay in [day, dusk]` (`t < .52`, tick 936 of 1,800), and the corrected
+  // warm-up now eats until tick 600, leaving him only 336 ticks (268.8 sim-minutes, well short of
+  // `quietStretchSimMinutes`) of eligible, unrelaxed-pacing window to land in. Measured directly
+  // (`tick`-driven, one sim-day each, no scripting): seeds 1-30 show him on **5 of 30** (seeds 16,
+  // 17, 21, 25, 28 — none of the six seeds above, which is exactly why this needs its own wider
+  // sample rather than reusing those six). That is a real, further narrowing of the farm's
+  // economy on top of Round 1's own finding — worth the owner's and the world lane's look, most of
+  // all towards the "the merchant comes when there is wool to sell" condition Round 1 already
+  // flagged as unimplemented (`packages/content/events/farm.json`, not this lane's to fix) — not
+  // something to hide behind a looser bar. The floor below is set under the measured 5, with margin
+  // to still catch a further halving (to ~2-3), not padded back up to what round 1 measured.
+  it('the merchant still shows up on a single day, just rarely, seeds 1-30', () => {
+    let seedsWithMerchant = 0;
+    const misses: number[] = [];
+    for (let seed = 1; seed <= 30; seed++) {
+      const { events } = scriptedDay(seed);
+      if (events.some((e) => /merchant true/.test(e))) seedsWithMerchant++;
+      else misses.push(seed);
+    }
+    expect(seedsWithMerchant, `merchant seen on ${seedsWithMerchant}/30 seeds (missed: ${misses.join(',')})`).toBeGreaterThanOrEqual(3);
   });
 });
 

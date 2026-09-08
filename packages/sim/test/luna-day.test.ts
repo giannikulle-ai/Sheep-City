@@ -20,12 +20,17 @@
 // test/ledger.test.ts pins this day on its v4 view to the hash from before. It moved again in #60
 // for the schema only (save v6: `chronicle`, empty since nothing here calls `tell`); the list
 // still did not, and test/chronicle.test.ts pins this day on its v5 view to the hash from before.
-// It moved a third time in #40, and that one is not schema-only: the engine directs this day and
-// draws six events on it (DL's birthday, the merchant's cart, lamb zoomies, a stray cat, a fog
-// morning, and shearing day — read them off `state.chronicle`). Her list below did not move by a
-// single line: none of those six writes to her, and `fetchLamb`, the one behaviour #40 added to her
-// chain, never runs on this day because `lostLamb` is not among them. test/engine-parity.test.ts
-// pins this same day with the engine off, on its v6 view, to the hash from before #40.
+// It moved a third time in #40, and that one is not schema-only: the engine directs this day. Round
+// 1 shipped drawing six events on it (DL's birthday, the merchant's cart, lamb zoomies, a stray
+// cat, a fog morning, and shearing day). It moved a fourth time in Round 2 (#82): fixing
+// `warmupSimMinutes` to the owner's actual "no draws in a fresh world's first minute" (480
+// sim-minutes, not the 60 Round 1's own comment miscounted by 8x — see `engine/pacing.ts`) leaves
+// this day only three: DL's birthday (an authored punctuation, not gated by the warm-up), a stray
+// cat (tick 833 to 1023), and the farmer's dawn market walk (a category action, also ungated) —
+// read them off `state.chronicle`. Her list below did not move by a single line either time: none
+// of those writes to her, and `fetchLamb`, the one behaviour #40 added to her chain, never runs on
+// this day because `lostLamb` is not among them. test/engine-parity.test.ts pins this same day
+// with the engine off, on its v6 view, to the hash from before #40.
 import { describe, expect, it } from 'vitest';
 import { phaseOf } from '../src/clock';
 import { hashState } from '../src/hash';
@@ -99,7 +104,7 @@ describe('scripted day', () => {
     const b = scriptedDay(11);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('67924c8998f41fbb');
+    expect(hashState(a.state)).toBe('d8a6b2d3de49a6c0');
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "her 28 transitions at seed 11 are unchanged

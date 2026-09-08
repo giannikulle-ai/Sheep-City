@@ -528,18 +528,20 @@ describe('parity: no deity intent moves the pin', () => {
   // them is ever set unless an intent lands, and the hash's canonical JSON drops an undefined key
   // the same as an absent one, so a day with no deity intent hashes exactly as it did before #43.
   // The pins below are the current (v7, events-included — #40) full-state hashes, the same ones
-  // luna-day.test.ts and sheep-day.test.ts carry for this exact seed and script: they moved twice
-  // since, for the chronicle schema bump and then for the event engine, not for anything
-  // deity-shaped. The engine runs on both days here, as it does in those two files.
+  // luna-day.test.ts and sheep-day.test.ts carry for this exact seed and script: they moved three
+  // times since, for the chronicle schema bump, then for the event engine, then again in Round 2
+  // (#82) when the `warmupSimMinutes` fix changed which cards these two days draw (see each file's
+  // own comment) — not for anything deity-shaped. The engine runs on both days here, as it does in
+  // those two files.
   it('luna-day.test.ts, seed 11: the end-of-day hash is unchanged', () => {
     let s = createInitialState(11);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('67924c8998f41fbb');
+    expect(hashState(s)).toBe('d8a6b2d3de49a6c0');
   });
 
   it('sheep-day.test.ts, seed 71: the end-of-day hash is unchanged', () => {
     let s = createInitialState(71);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('14c453a177ba4c24');
+    expect(hashState(s)).toBe('92d20524eb199051');
   });
 });

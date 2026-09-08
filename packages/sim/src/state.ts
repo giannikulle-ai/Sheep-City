@@ -4,6 +4,7 @@
 
 import { cloneChronicle, createChronicle, type Chronicle } from './chronicle/store';
 import { createClock, createSeason, type Clock, type Season } from './clock';
+import { cloneEvents, createEvents, type EventsState } from './engine/events';
 import { FLOWERS, inBarn, LFOOT, randomDir, randomFoot, SFOOT, type Point } from './geometry';
 import type { ActCmd, Intent } from './intents';
 import { cloneLedger, summarise, type Ledger } from './ledger/ledger';
@@ -20,7 +21,9 @@ import { createWeather, type Weather } from './weather';
  * `icon`, `iconUntilMs`); v4 (#33) adds `ground` (snow footprints, mud patches, `wasSnowy`) and the
  * per-walker stamp fields `lastStamp` and `stampSide` on each sheep and on Digital Luna; v5 (#39)
  * adds `ledger` (the district's numbers as the Ledger path last wrote them) and `lastLedgerAt`; v6
- * (#60) adds `chronicle` (the whole world's log; see chronicle/store.ts).
+ * (#60) adds `chronicle` (the whole world's log; see chronicle/store.ts); v7 (#40) adds `events`
+ * (the event engine's own slice: what is running, what is on cooldown, its own generator; see
+ * engine/events.ts) and the optional `lost` flag on a `Lamb`.
  *
  * PR #43 (deity intents) adds `actCmd` to `Sheep` and `Luna`, and `holdUntilMs` / `foggy` to
  * `Weather`, all as optional fields with no stored default: absent means what it always meant
@@ -28,7 +31,7 @@ import { createWeather, type Weather } from './weather';
  * this pattern for a field that needs a real default; it works here only because "absent" was
  * already the correct old behaviour.
  */
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 /** Stable actor ids. Sheep are `sheep-<n>`; Digital Luna is `luna`. */
 export type ActorId = string;
@@ -46,6 +49,13 @@ export interface Lamb extends Point {
   dir: Dir;
   bornMs: number;
   grown: boolean;
+  /**
+   * Off its mother's trail: the `lostLamb` card (engine/hooks.ts) walked it out towards the gate,
+   * and the lamb-trailing loop in behaviours/sheep.ts leaves it where it is until Digital Luna
+   * brings it back. Optional and absent by default (PR #40), so a lamb no card has ever touched
+   * hashes and saves exactly as it did before the engine existed.
+   */
+  lost?: boolean;
 }
 
 /** What `stampGround` keeps on a walker: the foot point of its last stamp and which side the next print goes on. */
@@ -258,6 +268,8 @@ export interface SimState {
   lastLedgerAt: number;
   /** The whole world's log: append-only, and any system's only way in is `tell` (chronicle/store.ts). */
   chronicle: Chronicle;
+  /** The event engine's own slice of the world: see engine/events.ts. */
+  events: EventsState;
 }
 
 export const NAMES = ['Clover', 'Daisy', 'Biscuit', 'Pepper', 'Maple', 'Willow', 'Poppy', 'Hazel', 'Juniper'] as const;
@@ -266,6 +278,12 @@ export const COLORS = ['#3a7bd5', '#e0a52c', '#2fa07a', '#7c4dbf', '#e0602c', '#
 export interface InitialStateOptions {
   /** How many sheep to spawn. Default `RULES.flock.initial` (the prototype's 5). */
   sheep?: number;
+  /**
+   * Whether the event engine directs this world. Default true. False gives the pre-engine world
+   * exactly — no draws, no authored triggers, no scheduled category actions, and the merchant back
+   * on his fixed timer — which is what the parity pins in test/engine-parity.test.ts measure.
+   */
+  events?: boolean;
 }
 
 /** The prototype's `makeTufts`, drawing from `rng` where it drew from Math.random. */
@@ -411,6 +429,7 @@ export function createInitialState(seed: number, options: InitialStateOptions = 
     ledger: null as unknown as Ledger,
     lastLedgerAt: 0,
     chronicle: createChronicle(),
+    events: createEvents(seed, 0, options.events ?? true),
   };
   state.ledger = summarise(state);
   return state;
@@ -460,6 +479,7 @@ export function cloneState(state: SimState): SimState {
     pendingIntents: state.pendingIntents.slice(),
     ledger: cloneLedger(state.ledger),
     chronicle: cloneChronicle(state.chronicle),
+    events: cloneEvents(state.events),
   };
 }
 

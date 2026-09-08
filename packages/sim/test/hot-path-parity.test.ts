@@ -16,6 +16,14 @@
 // pins the same six worlds on their v5 view (`chronicle` taken off, version put back to 5) to the
 // hashes from before #60.
 //
+// They moved a fourth time in #40: the state now carries `events` and is v7. These six worlds are
+// built with the engine off (`events: false`) so this file keeps meaning what it says — with the
+// engine directing, a card can move a sheep or bring the farmer in, and a hash here would move for
+// that rather than for a parity break. So the values below are the same worlds as before with one
+// more (inert) field on them and a new version number; test/engine-parity.test.ts hashes their v6
+// view — `events` stripped, version back to 6 — to the values this file carried before #40, which
+// is what proves the tick itself did not move. The engine-on worlds are pinned there too.
+//
 // If a hash here moves, some sheep, DL, or NPC took a different path or drew a different die.
 // That is a parity break, not a number to update: find the behaviour change first, and if it is a
 // deliberate new draw, say so in the PR.
@@ -29,18 +37,18 @@ import { advance } from '../src/tick';
 const TICKS = 6000;
 
 const BEFORE: readonly { seed: number; sheep: number; hash: string }[] = [
-  { seed: 6, sheep: 5, hash: 'ec16cd89f0d97235' },
-  { seed: 6, sheep: 40, hash: '435da071f10e5017' },
-  { seed: 7, sheep: 5, hash: '092b1cb807636e88' },
-  { seed: 7, sheep: 40, hash: '50bccaa1fd5ce924' },
-  { seed: 11, sheep: 5, hash: 'a70633600f30f95c' },
-  { seed: 11, sheep: 40, hash: 'a68a43c93bd34c39' },
+  { seed: 6, sheep: 5, hash: '0791cd39c7e2aab8' },
+  { seed: 6, sheep: 40, hash: '205b7d4de17aaf10' },
+  { seed: 7, sheep: 5, hash: '0ed2243395f4d7e2' },
+  { seed: 7, sheep: 40, hash: 'bc20b20c5bffac4b' },
+  { seed: 11, sheep: 5, hash: '0e4a4606aab31838' },
+  { seed: 11, sheep: 40, hash: '391c982b6e6dec4f' },
 ];
 
 describe('hot path parity (#27)', () => {
   for (const { seed, sheep, hash } of BEFORE) {
     it(`seed ${seed}, ${sheep} sheep, ${TICKS} ticks hashes as pinned`, () => {
-      const s = advance(createInitialState(seed, { sheep }), TICKS);
+      const s = advance(createInitialState(seed, { sheep, events: false }), TICKS);
       expect(s.clock.tick).toBe(TICKS);
       expect(hashState(s)).toBe(hash);
     });

@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { NPC_SIZE, SFOOT, SPOT } from '../src/geometry';
 import { applyIntent } from '../src/intents';
-import { NPC_FOOT, buyUpgrades, makeNpc, npcStep, summonFarmer, summonMerchant } from '../src/npcs';
+import { NPC_FOOT, buyUpgrades, makeNpc, npcStep, summonFarmer, summonMerchant, tickNpcs } from '../src/npcs';
 import { RULES, TICK_MS, TICK_SEC } from '../src/rules';
 import { createInitialState, type Npc, type SimState } from '../src/state';
 import { tickInPlace } from '../src/tick';
@@ -12,6 +12,12 @@ import { settle } from './sheep-helpers';
 
 const N = RULES.npc;
 
+/**
+ * A world for the NPC tests: the engine off (#40) on top of what `world` already pins down. These
+ * tests summon the farmer and the merchant themselves and count what follows; a card drawing one of
+ * them in mid-test would be noise. The engine's own hold on the two of them is tested in
+ * test/engine-events.test.ts and test/engine-category.test.ts.
+ */
 function calm(options: Parameters<typeof world>[0] = {}): SimState {
   const s = settle(world(options));
   s.luna.x = 300;
@@ -25,7 +31,10 @@ function footOf(n: Npc) {
 
 describe('schedules', () => {
   it('the farmer comes at clock .06 and .38, once each per day; the merchant 45 s after reset', () => {
-    const s = createInitialState(7);
+    // The engine off (#40): this pins the prototype's own schedule. With the engine directing, the
+    // merchant arrives on a `merchantCaravan` draw instead of his 45-second timer, and the farmer
+    // has a third visit — the dawn market walk, a category action — on top of these two.
+    const s = createInitialState(7, { events: false });
     s.weather = { ...s.weather, mode: 'manual' };
     const farmerAt: number[] = [];
     const merchantAt: number[] = [];
@@ -59,6 +68,65 @@ describe('schedules', () => {
     s.npcs.farmer = null;
     run(s, 50);
     expect(s.npcs.farmer).toBeNull();
+  });
+
+  // Round 1 verifier finding 7 (#82): a card can put the farmer on the field off-schedule
+  // (`shearingDay`'s own `summonFarmer` hook). With the engine on, `tickNpcs` must not read that
+  // presence as "the scheduled slot was visited" and book its key anyway — he would sleep through a
+  // slot he never actually walked in for. With the engine off there is no card in the room, so the
+  // prototype's own two-visit collision (the test above this describe, "is consumed unseen... odd
+  // but kept") is untouched.
+  it('a card-summoned farmer does not let a scheduled slot book its key while he is busy elsewhere (engine on)', () => {
+    const key = (k: number, s: SimState) => k * 1000 + s.clock.dayCount;
+    // A card puts him on the field first, exactly as `shearingDay`'s hook does.
+    const s = calm({ t: 0.06, events: true });
+    summonFarmer(s);
+    const summoned = s.npcs.farmer;
+    expect(summoned).not.toBeNull();
+
+    // The .06 scheduled slot arrives while he is already busy with the card's business: no re-summon
+    // (he is the same npc), and the slot's key is left unbooked rather than marked visited.
+    tickNpcs(s);
+    expect(s.npcs.farmer).toBe(summoned);
+    expect(s.npcs.lastVisitKey).not.toBe(key(6, s));
+
+    // He is freed (the card's own visit ends) while the .06 window is still open: the very next
+    // look books the key and actually summons him for it.
+    s.npcs.farmer = null;
+    tickNpcs(s);
+    expect(s.npcs.farmer).not.toBeNull();
+    expect(s.npcs.lastVisitKey).toBe(key(6, s));
+  });
+
+  it('if the window closes before he is free, the slot is simply missed, not swallowed-and-marked', () => {
+    const key = (k: number, s: SimState) => k * 1000 + s.clock.dayCount;
+    const s = calm({ t: 0.06, events: true });
+    summonFarmer(s);
+    tickNpcs(s);
+    expect(s.npcs.lastVisitKey).not.toBe(key(6, s));
+
+    s.clock = { ...s.clock, t: 0.08 }; // day fraction moves past the .06 window; still busy
+    tickNpcs(s);
+    expect(s.npcs.lastVisitKey).not.toBe(key(6, s)); // never booked — a real miss, not a false "visited"
+  });
+
+  // The concrete case the finding was found on: shearingDay's overrun on seed 3, day 2 spans the
+  // .38 scheduled slot, and the fix leaves it unbooked rather than reading his presence there as a
+  // visit that never happened as its own visit.
+  it('reproduces on seed 3, day 2: shearingDay’s overrun spans the .38 slot, and it is left unbooked', () => {
+    let s = createInitialState(3);
+    let lastKey = s.npcs.lastVisitKey;
+    let sawSlot38DayTwo = false;
+    for (let i = 0; i < 1800 * 3; i++) {
+      s = tickInPlace(s);
+      if (s.clock.dayCount === 2 && s.npcs.lastVisitKey !== lastKey) {
+        lastKey = s.npcs.lastVisitKey;
+        if (lastKey === 38 * 1000 + 2) sawSlot38DayTwo = true;
+      }
+    }
+    expect(sawSlot38DayTwo).toBe(false); // the .38 key for day 2 is never booked, not booked-unvisited
+    // The rest of the schedule keeps working: day 3's own .06 slot books and summons normally.
+    expect(s.npcs.lastVisitKey).toBe(6 * 1000 + 3);
   });
 });
 

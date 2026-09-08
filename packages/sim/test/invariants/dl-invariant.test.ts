@@ -52,7 +52,7 @@ import { describe, expect, it } from 'vitest';
 import { LUNA_ID } from '../../src/actors';
 import { advanceClock, advanceSeason, phaseOf, SEASONS } from '../../src/clock';
 import { tickSheep } from '../../src/behaviours/sheep';
-import { ACT_VERBS, applyIntent, DEITY_WEATHER_KINDS, FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type Intent } from '../../src/intents';
+import { ACT_VERBS, applyIntent, AUTHORED_ACTIONS, DEITY_WEATHER_KINDS, FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type Intent } from '../../src/intents';
 import { createChronicle } from '../../src/chronicle/store';
 import { advanceLedger } from '../../src/ledger/advance';
 import { summarise } from '../../src/ledger/ledger';
@@ -63,18 +63,25 @@ import { cloneState, createInitialState, type Luna, type SimState } from '../../
 import { step } from '../../src/step';
 import { tickWeather } from '../../src/weather';
 import { HARM_CHECKS, StuckManualGuard, harmIn } from './dl-harm';
+import { probeEngine } from './engine-probe';
 
 const TICKS_PER_DAY = 1800;
 const DAY_MS = RULES.clock.periodSec * 1000;
 
 /**
- * Cards and the event engine (#40) do not exist yet, and neither does a crow in the sim: the crow
- * brief (docs/content/CROW_BRIEF.md) is art only so far, and "behaviour is the sim lane's ticket"
- * per that doc, still open. This is the plug point for both: each entry is called once per tick
- * with the live state, so a new event or a landed crow that can touch Digital Luna gets fuzzed here
- * the moment it exists, with no other change to this file. Empty today, on purpose.
+ * The plug point for anything new that could reach Digital Luna: each entry is called once per tick
+ * with the live state, right before the harm predicate is checked, so it gets fuzzed on all fifty
+ * seeds with no other change to this file.
+ *
+ * The event engine (#40) registered `probeEngine` (test/invariants/engine-probe.ts): every 300
+ * ticks it forces the `lostLamb` card (the one that walks her out to fetch a lamb), `shearingDay`
+ * (which summons the farmer, whose pat is one of the two non-intent writes to her in the package),
+ * and `fogMorning`, and works the owner's `authored` intent both ways.
+ *
+ * A crow in the sim is still to come: the crow brief (docs/content/CROW_BRIEF.md) is art only so
+ * far, and "behaviour is the sim lane's ticket" per that doc, still open. Its entry goes here.
  */
-const EVENT_ENGINE_HOOKS: ReadonlyArray<(s: SimState) => void> = [];
+const EVENT_ENGINE_HOOKS: ReadonlyArray<(s: SimState) => void> = [probeEngine];
 
 /**
  * Every intent type the sim accepts (src/intents.ts), with enough variety in the enum-shaped ones
@@ -110,6 +117,9 @@ function scriptedIntents(state: SimState): Intent[] {
   // `state.weather`; `act` stages a command on one named actor — Digital Luna included, by her own
   // id — for every verb, `call` (the only one that carries a point) aimed both at her and a sheep.
   for (const kind of DEITY_WEATHER_KINDS) list.push({ type: 'weather', kind, holdSimMinutes: 5 });
+  // The owner's hand on an authored event (#40). Not on her command surface (`mayTouchLuna` says
+  // no), so the static guard below holds both actions to writing nothing of hers at all.
+  for (const action of AUTHORED_ACTIONS) list.push({ type: 'authored', id: 'dlBirthday', action });
   for (const verb of ACT_VERBS) {
     if (verb === 'call') {
       list.push({ type: 'act', target: LUNA_ID, verb: 'call', x: state.luna.x + 20, y: state.luna.y + 10 });

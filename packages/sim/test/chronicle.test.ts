@@ -18,15 +18,23 @@ import { advance } from '../src/tick';
 
 const DAY = 180_000; // RULES.clock.periodSec (180s) in ms, the default day length these worlds use
 
-/** The state as a v5 build would hash it: the ledger snapshot present, no chronicle, version 5. */
+/** The state as a v5 build would hash it: the ledger snapshot present, no chronicle, no events, version 5. */
 function v5View(s: SimState): Record<string, unknown> {
-  return { ...s, version: 5, chronicle: undefined };
+  return { ...s, version: 5, chronicle: undefined, events: undefined };
+}
+
+/** A v5-comparable world: the engine off (#40), so the actors run exactly the tick a v5 build ran. */
+function preEngine(seed: number, sheep?: number): SimState {
+  return createInitialState(seed, sheep === undefined ? { events: false } : { sheep, events: false });
 }
 
 describe('the actor tick is untouched (#60 is a new path)', () => {
   // The pins the trunk carried before #60, from test/hot-path-parity.test.ts, test/luna-day.test.ts,
   // and test/sheep-day.test.ts, before `chronicle` was added and the version moved to 6. On the v5
-  // view of the same six worlds and two scripted days they hold as they were.
+  // view of the same six worlds and two scripted days they hold as they were. (`v5View` also strips
+  // `events`, added in #40, and the worlds are built with the engine off: a v5 build had no engine,
+  // and with one directing these are different worlds, not differently-shaped ones —
+  // test/engine-parity.test.ts pins that.)
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
     { seed: 6, sheep: 5, hash: 'c983956cb0872c74' },
     { seed: 6, sheep: 40, hash: 'f836d10c0aed5264' },
@@ -37,14 +45,14 @@ describe('the actor tick is untouched (#60 is a new path)', () => {
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #60 on the v5 view`, () => {
-      expect(hashState(v5View(advance(createInitialState(seed, { sheep }), 6000)))).toBe(hash);
+      expect(hashState(v5View(advance(preEngine(seed, sheep), 6000)))).toBe(hash);
     });
   }
   it("Digital Luna's scripted day (seed 11, 1,800 ticks) hashes as before #60 on the v5 view", () => {
-    expect(hashState(v5View(advance(createInitialState(11), 1800)))).toBe('067877d6ea96f42c');
+    expect(hashState(v5View(advance(preEngine(11), 1800)))).toBe('067877d6ea96f42c');
   });
   it("the sheep's scripted day (seed 71, 1,800 ticks) hashes as before #60 on the v5 view", () => {
-    expect(hashState(v5View(advance(createInitialState(71), 1800)))).toBe('779eafbf4da9aa0d');
+    expect(hashState(v5View(advance(preEngine(71), 1800)))).toBe('779eafbf4da9aa0d');
   });
 });
 
@@ -77,7 +85,9 @@ describe('the store is append-only', () => {
   });
 
   it('cloneState carries the chronicle forward as a new array of the same, frozen entries: a tick never touches the input', () => {
-    const s = createInitialState(3);
+    // The engine off, so the only entry in this world is the one told below: with it on, a tick
+    // may tell one of its own (#40) and the counts below would be about the engine, not the clone.
+    const s = preEngine(3);
     tell(s, { atMs: 0, district: 'farm', line: 'a', picture: 'p', source: 'authored', actors: ['sheep-0'], facts: { wool: 1 } });
     const before = s.chronicle.entries.length;
     const after = advance(s, 10);
@@ -123,10 +133,12 @@ describe('the store is append-only', () => {
       return timings[Math.floor(timings.length / 2)]!;
     };
 
-    const emptyMs = medianTickMs(() => createInitialState(15, { sheep: 40 }));
+    // Both worlds have the engine off (#40): this measures what cloning a chronicle costs a tick,
+    // and an event firing inside a timed tick is noise on both sides of the comparison.
+    const emptyMs = medianTickMs(() => preEngine(15, 40));
 
     const withHistory = (): SimState => {
-      const s = createInitialState(16, { sheep: 40 });
+      const s = preEngine(16, 40);
       for (let i = 0; i < 40_000; i++) {
         tell(s, { atMs: i, district: 'farm', line: 'x', picture: 'p', source: 'ledger', facts: { wool: 40 + (i % 5) } });
       }
@@ -308,7 +320,9 @@ describe('tellLedgerDiff', () => {
   });
 
   it('catchUp tells its diff onto the carried-over chronicle for a ledger-resolution gap, and not for a same-day one', () => {
-    const s = createInitialState(11);
+    // The engine off: this is about what `catchUp` tells, and a card firing during the actor
+    // remainder of the gap would add entries of its own to both sides of the comparison.
+    const s = preEngine(11);
     tell(s, { atMs: 0, district: 'farm', line: 'the world began', picture: 'p', source: 'authored', hint: 0.5 });
     const short = catchUp(s, DAY - 1000);
     expect(short.mode).toBe('actors');

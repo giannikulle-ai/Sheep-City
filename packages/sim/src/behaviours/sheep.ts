@@ -13,6 +13,7 @@
 
 import { bubble, nearestTuft } from '../actors';
 import { phaseOf } from '../clock';
+import { growWool } from '../engine/category';
 import { SFOOT, SPOT, randomFoot, type Point } from '../geometry';
 import { groundSnowy, stampGround } from '../ground';
 import { clampField, clampMoverTarget, stepToward } from '../movement';
@@ -437,13 +438,11 @@ export function tickSheep(s: SimState): void {
   // prototype's `for (const s of sheep)` reached it in the same frame.
   for (let i = 0; i < s.sheep.length; i++) {
     const sheep = s.sheep[i] as Sheep;
-    // Fleece grows over woolGrowSec; a pending shear completes and banks the wool.
-    sheep.wool = Math.min(1, sheep.wool + dt / RULES.woolGrowSec);
-    if (sheep.shearAtMs !== null && ctx.now > sheep.shearAtMs) {
-      sheep.shearAtMs = null;
-      sheep.wool = S.shornWool;
-      s.banks.wool++;
-    }
+    // Fleece growth and the pending shear are a category action now — a habit of the type, not of
+    // one sheep (engine/category.ts, `sheepGrowWool`). Called here, in the place and with the
+    // arguments the inline code had, so the arithmetic and the order are untouched and the world
+    // hashes exactly as it did before the move.
+    growWool(s, sheep, dt, ctx.now);
     ctx.fx = sheep.x + SFOOT[0];
     ctx.fy = sheep.y + SFOOT[1];
     SHEEP_BEHAVIOURS.step(ctx, sheep);
@@ -454,10 +453,16 @@ export function tickSheep(s: SimState): void {
     const outside = !sheep.inBarn;
     sheep.wet = clamp01(sheep.wet + (rain && outside ? dt / 6 : -dt / 45));
     sheep.snow = clamp01(sheep.snow + (snow && outside && sheep.tx === null ? dt / 10 : -(rain ? dt / 2 : dt / 25)));
-    // Lambs trail the mother in a line, each easing towards the one before.
+    // Lambs trail the mother in a line, each easing towards the one before. A lamb the `lostLamb`
+    // card walked off (`lost`, PR #40) is skipped whole: it keeps its own position instead of being
+    // sprung back to the trail, and it does not become the anchor for the lambs behind it either —
+    // they close up and trail the one in front of it, rather than following the runaway out of the
+    // field. Nothing changes for a flock no card has touched: the flag is absent, the branch is
+    // never taken, and the arithmetic is what it was.
     let px = sheep.x - sheep.dir * 18;
     let py = sheep.y + 8;
     for (const l of sheep.lambs) {
+      if (l.lost) continue;
       l.x += (px - l.x) * S.lambFollowRate * dt;
       l.y += (py - l.y) * S.lambFollowRate * dt;
       l.dir = sheep.dir;

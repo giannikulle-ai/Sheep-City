@@ -1,10 +1,12 @@
 // One fixed step of the world, in the prototype's order: clock, weather, grass and fleece
 // bookkeeping, sheep, Digital Luna, the ground stamps, then `tickLife` (the NPCs, the rabbit, the
-// butterflies, the bird).
+// butterflies, the bird). The event engine (#40) is one call between the weather and the sheep;
+// with the engine off it returns at once and the tick is bitwise the prototype's port.
 
 import { fetch as fetchStick, tickLuna } from './behaviours/luna';
 import { tickSheep } from './behaviours/sheep';
 import { advanceClock, advanceSeason } from './clock';
+import { tickEngine } from './engine/engine';
 import { groundSnowy, tickGround } from './ground';
 import { applyDueIntents } from './intents';
 import { tickBird, tickButterflies, tickRabbit } from './life';
@@ -29,6 +31,11 @@ export function tickInPlace(s: SimState): SimState {
   s.season = advanceSeason(s.season, TICK_MS);
   s.weather = tickWeather(s.weather, s.clock, s.season, s.rng);
   for (const t of s.tufts) t.level = Math.min(1, t.level + TICK_SEC * RULES.tuftRegrowPerSec);
+
+  // The event engine looks at the world after the weather and before the actors, so a card that
+  // starts this tick is already true for the sheep and for Digital Luna this tick. It never writes
+  // to her: what it sets is a flag or a marker her own chain reads (see engine/hooks.ts).
+  tickEngine(s);
 
   // Fleece growth and pending shears are the first lines of the prototype's per-sheep loop and
   // live in `tickSheep`, so a lamb that grows up mid-loop gets its first frame like every other.

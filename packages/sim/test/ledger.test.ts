@@ -25,9 +25,14 @@ import { buildFixtureState } from './save-fixture.test';
 
 const DAY = RULES.clock.periodSec * 1000;
 
-/** The state as a v4 build would hash it: no ledger snapshot, no chronicle, version 4. */
+/** The state as a v4 build would hash it: no ledger snapshot, no chronicle, no events, version 4. */
 function v4View(s: SimState): Record<string, unknown> {
-  return { ...s, version: 4, ledger: undefined, lastLedgerAt: undefined, chronicle: undefined };
+  return { ...s, version: 4, ledger: undefined, lastLedgerAt: undefined, chronicle: undefined, events: undefined };
+}
+
+/** A v4-comparable world: the engine off, so the actors run exactly the tick a v4 build ran. */
+function preEngine(seed: number, sheep?: number): SimState {
+  return createInitialState(seed, sheep === undefined ? { events: false } : { sheep, events: false });
 }
 
 /** A fresh ledger with the weather pinned (manual mode never rolls), so a rule can be read alone. */
@@ -42,7 +47,10 @@ describe('the actor tick is untouched (#39 is a new path)', () => {
   // The pins the trunk carried before #39, from test/hot-path-parity.test.ts, test/luna-day.test.ts,
   // and test/sheep-day.test.ts. They moved there only because the state now carries `ledger` and
   // `lastLedgerAt` and the version is 5; on the v4 view of the same worlds they hold as they were.
-  // (`v4View` also strips `chronicle`, added in #60: a v4 build never had one either.)
+  // (`v4View` also strips `chronicle`, added in #60, and `events`, added in #40: a v4 build never
+  // had either. The worlds are built with the engine off — `events: false`, see `preEngine` — since
+  // a v4 build had no engine to run: with it on, the world these hashes describe is a different
+  // world, not a differently-shaped one. test/engine-parity.test.ts is where that is pinned.)
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
     { seed: 6, sheep: 5, hash: 'e85cbb53bef79387' },
     { seed: 6, sheep: 40, hash: '681d0cbae2eace49' },
@@ -53,14 +61,14 @@ describe('the actor tick is untouched (#39 is a new path)', () => {
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #39 on the v4 view`, () => {
-      expect(hashState(v4View(advance(createInitialState(seed, { sheep }), 6000)))).toBe(hash);
+      expect(hashState(v4View(advance(preEngine(seed, sheep), 6000)))).toBe(hash);
     });
   }
   it("Digital Luna's scripted day (seed 11, 1,800 ticks) hashes as before #39 on the v4 view", () => {
-    expect(hashState(v4View(advance(createInitialState(11), 1800)))).toBe('22fec366499b4508');
+    expect(hashState(v4View(advance(preEngine(11), 1800)))).toBe('22fec366499b4508');
   });
   it("the sheep's scripted day (seed 71, 1,800 ticks) hashes as before #39 on the v4 view", () => {
-    expect(hashState(v4View(advance(createInitialState(71), 1800)))).toBe('14d17f24e11a589a');
+    expect(hashState(v4View(advance(preEngine(71), 1800)))).toBe('14d17f24e11a589a');
   });
   it('the snapshot on the state is the one the Ledger path wrote; the tick leaves it alone', () => {
     const a = createInitialState(7);
@@ -106,7 +114,10 @@ describe('summarise', () => {
   });
 
   it('folds a merchant mid-visit into his next trade time', () => {
-    const s = advance(createInitialState(7), 470); // 47 s: the merchant is on his way in
+    // The engine off (#40), so his arrival is the prototype's fixed 45 s timer and the two
+    // sample points below land where they always did; with the engine on the `merchantCaravan`
+    // card owns his arrival and it is a draw, not a stopwatch.
+    const s = advance(preEngine(7), 470); // 47 s: the merchant is on his way in
     expect(s.npcs.merchant?.job).toBe('enter');
     expect(summarise(s).merchantAtMs).toBe(s.clock.nowMs);
     const t = advance(s, 100); // 57 s: trading

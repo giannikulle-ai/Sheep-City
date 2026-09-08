@@ -75,7 +75,10 @@ export function catchUp(state: SimState, awayMs: number, options: CatchUpOptions
   const actorMs = gap - ledgerMs;
   const rng = cloneRng(state.rng);
   const ledger = advanceLedger(before, ledgerMs, rng);
-  let s = respawn(ledger, state.chronicle, nextU32(rng));
+  // The engine slice crosses the gap with the chronicle: the Ledger ran the whole days with no
+  // actors and no events, and the respawned world picks the engine up where the district left it
+  // (cooldowns intact, anything that was running ended by its first look at the world).
+  let s = respawn(ledger, state.chronicle, nextU32(rng), state.events);
   s.pendingIntents = state.pendingIntents.slice();
   s = step(s, [], actorMs);
   s = { ...s, ledger: summarise(s), lastLedgerAt: s.clock.nowMs };

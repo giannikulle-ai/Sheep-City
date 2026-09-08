@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { IDLE_PLAYS, LUNA_BEHAVIOURS, lunaContext } from '../src/behaviours/luna';
 import { LUNA_ID } from '../src/actors';
+import { FETCH_LAMB_PRIORITY } from '../src/engine/pacing';
 import { SPOT } from '../src/geometry';
 import { hashState } from '../src/hash';
 import { applyIntent, type Intent } from '../src/intents';
@@ -30,6 +31,14 @@ describe('the registry holds DL in the owner’s order', () => {
     // `act` (#43, the deity direct action) is a chain of its own after `move`: it adds a new
     // reaction gated on being free (not held, ridden, mounted, fetching, or in a busy routine); it
     // does not reorder any of the owner's chains above.
+    // `fetchLamb` (#40, the `lostLamb` card's own half of the work) is one new entry in the
+    // `routine` chain, between the rain shepherd and bedtime: a lamb out at dusk outranks a night
+    // in, and a whole flock in the rain outranks one lamb. The owner decided "fetch wins" on
+    // 2026-09-08 (Round 1 verifier finding 1) — see `FETCH_LAMB_PRIORITY`'s comment in
+    // `engine/pacing.ts`; this pin reads its priority from that constant so a future change of
+    // heart is a one-number change there (a move below `bedtime`, 50, would also reorder this list
+    // and need its own edit here). Nothing else moved.
+    expect(LUNA_BEHAVIOURS.get('fetchLamb')?.priority).toBe(FETCH_LAMB_PRIORITY);
     expect(LUNA_BEHAVIOURS.chains()).toEqual(['riding', 'fetch', 'command', 'routine', 'move', 'act']);
     expect(LUNA_BEHAVIOURS.behaviours('riding').map((b) => b.id)).toEqual(['riding']);
     expect(LUNA_BEHAVIOURS.get('riding')?.exclusive).toBeFalsy();
@@ -40,6 +49,7 @@ describe('the registry holds DL in the owner’s order', () => {
       'tiltRecover',
       'pantRest',
       'rainShepherd',
+      'fetchLamb',
       'bedtime',
       'hotPant',
       'idlePlay',

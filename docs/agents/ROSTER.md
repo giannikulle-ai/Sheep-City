@@ -38,7 +38,8 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 ## Owner's operating rules, 2026-09-02 22:30 UTC
 - Foreman check-ins every four hours, six a day: 8pm, 12am, 4am, 8am, 12pm, 4pm Central (01, 05, 09, 13, 17, 21 UTC). PR events still wake the Foreman in between.
 - The Fable weekly window is spent until Monday 11:00 Central. New workers and Verifiers run on Opus (claude-opus-5) until then, and every PR from an Opus worker gets a Verifier pass whatever its gate. "We better be watching closely."
-- The two Fable workers already running (#39 Ledger, #20 jump-to) finish on their own; they are not restarted on credits if they stall.
+- The two Fable workers already running (#39 Ledger, #20 jump-to) finish on their own; they are not restarted on credits if they stall. (Both landed 23:05 UTC.)
+- 2026-09-02 23:15 UTC: the owner gave the event-layer direction; #40 was stopped and is rewritten; nothing runs until the owner reads the plan PR. The check-in routine is disabled until then.
 
 ## Phase 0 ticket order
 #2 scaffold (landed) → #4 clock/RNG (landed) → #5 behaviour registry (both parts landed) and #8 save v1 (landed)
@@ -51,14 +52,11 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 ## Phase 0 exit
 Passed 2026-09-02 21:22 UTC: the owner merged PR #34 (real sim in the app at v31 parity) after the Verifier's approval; that merge is the pin. PR #32 followed; the owner merged the tile swap (PR #50) at 21:37 and https://sheep-city.sheepcliff.com serves the app. Remaining tail: #33 small life (landed as PR #54), #20 jump-to values (active).
 
-## Phase 1 ticket order
-Landed: #41 world event deck (PR #52), #47 art crows (PR #53, pinned). Running: #39 sim Ledger. Queued client: #55 (wall-clock poll in the tray-verbs e2e) after #20.
-Sim order: #39 sim Ledger (landed as PR #57), #40 sim Director (running on Opus), #45 sim social behaviours, #43 sim deity intents (one or two sim workers at a time; the save version bump is shared, so the second merges trunk before its PR).
-After #39 and #40: #42 client storybook (owner pin), #48 sim crows.
-After #43: #44 client deity powers UX (owner pin).
-After #45: #46 art social frames (owner pin).
-After #40, #41, #42: #49 qa event coverage.
-Cap: no more than three needs-owner-pin PRs open at once (#38, #47, then #46, #42, #44 in turn).
+## Phase 1 ticket order (after the plan rewrite, 2026-09-02)
+Landed: #41 world event deck (PR #52, cards v1), #47 art crows (PR #53, pinned), #39 sim Ledger (PR #57), #33 small life (PR #54), #20 (PR #56).
+One sim worker at a time, in this order: cards v2 schema (world, new ticket) -> chronicle and `tell` (sim, new) -> #40 event engine (sim, rewritten) -> DL invariant test (sim, new) -> #45 social graph v1 (sim, rewritten) -> #43 deity intents (sim) -> #42 storybook (client, rewritten, owner pin) -> #44 powers UX (client, owner pin) -> #48 crows on the engine (sim) -> #46 social frames (art, owner pin) -> map design document (client and sim, new, owner pin) -> disposition of flowerbed, hay2, scarecrow (sim, new) -> #49 qa coverage against the chronicle -> Phase 2.
+Client housekeeping when the lane is idle: #55.
+Cap: no more than three needs-owner-pin PRs open at once.
 
 ## Health note 2026-09-02 20:50 UTC
 The usage cap lifted at 20:20 UTC. All three stalled sessions resumed from a scheduled poke with their context intact and opened PRs #31, #32, #34 within twenty minutes; no work was lost. The cap cost about an hour of wall time. Rule kept from it: workers push early, and the Foreman treats a session over three hours with no push as a health signal.

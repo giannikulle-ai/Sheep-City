@@ -1,11 +1,35 @@
-// The draw (#40): what the engine is allowed to start, how often, and how the pacing relaxes when
-// the world has been quiet. The rules are pinned against a stub deck, where one card with no
-// conditions and a known weight says exactly what the engine decided; the run-level tests at the
-// bottom use the shipped fifteen.
+// The draw (#101, was #40): what the engine is allowed to start, how often, and — new in #101 —
+// which size of thing may start while nobody is watching. The rules are pinned against a stub deck,
+// where one card with no conditions and a known weight says exactly what the engine decided; the
+// run-level measurements over the shipped deck live in `engine-pace.test.ts`.
+//
+// Everything the engine is held to is now stated in farm days and farm hours (the owner's decision,
+// 2026-09-09, plan decision 16). The real-minute framing this file used to carry — "about three
+// moments per five real minutes", the five-real-minute population bar — is withdrawn with decision
+// 11 and decision 14, and the block that measured it is gone rather than quietly rescaled; see the
+// note at the bottom of this file and `engine-pace.test.ts` for what replaced it.
 import { describe, expect, it } from 'vitest';
-import { drawAllowed, eligibleCards, endEvent, evaluate, liveWeight, runningMoments, startEvent } from '../src/engine/engine';
+import { drawAllowed, eligibleCards, endEvent, evaluate, lastDrawOfSize, liveWeight, pacingNow, runningMoments, startEvent } from '../src/engine/engine';
 import { FARM_DECK, momentKindOf } from '../src/engine/deck';
-import { drawChance, msToSimMinutes, PACING, pacingAt, simHoursToMs, simMinutesToMs } from '../src/engine/pacing';
+import {
+  BIG_GAP_SIM_MINUTES,
+  drawChance,
+  farmDaysToSimMinutes,
+  farmHoursToSimMinutes,
+  msToSimMinutes,
+  PACE_TARGETS,
+  PACING,
+  REFERENCE_WEIGHT,
+  SIM_MINUTES_PER_DAY,
+  SIM_MINUTES_PER_FARM_HOUR,
+  UNWATCHED_LOOK_SIM_MINUTES,
+  simHoursToMs,
+  simMinutesToMs,
+  SIZE_PACING,
+  NO_REPEAT_SIM_MINUTES,
+  SMALL_GAP_SIM_MINUTES,
+  WARMUP_SIM_MINUTES,
+} from '../src/engine/pacing';
 import { viewOf } from '../src/engine/view';
 import { hashState } from '../src/hash';
 import { createInitialState, type SimState } from '../src/state';
@@ -22,76 +46,128 @@ function bench(seed = 1): SimState {
   return s;
 }
 
-describe('the pacing numbers are data', () => {
-  it('every one of them is on PACING, with the sim-minute conversion the deck files declare', () => {
-    // Round 1 moved this off the plan's every-sim-minute after measuring +66.8 ms on the charter's
-    // catch-up bench. Round 2's verifier re-measured on another box and found every-two-minutes
-    // still NOT MET on 2 of 4 runs; tracing the cost found most of it was not predicate evaluation
-    // at all but `farmerMarketWalk`'s own downstream cost (`engine/category.ts`) — a real feature
-    // the owner asked for, not a bug. `evaluate`'s own share is cut by the `couldStartSomething`
-    // early-out in `engine/engine.ts` (RNG-neutral, checked directly).
-    //
-    // Round 3 re-ran that bench: three interleaved matrices, one box, one install, full numbers in
-    // `engine/pacing.ts`'s own comment. The short version: the engine's own share (this build with
-    // the bench district's engine forced off, against the same build shipped) measured +76.4 ms in
-    // one matrix and +43.1 ms in another; the branch went over the 1,000 ms line on 6 of 13 runs
-    // and trunk on none of 9 (trunk's worst here 960.6 ms); and the market walk's own share came
-    // out +62.1 ms in one matrix and +12.5 ms in another, so this box does not resolve the
-    // attribution either. The Foreman has ruled the catch-up line **advisory until #78 lands**.
-    // Nothing here claims the branch is under budget, and nothing here claims it broke one.
-    //
-    // The density figures this comment used to carry (a median of 2 starts with 2 of 30 seeds
-    // drawing no card) did not reproduce and are gone; what the current head actually measures is
-    // in the "five unattended minutes" block at the bottom of this file, and every number there was
-    // measured on this head with two independent rulers.
+describe('the pacing numbers are data, and every one of them is in world time', () => {
+  it('no constant on PACING is a real-minute one: they are farm days, farm hours, or a resolution', () => {
+    // The whole point of #101's rewrite. A pace written in farm days reads the same to a player
+    // whatever the world's period is; the retired real-minute framing did not, and the owner's
+    // decision 16 withdrew it. So: every *pace* constant here is named for farm days or farm hours,
+    // and the two that are not (`evalEverySimMinutes`, `concurrentCap`) are a resolution and a cap,
+    // not a pace — looking half as often does not halve how often things happen, because
+    // `drawChance` scales with the world time a look covers.
+    const paceKeys = Object.keys(PACING).filter((k) => /Gap|warmup|Look|noRepeatMomentKindF/.test(k));
+    expect(paceKeys.sort()).toEqual(['bigGapFarmDays', 'noRepeatMomentKindFarmHours', 'smallGapFarmHours', 'unwatchedLookFarmHours', 'warmupFarmHours']);
+    for (const key of paceKeys) expect(key, `${key} must name a farm day or a farm hour`).toMatch(/Farm(Days|Hours)$/);
+    // `evalEverySimMinutes` is the one sim-minute name left, and it is the resolution, not a pace.
+    const simMinuteKeys = Object.keys(PACING).filter((k) => /RealMinutes|realSeconds|SimMinutes|SimHours|SimDays/.test(k));
+    expect(simMinuteKeys, Object.keys(PACING).join(', ')).toEqual(['evalEverySimMinutes']);
+    // And the retired ones are gone, not renamed: nothing forces the world any more.
+    for (const gone of ['quietStretchSimMinutes', 'quietGapScale', 'quietWeightBoost', 'minGapSimMinutes', 'weightForCertainDraw']) {
+      expect(PACING, gone).not.toHaveProperty(gone);
+    }
     expect(PACING.evalEverySimMinutes).toBe(2);
-    expect(PACING.concurrentCap).toBeGreaterThan(0);
-    expect(PACING.minGapSimMinutes).toBeGreaterThan(0);
-    expect(PACING.quietStretchSimMinutes).toBeGreaterThan(PACING.minGapSimMinutes);
-    // A sim-minute is the clock's period over 1,440: 125 ms at the watching rate, and it follows
-    // the world's own period rather than wall time.
+    expect(PACING.concurrentCap).toBe(2);
+    expect(PACING.bigDrawsWhileWatchedOnly).toBe(true);
+    expect(PACING.noRepeatMomentKind).toBe(true);
+  });
+
+  it('the conversion from world time to sim time happens in one place, off the day length', () => {
+    // A farm hour is the day length over the hours in a day; a farm day is the day length. Both are
+    // derived, not written down twice, and the sim-millisecond conversion is `simMinuteMs` alone.
+    expect(SIM_MINUTES_PER_FARM_HOUR).toBe(SIM_MINUTES_PER_DAY / 24);
+    expect(farmHoursToSimMinutes(1)).toBe(60);
+    expect(farmHoursToSimMinutes(24)).toBe(SIM_MINUTES_PER_DAY);
+    expect(farmDaysToSimMinutes(30)).toBe(30 * SIM_MINUTES_PER_DAY);
+    // A sim-minute follows the world's own period rather than wall time: 125 ms at the watching
+    // rate, 250 ms on a world whose day is twice as long.
     expect(minutes(1)).toBeCloseTo(125, 9);
     expect(simMinutesToMs(1, 360)).toBeCloseTo(250, 9);
     expect(simHoursToMs(1, PERIOD)).toBeCloseTo(7500, 9);
     expect(msToSimMinutes(minutes(240), PERIOD)).toBeCloseTo(240, 9);
+    // The three derived constants the engine actually holds draws to.
+    expect(WARMUP_SIM_MINUTES).toBe(farmHoursToSimMinutes(PACING.warmupFarmHours));
+    expect(SMALL_GAP_SIM_MINUTES).toBe(farmHoursToSimMinutes(PACING.smallGapFarmHours));
+    expect(BIG_GAP_SIM_MINUTES).toBe(farmDaysToSimMinutes(PACING.bigGapFarmDays));
   });
 
-  it('a draw chance is the eligible weight over the certainty weight, capped', () => {
-    // Each attempt now covers `evalEverySimMinutes` sim-minutes at once (finding 2), so the raw
-    // chance scales by that too — see `drawChance`'s own formula in `engine/pacing.ts`.
+  it('the owner’s two targets are the numbers, and each size’s gap comes off them', () => {
+    // These two are the owner's own, in the owner's own words, stated as outcomes: they are what a
+    // retune moves. `SIZE_PACING`'s rates are the engine's knob under them; `engine-pace.test.ts`
+    // measures how much outcome the rates actually buy on this deck, shortfall and all.
+    expect(PACE_TARGETS.smallDaysInFive).toBe(4); // "a small thing most days"
+    expect(PACE_TARGETS.bigPerThirtyFarmDays).toBe(3); // "a big thing a few a month"
+    expect(SIZE_PACING.big.perFarmDay).toBe(PACE_TARGETS.bigPerThirtyFarmDays / 30);
+    expect(SIZE_PACING.small.perFarmDay).toBeGreaterThan(SIZE_PACING.big.perFarmDay);
+    // A small gap of a few farm hours, a big gap of several farm days: separate decisions.
+    expect(PACING.smallGapFarmHours).toBeGreaterThanOrEqual(1);
+    expect(PACING.smallGapFarmHours).toBeLessThan(24);
+    expect(PACING.bigGapFarmDays).toBeGreaterThanOrEqual(2);
+    expect(SIZE_PACING.big.gapSimMinutes).toBeGreaterThan(SIZE_PACING.small.gapSimMinutes);
+  });
+
+  it('a draw chance is the size’s target rate, scaled by weight and by the world time a look covers', () => {
+    // A lone ordinary card (base 10 = REFERENCE_WEIGHT), eligible all day, draws at exactly its
+    // size's target rate per farm day: sum the per-look chance over a day's worth of looks and the
+    // target comes back out. That is the whole formula, and it is why the same constants pace live
+    // play (a look every `evalEverySimMinutes`) and the unwatched path (a look every farm hour).
     const perEval = PACING.evalEverySimMinutes;
-    expect(drawChance(0, 1)).toBe(0);
-    expect(drawChance(10, 1)).toBeCloseTo((10 * perEval) / PACING.weightForCertainDraw, 12);
-    expect(drawChance(10, PACING.quietWeightBoost)).toBeCloseTo(
-      (10 * PACING.quietWeightBoost * perEval) / PACING.weightForCertainDraw,
-      12,
-    );
-    expect(drawChance(1e9, 1)).toBe(PACING.maxDrawChance);
+    expect(drawChance(0, 'small', perEval)).toBe(0);
+    expect(drawChance(REFERENCE_WEIGHT, 'small', perEval)).toBeCloseTo((SIZE_PACING.small.perFarmDay * perEval) / SIM_MINUTES_PER_DAY, 12);
+    expect(drawChance(REFERENCE_WEIGHT, 'big', perEval)).toBeCloseTo((SIZE_PACING.big.perFarmDay * perEval) / SIM_MINUTES_PER_DAY, 12);
+    expect(drawChance(2 * REFERENCE_WEIGHT, 'small', perEval)).toBeCloseTo(2 * drawChance(REFERENCE_WEIGHT, 'small', perEval), 12);
+    // The same weight, drawn as a big thing, is far rarer: the two rates are the whole difference.
+    expect(drawChance(REFERENCE_WEIGHT, 'big', perEval)).toBeLessThan(drawChance(REFERENCE_WEIGHT, 'small', perEval) / 10);
+    // Looks that cover more world time land proportionally more often, so the per-farm-day rate is
+    // the same whatever resolution the caller looks at — that is what lets the unwatched path
+    // (a look a farm hour) pace a small card exactly as live play (a look every two sim-minutes)
+    // does. Shown here at a tenth of the reference weight, where the cap does not come into it.
+    const unwatchedLook = farmHoursToSimMinutes(PACING.unwatchedLookFarmHours);
+    expect(UNWATCHED_LOOK_SIM_MINUTES).toBe(unwatchedLook);
+    const thin = REFERENCE_WEIGHT / 10;
+    const perDayLive = drawChance(thin, 'small', perEval) * (SIM_MINUTES_PER_DAY / perEval);
+    const perDayUnwatched = drawChance(thin, 'small', unwatchedLook) * (SIM_MINUTES_PER_DAY / unwatchedLook);
+    expect(perDayLive).toBeCloseTo(SIZE_PACING.small.perFarmDay / 10, 12);
+    expect(perDayUnwatched).toBeCloseTo(perDayLive, 12);
+    // **And the honest caveat, asserted rather than only written down.** A farm hour is a big
+    // enough slice that `maxDrawChance` binds for an ordinary card, so the unwatched path runs at
+    // about three fifths of nominal where a card is eligible for a long stretch. It is stated in
+    // `PACING.unwatchedLookFarmHours`'s own comment and measured in `engine-pace.test.ts`; this
+    // pins the arithmetic so the caveat cannot go stale without a test noticing.
+    expect(drawChance(REFERENCE_WEIGHT, 'small', unwatchedLook)).toBe(PACING.maxDrawChance);
+    const capped = drawChance(REFERENCE_WEIGHT, 'small', unwatchedLook) * (SIM_MINUTES_PER_DAY / unwatchedLook);
+    expect(capped / SIZE_PACING.small.perFarmDay).toBeCloseTo(0.6, 6);
+    expect(drawChance(1e9, 'small', perEval)).toBe(PACING.maxDrawChance);
   });
 });
 
 describe('the warm-up holds card draws back at the start of a fresh world (owner note, Round 1, #82)', () => {
-  it('no card draws inside warmupSimMinutes, however certain the draw would otherwise be', () => {
+  it('no card draws inside the warm-up, however certain the draw would otherwise be', () => {
     // A card that is always eligible, at a weight the cap on `maxDrawChance` still lets through
-    // comfortably every attempt: if the warm-up did not hold it back, this would draw almost at once.
+    // comfortably every look: if the warm-up did not hold it back, this would draw almost at once.
     const deck = stubDeck([{ id: 'a', base: 1e9 }]);
     const s = bench(30);
-    for (let i = 0; i * PACING.evalEverySimMinutes < PACING.warmupSimMinutes; i++) {
+    for (let i = 0; i * PACING.evalEverySimMinutes < WARMUP_SIM_MINUTES; i++) {
       atMs(s, minutes(i * PACING.evalEverySimMinutes));
       evaluate(s, deck);
     }
-    expect(s.clock.nowMs).toBeLessThan(minutes(PACING.warmupSimMinutes));
+    expect(s.clock.nowMs).toBeLessThan(minutes(WARMUP_SIM_MINUTES));
     expect(s.events.running).toEqual([]);
     expect(s.events.lastDrawMs).toBe(-1); // no attempt was even burned from the generator
 
-    // Past the warm-up, the same certain-draw card lands within a handful of attempts (the draw
-    // itself is still a capped-chance roll per attempt, `PACING.maxDrawChance`, not a guarantee on
-    // the very first one).
+    // Past the warm-up, the same certain-draw card lands within a handful of looks (the draw itself
+    // is still a capped-chance roll per look, `PACING.maxDrawChance`, not a guarantee on the first).
     for (let i = 0; i < 50 && s.events.running.length === 0; i++) {
-      atMs(s, minutes(PACING.warmupSimMinutes + i * PACING.evalEverySimMinutes));
+      atMs(s, minutes(WARMUP_SIM_MINUTES + i * PACING.evalEverySimMinutes));
       evaluate(s, deck);
     }
     expect(s.events.running.map((r) => r.id)).toEqual(['a']);
+  });
+
+  it('the warm-up is eight farm hours: the owner’s "first minute" at the watching rate', () => {
+    // The number did not move in #101, only its unit did. Eight farm hours is a third of a farm day
+    // — 480 sim-minutes, one real minute at the 180-second period #82 measured it at.
+    expect(PACING.warmupFarmHours).toBe(8);
+    expect(WARMUP_SIM_MINUTES).toBe(480);
+    expect(simMinutesToMs(WARMUP_SIM_MINUTES, PERIOD)).toBe(60_000);
   });
 
   it('does not gate authored triggers or category actions, only the card draw', () => {
@@ -99,7 +175,7 @@ describe('the warm-up holds card draws back at the start of a fresh world (owner
     // held back by the card warm-up, because `attemptDraw` is the only place that checks it.
     const deck = stubDeck([], [{ id: 'always', trigger: { kind: 'predicates', all: [], cooldownSimDays: 0 } }]);
     const s = bench(31);
-    atMs(s, 0); // well inside warmupSimMinutes
+    atMs(s, 0); // well inside the warm-up
     evaluate(s, deck);
     expect(s.events.running.map((r) => r.id)).toEqual(['always']);
 
@@ -107,7 +183,7 @@ describe('the warm-up holds card draws back at the start of a fresh world (owner
     // `runScheduledCategoryActions` is called before the warm-up check even exists in `attemptDraw`.
     const s2 = createInitialState(32);
     s2.clock = { ...s2.clock, t: 0.95 }; // dawn (`RULES.clock.phases.dawn` is .92)
-    expect(msToSimMinutes(s2.clock.nowMs, s2.clock.periodSec)).toBeLessThan(PACING.warmupSimMinutes);
+    expect(msToSimMinutes(s2.clock.nowMs, s2.clock.periodSec)).toBeLessThan(WARMUP_SIM_MINUTES);
     evaluate(s2, FARM_DECK);
     expect(s2.npcs.farmer).not.toBeNull();
   });
@@ -148,7 +224,7 @@ describe('a card with unmet conditions never fires', () => {
   });
 });
 
-describe('limits: concurrency, the gap, and the cooldown', () => {
+describe('limits: concurrency, the two gaps, and the cooldown', () => {
   it('never more than the global cap runs at once', () => {
     const deck = stubDeck([
       { id: 'a', momentKind: 'bubble', durationSimMinutes: 10_000 },
@@ -160,7 +236,8 @@ describe('limits: concurrency, the gap, and the cooldown', () => {
     for (const id of ['a', 'b', 'c', 'd']) startEvent(s, deck, id, 'card');
     // `startEvent` is the owner's-hand path and does not check the cap; the draw does.
     expect(s.events.running).toHaveLength(4);
-    expect(drawAllowed(s)).toBe(false);
+    expect(drawAllowed(s, 'small', deck)).toBe(false);
+    expect(drawAllowed(s, 'big', deck)).toBe(false);
 
     const t = bench(7);
     for (let i = 0; i < 20_000; i++) {
@@ -171,25 +248,61 @@ describe('limits: concurrency, the gap, and the cooldown', () => {
     expect(Object.keys(t.events.starts).length).toBeGreaterThan(1); // it did draw, repeatedly
   });
 
-  it('two draws are never closer than the global gap', () => {
+  it('a small draw and a big draw are separate decisions with separate gaps', () => {
+    // Two cards, one of each size, both always eligible. The small one is held to six farm hours
+    // and the big one to four farm days, measured from the last draw *of that size* — so a big
+    // start does not lock the afternoon's small texture out, and a busy afternoon of small things
+    // does not push the set piece off.
     const deck = stubDeck([
-      { id: 'a', momentKind: 'bubble', durationSimMinutes: 30 },
-      { id: 'b', momentKind: 'lamb', durationSimMinutes: 30 },
+      { id: 'sm', size: 'small', momentKind: 'bubble', durationSimMinutes: 30 },
+      { id: 'bg', size: 'big', momentKind: 'lamb', durationSimMinutes: 30 },
     ]);
     const s = bench(8);
-    const draws: number[] = [];
-    for (let i = 0; i < 30_000; i++) {
-      atMs(s, i * 200);
-      const before = s.events.lastDrawMs;
+    const small: number[] = [];
+    const big: number[] = [];
+    for (let i = 0; i < 60_000; i++) {
+      atMs(s, i * 500);
+      const before = new Set(s.events.running.map((r) => `${r.id}@${r.startedMs}`));
       evaluate(s, deck);
-      if (s.events.lastDrawMs !== before) draws.push(s.events.lastDrawMs);
+      for (const r of s.events.running) {
+        if (before.has(`${r.id}@${r.startedMs}`)) continue;
+        (r.id === 'sm' ? small : big).push(r.startedMs);
+      }
     }
-    expect(draws.length).toBeGreaterThan(3);
-    for (let i = 1; i < draws.length; i++) {
-      const gap = msToSimMinutes(draws[i]! - draws[i - 1]!, PERIOD);
-      // Either the ordinary gap, or the relaxed one after a quiet stretch — never less than that.
-      expect(gap).toBeGreaterThanOrEqual(PACING.minGapSimMinutes * PACING.quietGapScale);
+    expect(small.length).toBeGreaterThan(3);
+    expect(big.length).toBeGreaterThan(1);
+    for (let i = 1; i < small.length; i++) {
+      expect(msToSimMinutes(small[i]! - small[i - 1]!, PERIOD)).toBeGreaterThanOrEqual(SMALL_GAP_SIM_MINUTES);
     }
+    for (let i = 1; i < big.length; i++) {
+      expect(msToSimMinutes(big[i]! - big[i - 1]!, PERIOD)).toBeGreaterThanOrEqual(BIG_GAP_SIM_MINUTES);
+    }
+    // And the small draws are the busier stream, which is the owner's whole point.
+    expect(small.length).toBeGreaterThan(big.length);
+  });
+
+  it('each size’s gap is measured from the last draw of that size, and only that size', () => {
+    const deck = stubDeck([
+      { id: 'sm', size: 'small', momentKind: 'bubble', durationSimMinutes: 30 },
+      { id: 'bg', size: 'big', momentKind: 'lamb', durationSimMinutes: 30 },
+    ]);
+    const s = bench(33);
+    atMs(s, minutes(100_000));
+    startEvent(s, deck, 'bg', 'card');
+    endEvent(s, deck, 'bg');
+    expect(lastDrawOfSize(s, 'big', deck)).toBe(minutes(100_000));
+    expect(lastDrawOfSize(s, 'small', deck)).toBe(-1); // a big start is not a small draw
+    // Just past the small gap, a small draw is allowed and a big one is not.
+    atMs(s, minutes(100_000) + minutes(SMALL_GAP_SIM_MINUTES));
+    expect(drawAllowed(s, 'small', deck)).toBe(true);
+    expect(drawAllowed(s, 'big', deck)).toBe(false);
+    atMs(s, minutes(100_000) + minutes(BIG_GAP_SIM_MINUTES));
+    expect(drawAllowed(s, 'big', deck)).toBe(true);
+    // `pacingNow` reports the same two answers rather than re-deriving them.
+    const now = pacingNow(s, deck);
+    expect(now.big.allowed).toBe(true);
+    expect(now.big.gapSimMinutes).toBe(BIG_GAP_SIM_MINUTES);
+    expect(now.small.sinceSimMinutes).toBe(Infinity);
   });
 
   it('a card is out of the running for its own cooldown and its own gap after it ends', () => {
@@ -224,53 +337,58 @@ describe('limits: concurrency, the gap, and the cooldown', () => {
   });
 });
 
-describe('the quiet relaxation fires after the configured stretch and only then', () => {
-  it('pacingAt flips exactly at the stretch, not before', () => {
-    const justUnder = pacingAt(0, minutes(PACING.quietStretchSimMinutes) - 1, PERIOD);
-    const exactly = pacingAt(0, minutes(PACING.quietStretchSimMinutes), PERIOD);
-    expect(justUnder.relaxed).toBe(false);
-    expect(justUnder.gapSimMinutes).toBe(PACING.minGapSimMinutes);
-    expect(justUnder.weightBoost).toBe(1);
-    expect(exactly.relaxed).toBe(true);
-    expect(exactly.gapSimMinutes).toBe(PACING.minGapSimMinutes * PACING.quietGapScale);
-    expect(exactly.weightBoost).toBe(PACING.quietWeightBoost);
-    // A world where nothing has ever started is quiet by definition, and starts relaxed.
-    expect(pacingAt(-1, 0, PERIOD).relaxed).toBe(true);
-  });
-
-  it('a draw held back by the ordinary gap is let through once the stretch has passed, and not one minute earlier', () => {
-    // The last draw is 300 sim-minutes back — inside the ordinary gap (`PACING.minGapSimMinutes`,
-    // 800 sim-minutes after Round 1's retune), outside the relaxed one (a quarter of that, 200). So
-    // the only thing that can change the answer is the quiet stretch.
+describe('nothing is forced: the quiet relaxation is retired (owner’s decision, plan 16)', () => {
+  // Through #82 the engine relaxed its thresholds after `quietStretchSimMinutes` of silence — a
+  // quarter of the gap, four times the weight, and the no-repeat-kind rule lifted — "so the world
+  // never goes dead" (the plan's old line). The owner retired all of it: "a quiet farm day is
+  // allowed". These two say the relaxation is gone rather than merely re-tuned.
+  it('the same conditions give the same answer however long the world has been silent', () => {
     const deck = stubDeck([{ id: 'a', momentKind: 'bubble' }]);
     const s = bench(11);
-    const quietFor = (simMinutes: number): boolean => {
+    const allowedAfter = (silentSimMinutes: number): boolean => {
       atMs(s, minutes(100_000));
-      s.events.lastDrawMs = s.clock.nowMs - minutes(300);
-      s.events.lastStartMs = s.clock.nowMs - minutes(simMinutes);
-      return drawAllowed(s);
+      s.events.starts['a'] = s.clock.nowMs - minutes(300); // inside the small gap, either way
+      s.events.lastStartMs = s.clock.nowMs - minutes(silentSimMinutes);
+      return drawAllowed(s, 'small', deck);
     };
-    expect(quietFor(PACING.quietStretchSimMinutes - 1)).toBe(false);
-    expect(quietFor(PACING.quietStretchSimMinutes)).toBe(true);
+    // 300 sim-minutes back is inside the six-farm-hour small gap. Nothing about how long the world
+    // has been quiet changes that — not a day of silence, not a fortnight of it.
+    expect(allowedAfter(300)).toBe(false);
+    expect(allowedAfter(farmDaysToSimMinutes(1))).toBe(false);
+    expect(allowedAfter(farmDaysToSimMinutes(14))).toBe(false);
+    // And past the gap it is allowed, again regardless of the silence.
+    atMs(s, minutes(100_000));
+    s.events.starts['a'] = s.clock.nowMs - minutes(SMALL_GAP_SIM_MINUTES);
+    expect(drawAllowed(s, 'small', deck)).toBe(true);
+  });
 
-    // And it is the draw itself, not only the predicate: 500 attempts inside the stretch start
-    // nothing, and the same 500 with the stretch passed start something.
-    const attempts = (simMinutes: number): number => {
-      const w = bench(12);
-      let started = 0;
-      for (let i = 0; i < 500; i++) {
-        atMs(w, minutes(100_000 + i));
-        w.events.lastDrawMs = w.clock.nowMs - minutes(300);
-        w.events.lastStartMs = w.clock.nowMs - minutes(simMinutes);
-        const before = w.events.running.length;
-        evaluate(w, deck);
-        if (w.events.running.length > before) started++;
-        w.events.running = [];
-      }
-      return started;
-    };
-    expect(attempts(PACING.quietStretchSimMinutes - 1)).toBe(0);
-    expect(attempts(PACING.quietStretchSimMinutes + 1)).toBeGreaterThan(0);
+  it('the no-repeat rule holds for its own window and then expires, and a long silence changes neither', () => {
+    // The one rule the relaxation used to lift. A quiet stretch no longer lifts it — what lifts it
+    // is its own clock, `noRepeatMomentKindFarmHours`, because "back to back" is a thing that
+    // happens in time. Inside the window this world's only card stays out of the running however
+    // long the silence; past it, it is eligible again, at exactly the ordinary chance and gap.
+    const deck = stubDeck([{ id: 'a', momentKind: 'bubble', durationSimMinutes: 30, minGapSimMinutes: 0, cooldownSimHours: 0 }]);
+    const s = bench(12);
+    atMs(s, minutes(100_000));
+    startEvent(s, deck, 'a', 'card');
+    endEvent(s, deck, 'a');
+    const startedAt = minutes(100_000);
+    // Just inside the window: nothing draws, over hundreds of looks.
+    let started = 0;
+    for (let i = 1; i * PACING.evalEverySimMinutes < NO_REPEAT_SIM_MINUTES; i++) {
+      atMs(s, startedAt + minutes(i * PACING.evalEverySimMinutes));
+      s.events.starts['a'] = startedAt - minutes(SMALL_GAP_SIM_MINUTES); // the small gap is clear
+      const before = s.events.running.length;
+      evaluate(s, deck);
+      if (s.events.running.length > before) started++;
+      s.events.running = [];
+    }
+    expect(started).toBe(0);
+    expect(msToSimMinutes(s.clock.nowMs - startedAt, PERIOD)).toBeLessThan(NO_REPEAT_SIM_MINUTES);
+    // Past it: eligible again, and it does draw within a reasonable stretch.
+    atMs(s, startedAt + minutes(NO_REPEAT_SIM_MINUTES));
+    s.events.starts['a'] = startedAt - minutes(SMALL_GAP_SIM_MINUTES);
+    expect(eligibleCards(s, deck, undefined, 'small').map((e) => e.card.id)).toEqual(['a']);
   });
 });
 
@@ -307,48 +425,22 @@ describe('the draw is deterministic and part of the hash', () => {
   });
 });
 
-describe('five unattended minutes', () => {
-  // The ticket's own bar (docs/SHEEPCLIFF_PLAN.md, Phase 1 exit): "five unattended sim-minutes at
-  // seed 9 show three distinct moment kinds". Five real minutes of watching is 3,000 ticks, one and
-  // two thirds sim-days.
+describe('seed 9, the plan’s own seed: the readable demonstration of a watched stretch', () => {
+  // This used to be the bottom half of a block called "five unattended minutes", whose population
+  // test asserted "two distinct moment kinds in five real minutes". **That bar is withdrawn**, not
+  // failed: the owner's decision 16 retires the real-minute framing entirely ("about three moments
+  // per five real minutes", decision 11) and decision 14's three-kind bar with it. Measuring a pace
+  // in real minutes says nothing about a world whose day length changes with whether you are
+  // watching, which is exactly the world this is. The population test that replaced it measures
+  // farm days over thirty seeds and thirty farm days: `test/engine-pace.test.ts`.
   //
-  // READ THIS BEFORE TRUSTING THE NUMBER BELOW. On this head that bar is met by **no seed at all**,
-  // and the reason is a decision, not a regression:
-  //
-  //   * Through rounds 1 and 2, `dlBirthday` fired in the first 0.1 real seconds of every world,
-  //     because its trigger was "the first day of spring" and a fresh world starts on it. It was a
-  //     free start and a free `bubble` kind on all 30 seeds, and it is the whole reason 18 of 30
-  //     seeds used to clear three kinds.
-  //   * The owner then decided the birthday is **December 15, a real calendar date** (plan decision
-  //     10). The world lane put it on a `realDate` trigger in #83, and this engine defers that kind
-  //     to #84 (`engine/deck.ts`) because answering "is it December 15?" needs a real-year calendar
-  //     the sim does not have. So the birthday no longer opens every world — which is what the
-  //     owner asked for — and the free kind is gone with it.
-  //
-  // What is left is the card deck alone, drawing under the owner's own pacing: a real minute of
-  // warm-up out of a five-minute watch, then a 100-real-second gap between starts. That allows at
-  // most three starts in a watch and in practice gives two. Measured on this head, seeds 1-30,
-  // 3,000 ticks, two independent rulers agreeing seed for seed (new entries in `events.running`,
-  // and non-"ended" card/authored chronicle lines): **median 2 starts, range 1 to 2, mean 1.90**;
-  // **26 of 30** seeds show two distinct moment kinds; **0 of 30** show three; **0 of 30** go
-  // without a card. Sweeping the levers in-process (mutating `PACING`, then restoring it; the
-  // control run reproduces the shipped row exactly) does not rescue three kinds either:
-  // `minGapSimMinutes` 800 -> 600 gives 1 of 30, -> 300 gives 6 of 30; `weightForCertainDraw`
-  // 12000 -> 4000 gives 3 of 30; gap 600 with `quietStretchSimMinutes` 620 and weight 9000 all at
-  // once gives 9 of 30, and pushes the mean to 2.37 starts, past the owner's "about three moments
-  // per five minutes" once the farmer's walk is counted. Three distinct kinds in five minutes and
-  // the owner's own pacing are in genuine tension now that the birthday is not free, and which one
-  // gives is the owner's call, not this lane's: see the PR's "Owner decision needed?".
-  //
-  // So the population test below pins what is true — that a five-minute watch is not one thing
-  // happening once — at a floor with margin, and the seed-9 test is the readable demonstration on
-  // the plan's own seed. Neither of them is the plan's three-kind bar, and neither pretends to be.
-  it('seed 9, the plan’s own seed: two distinct moment kinds, and never the same kind twice running', () => {
-    // Seed 9 was the plan's pinned seed; round 2 moved it to 25 after the warm-up fix, which the
-    // round-3 verifier rightly called a seed chosen because it passed. Moving back to the plan's own
-    // seed removes that choice: seed 9 is not picked, it is the one the document names. What it
-    // shows on this head is a stray cat (`dl-trick`) and the merchant (`npc-arrival`) — two starts,
-    // two kinds, no repeat.
+  // What survives is this: the plan's own seed, run for a fixed stretch, as a readable
+  // demonstration that a watched world is not one thing happening once. The ids and kinds below are
+  // **re-pinned for #101** — the pacing rewrite changed how much generator each look consumes (two
+  // draw decisions per look, one per size, each with its own gap and its own chance), so the same
+  // seed necessarily draws a different sequence. The pre-change sequence, for the record, was
+  // `strayCatVisits` (dl-trick) then `merchantCaravan` (npc-arrival).
+  it('a fixed stretch draws a sequence, never the same kind twice running, all of it told', () => {
     let s = createInitialState(9);
     const kinds = new Set<string>();
     const order: string[] = [];
@@ -365,67 +457,25 @@ describe('five unattended minutes', () => {
         kindOrder.push(momentKindOf(r.id) ?? '?');
       }
     }
-    expect(order.map((k) => k.split('@')[0])).toEqual(['strayCatVisits', 'merchantCaravan']);
-    expect(kindOrder).toEqual(['dl-trick', 'npc-arrival']);
-    expect(kinds.size).toBeGreaterThanOrEqual(2);
-    expect(order.length).toBeGreaterThanOrEqual(2);
-    // `PACING.noRepeatMomentKind`: never two of the same kind back to back. The quiet relaxation
-    // deliberately lifts it after a long enough silence (see `eligibleCards`), so this is asserted
-    // on this seed, where the relaxation never bit, and measured over the population below.
+    expect(order.map((k) => k.split('@')[0])).toEqual(SEED_9_IDS);
+    expect(kindOrder).toEqual(SEED_9_KINDS);
+    expect(kinds.size).toBeGreaterThanOrEqual(1);
+    // `PACING.noRepeatMomentKind`: never two of the same kind back to back. Nothing lifts it now,
+    // so unlike the pre-#101 pin this holds on every seed, not only on the ones the relaxation
+    // never reached — `engine-pace.test.ts` measures that over the population.
     for (let i = 1; i < kindOrder.length; i++) expect(kindOrder[i], `${kindOrder[i - 1]} then ${kindOrder[i]}`).not.toBe(kindOrder[i - 1]);
     // Every start is in the chronicle, told, not just held on the state.
     const told = s.chronicle.entries.filter((e) => e.source === 'card' || e.source === 'authored');
     expect(told.length).toBeGreaterThanOrEqual(order.length);
   });
-
-  it('the population, seeds 1-30: a five-minute watch is never empty, and usually holds two kinds', () => {
-    // A population bar, not a seed one — the round-3 verifier's finding C: a single seed can be
-    // chosen to pass, and the seed-25 pin it replaced went on passing in worlds where five seeds in
-    // thirty cleared the bar. This one cannot be satisfied by any single seed's luck.
-    //
-    // Measured at this head: two or more distinct kinds on **26 of 30**; two or more starts on
-    // **27 of 30**; a card drawn on **30 of 30**; three or more distinct kinds on **0 of 30** (see
-    // the block comment above — that is the plan's own bar, and it is the owner's decision to make,
-    // not a number to quietly lower). The floors are set well under the measured values so a loss
-    // of several seeds is tolerated and a collapse fails: 20 of 30 for the two-kind bar (measured
-    // 26), 22 of 30 for the two-start bar (measured 27), and no seed at all silent.
-    const kindCounts: number[] = [];
-    const startCounts: number[] = [];
-    const silent: number[] = [];
-    const oneKind: number[] = [];
-    const repeated: number[] = [];
-    for (let seed = 1; seed <= 30; seed++) {
-      let s = createInitialState(seed);
-      const kinds = new Set<string>();
-      const seen = new Set<string>();
-      const kindOrder: string[] = [];
-      for (let i = 0; i < 3000; i++) {
-        s = advance(s, 1);
-        for (const r of s.events.running) {
-          const key = `${r.id}@${r.startedMs}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const k = momentKindOf(r.id) ?? '?';
-          kinds.add(k);
-          kindOrder.push(k);
-        }
-      }
-      kindCounts.push(kinds.size);
-      startCounts.push(seen.size);
-      if (seen.size === 0) silent.push(seed);
-      if (kinds.size < 2) oneKind.push(seed);
-      if (kindOrder.some((k, i) => i > 0 && k === kindOrder[i - 1])) repeated.push(seed);
-    }
-    const twoKinds = kindCounts.filter((n) => n >= 2).length;
-    const threeKinds = kindCounts.filter((n) => n >= 3).length;
-    const twoStarts = startCounts.filter((n) => n >= 2).length;
-    const report = `kinds>=2 on ${twoKinds}/30 (measured 26), kinds>=3 on ${threeKinds}/30 (measured 0 — the plan's bar, see this block's comment), starts>=2 on ${twoStarts}/30 (measured 27), silent seeds ${silent.join(',') || 'none'}, one-kind seeds ${oneKind.join(',') || 'none'} (measured 1, 12, 25, 26)`;
-    expect(twoKinds, report).toBeGreaterThanOrEqual(20);
-    expect(twoStarts, report).toBeGreaterThanOrEqual(22);
-    expect(silent, report).toEqual([]);
-    // The no-repeat rule holds everywhere except where the quiet relaxation lifts it on purpose:
-    // measured, exactly one seed of thirty shows two starts of the same kind running (seed 25,
-    // `lostLamb` then `lambZoomiesHour`, both `lamb`, after a long silence).
-    expect(repeated.length, `seeds with a back-to-back repeat kind: ${repeated.join(',') || 'none'} (measured 25)`).toBeLessThanOrEqual(3);
-  });
 });
+
+/**
+ * Seed 9's draw over 3,000 ticks (one and two-thirds farm days), re-pinned for #101's per-size
+ * pacing: a stray cat on the fence, then a windfall. The pre-change pin was `strayCatVisits` then
+ * `merchantCaravan` — the caravan is a **big** card now, and one and two-thirds farm days is well
+ * inside the four-farm-day big gap, so a watched stretch this short usually holds small things only.
+ */
+const SEED_9_IDS = ['strayCatVisits', 'windfall'];
+/** The moment kinds of `SEED_9_IDS`, in the same order. */
+const SEED_9_KINDS = ['dl-trick', 'bubble'];

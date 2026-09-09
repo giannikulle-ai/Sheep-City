@@ -100,16 +100,19 @@ describe('scripted day', () => {
   });
 
   // The hash covers the whole end-of-day state. It moved in Round 2 (#82) for the `warmupSimMinutes`
-  // fix, and again in Round 3: trunk's #83 put Digital Luna's birthday on a real calendar date and
-  // this engine defers that trigger to #84 (`engine/deck.ts`), so `dlBirthday` no longer starts at
-  // tick 0 of every world, and every seed's card draws shift with it. Her transitions above did not
-  // move by a line either time — the test below pins that as an equality, not by eye.
+  // fix; again in Round 3, when trunk's #83 put Digital Luna's birthday on a real calendar date and
+  // this engine deferred that trigger to #84 so `dlBirthday` no longer started at tick 0 of every
+  // world; and now in **#101**, where the draw is two decisions a look instead of one (a small one
+  // and a big one, each with its own gap and its own chance), so the engine's generator is consumed
+  // differently from the first look at the world onwards and every seed's card draws shift with it.
+  // Her transitions above did not move by a line on any of the three — the test below pins that as
+  // an equality, not by eye, and it is the point of re-pinning the hash rather than loosening it.
   it('seed 11 twice gives the same day and the same hash', () => {
     const a = scriptedDay(11);
     const b = scriptedDay(11);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('b3da5ab0c4e981ed');
+    expect(hashState(a.state)).toBe('7c413f504c6d5a57');
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "her 28 transitions at seed 11 are unchanged

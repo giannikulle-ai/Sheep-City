@@ -672,13 +672,19 @@ describe('the catch-up policy', () => {
     expect(catchUp(s, 500, { minMs: 100 }).mode).toBe('actors');
   });
 
-  it('a gap under a day ticks the actors through it, as step() would', () => {
+  it('a gap under a day ticks the actors through it, as an unwatched step() would', () => {
+    // Re-pinned for #101: this is `step(..., { watched: false })`, not a bare `step`. A catch-up is
+    // by definition time nobody watched, and the actor branch is one of the two unwatched paths
+    // (the owner's decision, plan 16: "the big ones should not happen when I am not watching"), so
+    // it runs the same live code with every big card and big authored event held back. Against a
+    // bare `step` the two hashes differ, which is exactly the point of the change; the assertion
+    // below is the same equality it always was, against the call `catchUp` actually makes.
     const s = advance(createInitialState(7), 50);
     const c = catchUp(s, DAY - 100);
     expect(c.mode).toBe('actors');
     expect(c.actorMs).toBe(DAY - 100);
     expect(c.ledgerDays).toBe(0);
-    expect(hashState(c.state)).toBe(hashState(step(s, [], DAY - 100)));
+    expect(hashState(c.state)).toBe(hashState(step(s, [], DAY - 100, { watched: false })));
     expect(c.after).toEqual(summarise(c.state));
     expect(c.diff.days).toBe(1);
     // The snapshot on the state is untouched: the Ledger did not run.

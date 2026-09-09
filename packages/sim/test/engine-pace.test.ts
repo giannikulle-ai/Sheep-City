@@ -199,9 +199,11 @@ describe('an unwatched span: small things happen, big things do not', () => {
       expect(big.map((d) => d.id), `seed ${seed}: the Ledger branch drew a big thing`).toEqual([]);
       // And nothing big started in the actor remainder either, or on the respawned world's own
       // first looks: the whole gap is checked against the chronicle, not only the Ledger's report.
-      const bigLines = new Set(FARM_DECK.cards.concat().filter((x) => x.size === 'big').map((x) => x.storybook.line));
-      for (const e of FARM_DECK.authored) if (e.size === 'big') bigLines.add(e.storybook.line);
-      const toldDuringGap = c.state.chronicle.entries.filter((e) => e.atMs > s.clock.nowMs && bigLines.has(e.line));
+      // Matched on the picture key, not the authored line: since #114 the told line is the filled
+      // sentence, so a raw-line match could never fire (the round-3 Verifier proved it vacuous).
+      const bigPictures = new Set(FARM_DECK.cards.concat().filter((x) => x.size === 'big').map((x) => x.storybook.picture));
+      for (const e of FARM_DECK.authored) if (e.size === 'big') bigPictures.add(e.storybook.picture);
+      const toldDuringGap = c.state.chronicle.entries.filter((e) => e.atMs > s.clock.nowMs && bigPictures.has(e.picture));
       expect(toldDuringGap.map((e) => e.line), `seed ${seed}: a big line was told during the gap`).toEqual([]);
     }
   });
@@ -213,9 +215,10 @@ describe('an unwatched span: small things happen, big things do not', () => {
       const s = started(seed);
       const c = catchUp(s, Math.floor(0.9 * dayMs(s)));
       expect(c.mode).toBe('actors');
-      const bigLines = new Set(FARM_DECK.cards.filter((x) => x.size === 'big').map((x) => x.storybook.line));
-      for (const e of FARM_DECK.authored) if (e.size === 'big') bigLines.add(e.storybook.line);
-      const told = c.state.chronicle.entries.filter((e) => e.atMs > s.clock.nowMs && bigLines.has(e.line));
+      // Picture keys, not authored lines, for the same reason as above.
+      const bigPictures = new Set(FARM_DECK.cards.filter((x) => x.size === 'big').map((x) => x.storybook.picture));
+      for (const e of FARM_DECK.authored) if (e.size === 'big') bigPictures.add(e.storybook.picture);
+      const told = c.state.chronicle.entries.filter((e) => e.atMs > s.clock.nowMs && bigPictures.has(e.picture));
       expect(told.map((e) => e.line), `seed ${seed}`).toEqual([]);
     }
   });

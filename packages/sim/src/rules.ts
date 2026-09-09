@@ -48,6 +48,32 @@ export const RULES = {
 
   petTagMs: b.petTagMs.value,
 
+  /**
+   * hay2's disposition (issue #63, docs/content/FARM_BUILDS.md): the prototype's second hay bale
+   * drew and changed nothing. New for #63, not in the prototype, so it lives in outsideRules
+   * rather than rules (test/rules-parity.test.ts asserts `rules` against the prototype literal
+   * exactly). See `hay2RegrowMult` below for where it applies.
+   *
+   * Fix round (2026-09-08, the owner's decision "make hay2 visible instead" on a Verifier finding
+   * that the first cut's 15% bonus moved the field average about half a percent — invisible):
+   * raised to a multiplier of 1 + 2.5 = 3.5x tuftRegrowPerSec while owned. Still under
+   * tuftBitePerSec (0.018 * 3.5 = 0.063 < 0.07), so a grazing sheep still strips the tuft it is
+   * standing on faster than it grows back — only the field's background recovery speeds up.
+   *
+   * Fix round 2 (2026-09-08): 3.5x turned out to (mostly) erase the other thing "growth you can
+   * see" is about — a grazing sheep visibly winning the tuft it stands on. Measured over a sim-day
+   * on the 40-sheep world, real grazing bouts (`eating` start to end): unowned, 45-86% of bouts
+   * move the rendered grass frame (`packages/render/src/scene.ts`'s 4-frame quantisation) and
+   * 27-51% strip a tuft bare; at 3.5x that fell to 0-16% frame-moved and 0% ever stripped — the
+   * bare frame never drew. Lowered to a multiplier of 1 + 1.9 = 2.9x, the largest value at which
+   * at least half the unowned frame-moving rate survives (46-51% vs the 39-43% half-line) and
+   * tufts still strip sometimes (5-7%), while still clearing the +10pp field-average target with
+   * margin (+13.2 to +17.4pp on the 40-sheep world; +2.1 to +3.3pp on the default 5-sheep flock).
+   * Still comfortably under tuftBitePerSec (0.018 * 2.9 = 0.0522 < 0.07). See
+   * docs/content/FARM_BUILDS.md and test/ledger.test.ts's grazing-visibility test for the numbers.
+   */
+  hay2: { tuftRegrowBonusFrac: o.hay2.tuftRegrowBonusFrac.value },
+
   /** The prototype's clock: `{ t: .18, period: 180 }` and the `phaseOf` boundaries. One sim-day is 180 sim-seconds. */
   clock: { startT: o.clock.startT.value, periodSec: o.clock.periodSec.value, phases: o.clock.phases.value },
   /** SEASON_TEMP and SEASON_ODDS from the prototype. The season order is `SEASONS` in clock.ts. */
@@ -121,3 +147,18 @@ export const RULES = {
 } as const;
 
 export type Rules = typeof RULES;
+
+/**
+ * hay2's Ledger effect (issue #63): while owned, tuft regrow is eased up by `hay2.tuftRegrowBonusFrac`.
+ * One function so `tick.ts` (actor resolution) and `ledger/advance.ts` (offline catch-up) apply the
+ * same number the same way; test/ledger.test.ts pins both against each other.
+ *
+ * Always >= 1, so this only ever adds to the regrow rate, never subtracts from it: in the Ledger,
+ * where the bite term never reads the current grass level (it is a function of the flock size,
+ * the span, and the weather only, not of `L.grass`), that one fact is enough to prove a tuft owning
+ * hay2 never ends a step below where the same tuft, unowned, would have — test/ledger.test.ts's
+ * "never regrows the field less than an unowned one" case walks that proof with real numbers.
+ */
+export function hay2RegrowMult(owned: readonly string[]): number {
+  return owned.includes('hay2') ? 1 + RULES.hay2.tuftRegrowBonusFrac : 1;
+}

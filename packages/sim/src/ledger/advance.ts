@@ -21,9 +21,10 @@
 //   that lands in rain or over `flockCap` does not happen, as the actor's would not.
 // - A lamb grows up at `lambGrowMs`, in fair weather, into a shorn sheep at the end of the flock
 //   with the next name index, as the `lambs` chain does.
-// - Grass regrows `tuftRegrowPerSec` on every tuft all day; by day and in fair weather the flock
-//   bites `GRAZE_SHARE` of its sheep-seconds at `tuftBitePerSec`, spread over the tufts. The
-//   actors eat one tuft at a time; the ledger eats the lawn evenly.
+// - Grass regrows `tuftRegrowPerSec` on every tuft all day (eased up by `hay2RegrowMult` while hay2
+//   is owned, #63); by day and in fair weather the flock bites `GRAZE_SHARE` of its sheep-seconds
+//   at `tuftBitePerSec`, spread over the tufts. The actors eat one tuft at a time; the ledger eats
+//   the lawn evenly.
 // - Weather rolls as `tickWeather` does, in season mode only: at `rollAtMs` draw the next roll and
 //   the season's snow and rain odds, then a length; rain or snow clears at `untilMs`. Temperature
 //   is set to its target at the end of the step, where the actor relaxes towards it within
@@ -36,7 +37,7 @@ import { phaseOf, seasonAt, SEASON_ODDS, type SeasonName } from '../clock';
 import { NPC_SIZE, SPOT, type Point } from '../geometry';
 import { buyUpgrades, NPC_FOOT } from '../npcs';
 import { chance, nextFloat, type Rng } from '../rng';
-import { RULES, TICK_MS } from '../rules';
+import { hay2RegrowMult, RULES, TICK_MS } from '../rules';
 import { setWeather, tempTarget } from '../weather';
 import { cloneLedger, LEDGER_STEP_MS, ledgerFlock, moodOf, type Ledger, type LedgerLamb } from './ledger';
 
@@ -131,7 +132,8 @@ function stepLedger(L: Ledger, span: number, rng: Rng): void {
     for (const l of L.lambs) l.ageMs += ms;
     const grazing = !L.weather.rain && phaseOf(fracAt(from)) !== 'night';
     const bites = grazing && L.grass.length ? (L.wool.length * GRAZE_SHARE * dt * RULES.tuftBitePerSec) / L.grass.length : 0;
-    const regrow = dt * RULES.tuftRegrowPerSec;
+    // hay2 (#63): the same regrow bonus tick.ts applies, so a catch-up week agrees with a watched one.
+    const regrow = dt * RULES.tuftRegrowPerSec * hay2RegrowMult(L.banks.owned);
     for (let i = 0; i < L.grass.length; i++) L.grass[i] = clamp01((L.grass[i] as number) - bites + regrow);
   };
 

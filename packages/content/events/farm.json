@@ -13,6 +13,7 @@
     {
       "id": "fogMorning",
       "title": "Fog morning",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"Fog morning\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["autumn", "winter", "spring"] },
@@ -39,6 +40,7 @@
     {
       "id": "crowsOnTheField",
       "title": "Crows on the field",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"Crows on the field\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["spring", "summer", "autumn"] },
@@ -70,6 +72,7 @@
     {
       "id": "lostLamb",
       "title": "Lost lamb",
+      "size": "big",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"Lost lamb\". `lambFarFromMother` is PROPOSED to sim on #40.",
       "conditions": [
         { "on": "lambPresent", "op": "eq", "value": true },
@@ -104,6 +107,7 @@
     {
       "id": "merchantCaravan",
       "title": "Merchant caravan",
+      "size": "big",
       "comment": "Write-up and the KNOWN GAP (three code paths still sell wool on this card): docs/content/EVENT_DECK.md, \"Merchant caravan\". Owner's decision 12: no transaction on the farm; data has no coins/wool hook. Weight stays at 10, not trunk's 14: the day-only window (dropping dusk) is roughly half of trunk's day-or-dusk window, so trunk's weight would land this card almost as often inside a narrower slice of the clock — 10 keeps its per-eligible-tick odds close to trunk's own feel instead of concentrating trunk's frequency into half the hours.",
       "conditions": [
         { "on": "merchantPresent", "op": "eq", "value": false },
@@ -125,6 +129,7 @@
     {
       "id": "shearingDay",
       "title": "Shearing day",
+      "size": "big",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"Shearing day\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["spring", "summer"] },
@@ -158,6 +163,7 @@
     {
       "id": "rainbowAfterRain",
       "title": "Rainbow after rain",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"Rainbow after rain\". `simMinutesSinceRain` is PROPOSED to sim on #40.",
       "conditions": [
         { "on": "weather", "op": "eq", "value": "sun" },
@@ -183,6 +189,7 @@
     {
       "id": "strayCatVisits",
       "title": "A stray cat visits",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"A stray cat visits\". Cat is a new creature (High gate for art/behaviour).",
       "conditions": [
         { "on": "weather", "op": "in", "value": ["sun", "rain"] },
@@ -209,6 +216,7 @@
     {
       "id": "farmersDayOff",
       "title": "The farmer's day off",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"The farmer's day off\".",
       "conditions": [
         { "on": "timeOfDay", "op": "in", "value": ["dawn"] },
@@ -234,6 +242,7 @@
     {
       "id": "nightOfTheFireflies",
       "title": "Night of the fireflies",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"Night of the fireflies\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["spring", "summer", "autumn"] },
@@ -264,6 +273,7 @@
     {
       "id": "lambZoomiesHour",
       "title": "Lamb zoomies hour",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"Lamb zoomies hour\".",
       "conditions": [
         { "on": "lambPresent", "op": "eq", "value": true },
@@ -294,6 +304,7 @@
     {
       "id": "wellRunsLow",
       "title": "The well runs low",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"The well runs low\". Drop bubble is an art ask.",
       "conditions": [
         { "on": "season", "op": "in", "value": ["summer"] },
@@ -328,6 +339,7 @@
     {
       "id": "windfall",
       "title": "A windfall",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"A windfall\". Owner's decision 12: no transaction on the farm, so no coins hook.",
       "conditions": [
         { "on": "weather", "op": "in", "value": ["sun", "rain"] },
@@ -349,6 +361,7 @@
     {
       "id": "stargazingNight",
       "title": "Stargazing night",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"Stargazing night\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["spring", "summer", "autumn", "winter"] },
@@ -379,6 +392,7 @@
     {
       "id": "flockHuddle",
       "title": "Rain, and a flock to gather",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"Rain, and a flock to gather\".",
       "conditions": [
         { "on": "weather", "op": "eq", "value": "rain" },
@@ -410,6 +424,7 @@
     {
       "id": "farmerMeetsMerchant",
       "title": "The farmer meets the merchant",
+      "size": "small",
       "comment": "Write-up: docs/content/EVENT_DECK.md, \"The farmer meets the merchant\".",
       "conditions": [
         { "on": "merchantPresent", "op": "eq", "value": true },

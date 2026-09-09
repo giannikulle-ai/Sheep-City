@@ -10,6 +10,8 @@ import type { SimState } from '../src/state';
 /** The shape of one stub card, with everything the schema requires filled in from defaults. */
 export interface StubCard {
   id: string;
+  /** Small unless said otherwise: most pacing rules are asserted on the everyday size. */
+  size?: 'small' | 'big';
   conditions?: unknown[];
   base?: number;
   multipliers?: unknown[];
@@ -25,6 +27,8 @@ export interface StubCard {
 
 export interface StubAuthored {
   id: string;
+  /** Big unless said otherwise: the three shipped authored events are the punctuation, and big. */
+  size?: 'small' | 'big';
   trigger: Record<string, unknown>;
   variables?: Record<string, unknown>;
   priorityOver?: string[];
@@ -39,6 +43,7 @@ function cardDoc(card: StubCard): Record<string, unknown> {
   return {
     id: card.id,
     title: card.id,
+    size: card.size ?? 'small',
     comment: 'stub',
     conditions: card.conditions ?? [],
     weight: { base: card.base ?? 10, multipliers: card.multipliers ?? [] },
@@ -59,6 +64,7 @@ function authoredDoc(event: StubAuthored): Record<string, unknown> {
   return {
     id: event.id,
     title: event.id,
+    size: event.size ?? 'big',
     comment: 'stub',
     trigger: event.trigger,
     variables: event.variables ?? { stub: 1 },

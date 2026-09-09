@@ -17,7 +17,12 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Trunk pushes queue instead of cancelling (issue #93): a merge followed within a
+  # minute by an unrelated trunk push (e.g. a docs-only roster commit) must not have
+  # its CI run cancelled, or deploy.yml's wait step sees `cancelled` and refuses to
+  # deploy the merge. PR runs still cancel a superseded push, since `github.ref` for
+  # a `pull_request` event is the PR's `refs/pull/<n>/merge` ref, never the trunk ref.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/claude/sheepcliff-civilization-framework-bkgla5' }}
 
 jobs:
   typecheck:

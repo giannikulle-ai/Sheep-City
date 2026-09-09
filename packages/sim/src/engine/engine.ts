@@ -1,5 +1,5 @@
-// The engine. It looks at the world once a sim-minute and decides what happens, from three
-// sources (plan section 2, "Layer 3: the event engine" — nothing in the code is named for the
+// The engine. It looks at the world every couple of sim-minutes and decides what happens, from
+// three sources (plan section 2, "Layer 3: the event engine" — nothing in the code is named for the
 // role the plan retired; the engine directs, and events happen in the world):
 //
 //   1. authored events, which become eligible on their own trigger and outrank cards while they run;
@@ -7,10 +7,27 @@
 //   3. cards, drawn under a pacing target from the eligible set, weighted live.
 //
 // Order inside one look at the world: end what is due, run the category actions, then authored
-// events, then the card draw. Authored before cards is the plan's "when an authored event and a
-// card share parameters the authored event wins, so a small random card never steps on something
-// with a more interesting result" — the authored event takes its slot first, and every card it
-// outranks is out of the running for the same minute.
+// events, then the big card draw, then the small card draw. Authored before cards is the plan's
+// "when an authored event and a card share parameters the authored event wins, so a small random
+// card never steps on something with a more interesting result" — the authored event takes its slot
+// first, and every card it outranks is out of the running for the same minute. Big before small is
+// the same idea one step down: a set piece takes its slot before the day's small texture does.
+//
+// **Watched and unwatched** (the owner's decision, 2026-09-09, plan decision 16: "the big ones
+// should not happen when I am not watching"). The sim does not ask the operating system whether
+// anyone is looking; the two paths into it say so, and this is where that is written down:
+//
+//   * the **live path** — `step` / `tick` / `advance`, driven by the client's animation frame — is
+//     **watched**. The client only runs it while the tab is visible; when the tab hides it saves and
+//     stops, and when it comes back it hands the time away to `catchUp`. So a live tick is, by
+//     construction, a tick somebody could have seen.
+//   * `catchUp` (`ledger/catch-up.ts`) is **unwatched**, and it is the only unwatched path. Both of
+//     its branches are: the actor branch (under a farm day away) runs the same live code with
+//     `watched: false`, and the Ledger branch (a farm day or more) runs `ledger/unwatched.ts`.
+//
+// `watched` is therefore a property of the *call*, not of the world: it is threaded down as a
+// parameter and stored nowhere, so it cannot go stale in a save and there is no way for a loaded
+// world to believe it is being watched when it is not.
 //
 // Every start and every end writes to the chronicle through `tell`. Only `card` and `authored`
 // lines carry a `hint`; no line carries an event id in its `facts` (a fact key is a thing the
@@ -22,10 +39,10 @@ import { currentSeason, SEASON_MS } from '../clock';
 import { nextFloat } from '../rng';
 import type { SimState } from '../state';
 import { runScheduledCategoryActions } from './category';
-import { FARM_DECK, momentKindOf, type AuthoredEvent, type Card, type Deck, type EventHookOp } from './deck';
+import { EVENT_SIZES, FARM_DECK, momentKindOf, type AuthoredEvent, type Card, type Deck, type EventHookOp, type EventSize } from './deck';
 import { isRunning, runningCount, type RunningEvent } from './events';
 import { REFERENCE_EFFECTS, runHooks } from './hooks';
-import { drawChance, msToSimMinutes, PACING, pacingAt, simDaysToMs, simHoursToMs, simMinutesToMs, simMinuteMs } from './pacing';
+import { drawChance, msToSimMinutes, NO_REPEAT_SIM_MINUTES, PACING, simDaysToMs, simHoursToMs, simMinutesToMs, simMinuteMs, SIZE_PACING, WARMUP_SIM_MINUTES } from './pacing';
 import { allHold, holds, viewOf, type EventView } from './view';
 
 /**
@@ -123,23 +140,26 @@ export interface EligibleCard {
 }
 
 /**
- * Every card the engine could draw at this moment, with its live weight. A card is eligible when
- * every one of its conditions holds, it is under its own concurrency limit, its cooldown and its
- * own minimum gap have passed, no running authored event outranks it, and it is not the same
- * moment kind as the last event that started (PACING.noRepeatMomentKind).
+ * Every card of `size` the engine could draw at this moment, with its live weight (every size, when
+ * `size` is left out). A card is eligible when every one of its conditions holds, it is under its
+ * own concurrency limit, its cooldown and its own minimum gap have passed, no running authored
+ * event outranks it, and it is not the same moment kind as the last event that started
+ * (PACING.noRepeatMomentKind).
  *
- * That last one is a pacing preference rather than a limit, and it is the one rule the quiet
- * relaxation lifts: once the world has been quiet for the stretch, two lambs in a row is a better
- * answer than nothing at all, and on a small deck (or a season whose nights have only one card in
- * them) the no-repeat rule is otherwise a lockout.
+ * That last one used to be lifted after a long silence, by the quiet relaxation. Nothing lifts it
+ * now: nothing is forced, and a season whose nights hold one card simply has quiet nights (the
+ * owner's decision, 2026-09-09, plan decision 16 — "a quiet farm day is allowed"). It does expire
+ * on its own clock after `PACING.noRepeatMomentKindFarmHours`, because "back to back" is a thing
+ * that happens in time and an un-expiring version of the rule is a permanent lockout rather than a
+ * pacing preference — see that constant's own comment for why that is a fix and not the relaxation
+ * in another coat.
  */
-export function eligibleCards(state: SimState, deck: Deck = FARM_DECK, view: EventView = viewOf(state)): EligibleCard[] {
+export function eligibleCards(state: SimState, deck: Deck = FARM_DECK, view: EventView = viewOf(state), size?: EventSize): EligibleCard[] {
   const e = state.events;
   const now = view.now;
   const periodSec = state.clock.periodSec;
-  const relaxed = pacingAt(e.lastStartMs, now, periodSec).relaxed;
   const out: EligibleCard[] = [];
-  for (const card of deck.cards) {
+  for (const card of size === undefined ? deck.cards : deck.cardsBySize[size]) {
     if (runningCount(e, card.id) >= card.limits.concurrent) continue;
     const cooldownUntil = e.cooldowns[card.id];
     if (cooldownUntil !== undefined && now < cooldownUntil) continue;
@@ -149,7 +169,9 @@ export function eligibleCards(state: SimState, deck: Deck = FARM_DECK, view: Eve
     // is held to whichever is longer rather than to whichever the engine happened to check.
     const lastStart = e.starts[card.id];
     if (lastStart !== undefined && msToSimMinutes(now - lastStart, periodSec) < card.limits.minGapSimMinutes) continue;
-    if (PACING.noRepeatMomentKind && !relaxed && e.lastMomentKind === card.moment.kind) continue;
+    // Never two of the same kind back to back — for `noRepeatMomentKindFarmHours` of world time
+    // after the last start, which is what "back to back" means once nothing lifts the rule.
+    if (PACING.noRepeatMomentKind && e.lastMomentKind === card.moment.kind && msToSimMinutes(now - e.lastStartMs, periodSec) < NO_REPEAT_SIM_MINUTES) continue;
     if (preemptedByAuthored(state, deck, card)) continue;
     if (!allHold(view, card.conditions)) continue;
     out.push({ card, weight: liveWeight(view, card) });
@@ -300,11 +322,17 @@ export function triggerMet(state: SimState, view: EventView, event: AuthoredEven
   }
 }
 
-/** Every authored event whose trigger is met and whose cooldown has passed, in deck order. */
-export function readyAuthored(state: SimState, deck: Deck = FARM_DECK, view: EventView = viewOf(state)): AuthoredEvent[] {
+/**
+ * Every authored event whose trigger is met and whose cooldown has passed, in deck order. A **big**
+ * authored event is held back entirely while `watched` is false, the same rule and for the same
+ * reason as a big card: the owner does not want to miss one (plan decision 16). An authored event's
+ * own trigger is otherwise untouched by pacing — it is punctuation, not a draw.
+ */
+export function readyAuthored(state: SimState, deck: Deck = FARM_DECK, view: EventView = viewOf(state), watched = true): AuthoredEvent[] {
   const e = state.events;
   const out: AuthoredEvent[] = [];
   for (const event of deck.authored) {
+    if (!watched && PACING.bigDrawsWhileWatchedOnly && event.size === 'big') continue;
     if (isRunning(e, event.id)) continue;
     const until = e.cooldowns[event.id];
     if (until !== undefined && view.now < until) continue;
@@ -337,35 +365,67 @@ function endDue(state: SimState, deck: Deck): void {
 }
 
 /**
- * Is a draw allowed at all right now — under the global concurrency cap, and far enough past the
- * last draw for the gap the pacing is in force with? Exported because it is exactly what the
- * relaxation test asserts: the same predicate the draw itself uses, not a re-derivation of it.
+ * Sim time a card of this size last started, or -1 if one never has. Derived from `events.starts`
+ * rather than stored: `starts` already records the last start of every id, and the deck already
+ * knows which ids are which size (`cardsBySize`), so the per-size gap needs no new field on the
+ * engine slice — and so no save bump, and so a v7 save carries its own gaps across a load exactly.
+ * Authored events are not counted: they are punctuation on their own trigger and cooldown, and were
+ * never counted by the global card gap this replaces.
  */
-export function drawAllowed(state: SimState): boolean {
+export function lastDrawOfSize(state: SimState, size: EventSize, deck: Deck = FARM_DECK): number {
+  return lastDrawOfSizeIn(state.events, size, deck);
+}
+
+/** `lastDrawOfSize` off an engine slice alone, for the unwatched path, which has no `SimState`. */
+export function lastDrawOfSizeIn(events: SimState['events'], size: EventSize, deck: Deck = FARM_DECK): number {
+  const starts = events.starts;
+  let last = -1;
+  for (const card of deck.cardsBySize[size]) {
+    const at = starts[card.id];
+    if (at !== undefined && at > last) last = at;
+  }
+  return last;
+}
+
+/**
+ * Is a draw of this size allowed at all right now — under the global concurrency cap, and far
+ * enough past the last draw *of this size* for that size's own gap (`SIZE_PACING`)? A small draw
+ * and a big draw are separate decisions with separate gaps, so a big set piece does not lock the
+ * afternoon's small texture out and a busy afternoon does not push a set piece off.
+ *
+ * Exported because it is exactly what the gap tests assert: the same predicate the draw itself
+ * uses, not a re-derivation of it.
+ */
+export function drawAllowed(state: SimState, size: EventSize, deck: Deck = FARM_DECK): boolean {
   const e = state.events;
   const now = state.clock.nowMs;
   if (e.running.length >= PACING.concurrentCap) return false;
-  if (e.lastDrawMs < 0) return true;
-  const pacing = pacingAt(e.lastStartMs, now, state.clock.periodSec);
-  return msToSimMinutes(now - e.lastDrawMs, state.clock.periodSec) >= pacing.gapSimMinutes;
+  const last = lastDrawOfSize(state, size, deck);
+  if (last < 0) return true;
+  return msToSimMinutes(now - last, state.clock.periodSec) >= SIZE_PACING[size].gapSimMinutes;
 }
 
-/** One card draw attempt under the pacing target. Returns the card that started, or null. */
-function attemptDraw(state: SimState, deck: Deck, view: EventView): RunningEvent | null {
+/**
+ * One draw attempt of one size, under that size's own pacing target. `simMinutesCovered` is how
+ * much world time this look stands for — `PACING.evalEverySimMinutes` on the live path — so the
+ * same target rate per farm day comes out whatever resolution the caller looks at.
+ *
+ * Returns the card that started, or null.
+ */
+export function attemptDraw(state: SimState, deck: Deck, view: EventView, size: EventSize, simMinutesCovered: number): RunningEvent | null {
   const e = state.events;
-  // The warm-up (PACING.warmupSimMinutes): no card draws in a fresh world's first stretch, so the
+  // The warm-up (PACING.warmupFarmHours): no card draws in a fresh world's first stretch, so the
   // very first look at the world does not win a card before the player has settled in. Authored
   // events and category actions are not gated by this — they run earlier in `evaluate`, before this
   // function is even called.
-  if (msToSimMinutes(state.clock.nowMs, state.clock.periodSec) < PACING.warmupSimMinutes) return null;
-  if (!drawAllowed(state)) return null;
-  const pacing = pacingAt(e.lastStartMs, state.clock.nowMs, state.clock.periodSec);
-  const eligible = eligibleCards(state, deck, view);
+  if (msToSimMinutes(state.clock.nowMs, state.clock.periodSec) < WARMUP_SIM_MINUTES) return null;
+  if (!drawAllowed(state, size, deck)) return null;
+  const eligible = eligibleCards(state, deck, view, size);
   if (eligible.length === 0) return null;
-  // Each card's own gap, start to start, on top of the global one.
+  // Each card's own gap, start to start, on top of the global one for its size.
   let total = 0;
   for (const item of eligible) total += item.weight;
-  const chance = drawChance(total, pacing.weightBoost);
+  const chance = drawChance(total, size, simMinutesCovered);
   // No eligible weight, no roll: a quiet field never burns a draw from the generator, so the
   // engine's stream depends only on the attempts it actually made.
   if (chance <= 0) return null;
@@ -388,40 +448,54 @@ function attemptDraw(state: SimState, deck: Deck, view: EventView): RunningEvent
  * the predicate reads on the evaluations where the answer is already a plain "no" from data the
  * engine has in hand (Round 2 verifier finding B, #82: the catch-up budget).
  */
-function couldStartSomething(state: SimState, deck: Deck): boolean {
+function couldStartSomething(state: SimState, deck: Deck, watched: boolean): boolean {
   const e = state.events;
   if (e.running.length >= PACING.concurrentCap) return false; // every start path checks this first
   const now = state.clock.nowMs;
   for (const event of deck.authored) {
     if (event.deferred) continue; // a deferred trigger (`realDate`, #84) can never be met: never worth a look
+    if (!watched && PACING.bigDrawsWhileWatchedOnly && event.size === 'big') continue; // held back entirely: never worth a look
     if (isRunning(e, event.id)) continue;
     const until = e.cooldowns[event.id];
     if (until === undefined || now >= until) return true; // off cooldown: worth a real look
   }
-  return msToSimMinutes(now, state.clock.periodSec) >= PACING.warmupSimMinutes && drawAllowed(state);
+  if (msToSimMinutes(now, state.clock.periodSec) < WARMUP_SIM_MINUTES) return false;
+  for (const size of EVENT_SIZES) {
+    if (!watched && PACING.bigDrawsWhileWatchedOnly && size === 'big') continue;
+    if (drawAllowed(state, size, deck)) return true;
+  }
+  return false;
 }
 
 /**
- * One look at the world: ends, category actions, authored triggers, then a card draw. The
- * predicate view — and everything it can cost to build (the mean fleece, the mean grass, the
- * flock's spread, each an O(actors) walk cached on first ask) — is built only when
+ * One look at the world: ends, category actions, authored triggers, then a big card draw, then a
+ * small one. The predicate view — and everything it can cost to build (the mean fleece, the mean
+ * grass, the flock's spread, each an O(actors) walk cached on first ask) — is built only when
  * `couldStartSomething` says a start is actually possible (Round 2 verifier finding B, #82: the
- * catch-up budget). With the global gap at 800 sim-minutes and every authored trigger usually on
- * cooldown, most evaluations are a "no" the engine already knows without reading a single card's
- * conditions; those cost a handful of comparisons and nothing more.
+ * catch-up budget). With the small gap at six farm hours, the big gap at four farm days, and every
+ * authored trigger usually on cooldown, most evaluations are a "no" the engine already knows
+ * without reading a single card's conditions; those cost a handful of comparisons and nothing more.
+ *
+ * `watched` says whether anyone could be looking at this tick. **False holds every big thing back**,
+ * card and authored alike (PACING.bigDrawsWhileWatchedOnly): the owner does not want to come back to
+ * find they missed the storm. Small things draw either way. The live path passes true and `catchUp`
+ * passes false; the file header says why that is the whole of it.
  */
-export function evaluate(state: SimState, deck: Deck = FARM_DECK): void {
+export function evaluate(state: SimState, deck: Deck = FARM_DECK, watched = true): void {
   endDue(state, deck);
   runScheduledCategoryActions(state);
-  if (!couldStartSomething(state, deck)) return;
+  if (!couldStartSomething(state, deck, watched)) return;
   // One view for the whole look at the world: its aggregates are computed at most once even
   // though the triggers and every card read them.
   const view = viewOf(state);
-  for (const event of readyAuthored(state, deck, view)) {
+  for (const event of readyAuthored(state, deck, view, watched)) {
     if (state.events.running.length >= PACING.concurrentCap) break;
     startEvent(state, deck, event.id, 'authored');
   }
-  attemptDraw(state, deck, view);
+  // Big first, then small: a set piece takes its slot before the day's small texture does, and the
+  // small draw then sees whatever the big one started (the cap, the no-repeat kind, the preemption).
+  if (watched || !PACING.bigDrawsWhileWatchedOnly) attemptDraw(state, deck, view, 'big', PACING.evalEverySimMinutes);
+  attemptDraw(state, deck, view, 'small', PACING.evalEverySimMinutes);
 }
 
 /**
@@ -429,7 +503,7 @@ export function evaluate(state: SimState, deck: Deck = FARM_DECK): void {
  * card that starts this tick is already true for the actors this tick. Cheap on most ticks: the
  * running events' own per-tick effects, and a look at the world only when a sim-minute has passed.
  */
-export function tickEngine(state: SimState, deck: Deck = FARM_DECK): void {
+export function tickEngine(state: SimState, deck: Deck = FARM_DECK, watched = true): void {
   const e = state.events;
   if (!e.enabled) return;
   const now = state.clock.nowMs;
@@ -441,7 +515,7 @@ export function tickEngine(state: SimState, deck: Deck = FARM_DECK): void {
   // A jump in time (a loaded save, a respawn, a long step) resumes from now rather than catching
   // up every sim-minute it missed: the engine looks at the world it is in, not the one it left.
   if (e.nextEvalMs <= now) e.nextEvalMs = now + minute;
-  evaluate(state, deck);
+  evaluate(state, deck, watched);
 }
 
 /**
@@ -491,9 +565,32 @@ export function applyAuthoredIntent(state: SimState, id: string, action: 'trigge
   delete e.cooldowns[id];
 }
 
-/** The pacing in force right now: what a draw attempt is being held to, and whether it is relaxed. */
-export function pacingNow(state: SimState): ReturnType<typeof pacingAt> {
-  return pacingAt(state.events.lastStartMs, state.clock.nowMs, state.clock.periodSec);
+/** What each size's draw is being held to right now: its gap, and how long since one last landed. */
+export interface PacingNow {
+  /** Sim-minutes since a card of this size last started; `Infinity` when one never has. */
+  readonly sinceSimMinutes: number;
+  /** The gap a draw of this size is held to, in sim-minutes. Fixed: nothing relaxes it. */
+  readonly gapSimMinutes: number;
+  /** Is a draw of this size allowed right now (the cap and the gap, not the conditions)? */
+  readonly allowed: boolean;
+}
+
+/**
+ * The pacing in force right now, per size. There is no `relaxed` any more and no quiet stretch:
+ * the thresholds this reports are the only ones there are (plan decision 16, "nothing is forced").
+ */
+export function pacingNow(state: SimState, deck: Deck = FARM_DECK): Record<EventSize, PacingNow> {
+  const now = state.clock.nowMs;
+  const periodSec = state.clock.periodSec;
+  const of = (size: EventSize): PacingNow => {
+    const last = lastDrawOfSize(state, size, deck);
+    return {
+      sinceSimMinutes: last < 0 ? Infinity : msToSimMinutes(now - last, periodSec),
+      gapSimMinutes: SIZE_PACING[size].gapSimMinutes,
+      allowed: drawAllowed(state, size, deck),
+    };
+  };
+  return { small: of('small'), big: of('big') };
 }
 
 /** The moment kinds running right now, for the watch test and a debug overlay. */

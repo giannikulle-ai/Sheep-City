@@ -86,6 +86,8 @@ export interface EventMoment {
 export interface Card {
   readonly id: string;
   readonly title: string;
+  /** Small or big: the pacing target this card is drawn under, and whether it may draw unwatched. */
+  readonly size: EventSize;
   readonly conditions: readonly Predicate[];
   readonly weight: CardWeight;
   readonly limits: CardLimits;
@@ -111,6 +113,8 @@ export type DeferredTrigger = { readonly kind: 'realDate'; readonly ticket: '#84
 export interface AuthoredEvent {
   readonly id: string;
   readonly title: string;
+  /** Small or big, exactly as on a card: a big authored event never starts while nobody is watching. */
+  readonly size: EventSize;
   readonly trigger: AuthoredTrigger;
   /**
    * Set when this event's trigger is a *known but not yet implemented* kind (today: `realDate`,
@@ -139,10 +143,21 @@ export interface Deck {
   readonly authored: readonly AuthoredEvent[];
   /** Every id in the deck, card or authored, for the lookups the engine does by id. */
   readonly byId: ReadonlyMap<string, DeckEntry>;
+  /**
+   * The cards of each size, split once at load. The draw is a decision per size (a small draw and
+   * a big draw are separate, with separate gaps — see `pacing.ts`), so the split is data the engine
+   * reads rather than a filter it re-runs on every look at the world.
+   */
+  readonly cardsBySize: Readonly<Record<EventSize, readonly Card[]>>;
 }
 
 /** A time band, as `timeOfDay` reads it: the four the clock's `phaseOf` returns. */
 export type TimeOfDay = Phase;
+
+/** The two sizes a deck entry can be. Mirrors `size` in packages/content/schema/events.schema.json. */
+export const EVENT_SIZES = ['small', 'big'] as const;
+export type EventSize = (typeof EVENT_SIZES)[number];
+
 
 function fail(where: string, message: string): never {
   throw new Error(`event deck: ${where}: ${message}`);
@@ -156,6 +171,21 @@ function num(value: unknown, where: string): number {
 function str(value: unknown, where: string): string {
   if (typeof value !== 'string') fail(where, `expected a string, got ${JSON.stringify(value)}`);
   return value;
+}
+
+/**
+ * The size on one card or authored event, checked at load. A missing or unknown size fails the same
+ * way an unknown trigger kind or hook op does (the owner's decision, plan 16): size decides the
+ * pacing target a thing is drawn under *and* whether it may happen while nobody is watching, so an
+ * entry the engine cannot size is not an entry it can honestly draw. There is no default — guessing
+ * `small` would let a set piece fire into an empty room, and guessing `big` would silently stop a
+ * card ever drawing on an unwatched day, and both are the kind of quiet wrong this loader exists to
+ * refuse.
+ */
+function size(raw: unknown, where: string): EventSize {
+  const value = str(raw, where);
+  if (!(EVENT_SIZES as readonly string[]).includes(value)) fail(where, `"${value}" is not a size (${EVENT_SIZES.join(', ')})`);
+  return value as EventSize;
 }
 
 function rec(value: unknown, where: string): Record<string, unknown> {
@@ -242,6 +272,7 @@ function card(raw: unknown, where: string): Card {
   return {
     id: str(c['id'], `${where}.id`),
     title: str(c['title'], `${where}.title`),
+    size: size(c['size'], `${where}.size`),
     conditions: list(c['conditions'], `${where}.conditions`).map((x, i) => predicate(x, `${where}.conditions[${i}]`)),
     weight: {
       base,
@@ -328,6 +359,7 @@ function authoredEvent(raw: unknown, where: string): AuthoredEvent {
   return {
     id: str(e['id'], `${where}.id`),
     title: str(e['title'], `${where}.title`),
+    size: size(e['size'], `${where}.size`),
     trigger: trig,
     ...(deferred ? { deferred } : {}),
     variables: rec(e['variables'], `${where}.variables`),
@@ -364,7 +396,8 @@ export function loadDeck(cardsDoc: unknown, authoredDoc: unknown): Deck {
     if (byId.has(e.id)) fail('authored.events', `id "${e.id}" is already a card id`);
     byId.set(e.id, { kind: 'authored', event: e });
   }
-  return { district, cards, authored: events, byId };
+  const cardsBySize = { small: cards.filter((c) => c.size === 'small'), big: cards.filter((c) => c.size === 'big') };
+  return { district, cards, authored: events, byId, cardsBySize };
 }
 
 /** The farm's deck: fifteen cards and three authored events, straight from the world lane's data. */
@@ -375,4 +408,11 @@ export function momentKindOf(id: string, deck: Deck = FARM_DECK): string | null 
   const entry = deck.byId.get(id);
   if (!entry) return null;
   return entry.kind === 'card' ? entry.card.moment.kind : entry.event.moment.kind;
+}
+
+/** The size an id is, or null for an id the deck does not carry. */
+export function sizeOf(id: string, deck: Deck = FARM_DECK): EventSize | null {
+  const entry = deck.byId.get(id);
+  if (!entry) return null;
+  return entry.kind === 'card' ? entry.card.size : entry.event.size;
 }

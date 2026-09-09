@@ -49,6 +49,54 @@ So on a real gzip-serving host, first load is **~318 kB compressed**, and the JS
 that; the rest is the eight time-of-day/weather background PNGs and the spritesheet PNG, which
 gzip does almost nothing for because PNG is already compressed.
 
+## Measurement: issue #108, 2026-09-09, commit c02030f — gzip turned on
+
+`tools/deploy/tile/server.js` (the static server the deploy check and The Garage tile run) now
+gzips `.html`, `.js`/`.mjs`, `.css`, `.json`, `.svg`, `.webmanifest`, `.txt` and `.map` responses
+when the request sends `Accept-Encoding: gzip`, at level 9, compressed once per file and cached
+in memory for the life of the process; a request with no matching `Accept-Encoding` still gets
+the plain file, and PNGs are never touched. Same tool and method as the #97 measurement above,
+re-run against this commit:
+
+| Profile | Requests | Transferred (server) | Time to `body[data-ready]` |
+|---|---|---|---|
+| 4G (9 Mbps / 170 ms RTT) | 12 | 329,496 B | ~1.04-1.05 s |
+| Slow 3G (400 kbps / 400 ms RTT) | 12 | 329,496 B | ~8.02-8.05 s |
+
+`sawEncoding` (the script's own detector, "did any response carry a `Content-Encoding` header")
+now comes back `on` in both runs, where #97 recorded `off`. On-disk gzip -9 of the same 12 files
+at this commit: 453,811 B raw → 319,708 B gzip (per-file, from `vite build`'s own report: the JS
+bundle 174.24 kB → gzip 60.19 kB; the eight backgrounds + spritesheet PNG together, 262.7 kB →
+255.3 kB, barely move; `index.html` 11.4 kB → 3.0 kB; `spritesheet-*.json` 5.4 kB → 1.3 kB — the
+per-file shape matches #97's table almost exactly). The CDP-measured 329,496 B sits about 3.1%
+above the 319,708 B on-disk gzip total, which is response/request header overhead across 12
+requests plus the gzip framing CDP counts as transferred; #97 saw a tighter ~0.5% gap between its
+raw CDP figure and on-disk raw bytes because there was no compression or extra header (`Vary`,
+`Content-Encoding`) in play yet.
+
+Before vs. after, same tool, same throttle profiles:
+
+| Profile | Transferred, #97 (no gzip) | Transferred, #108 (gzip on) | Change |
+|---|---|---|---|
+| 4G | 450,448 B | 329,496 B | −121 kB (−26.9%) |
+| Slow 3G | 450,448 B | 329,496 B | −121 kB (−26.9%) |
+| Time to ready, 4G | ~1.1-1.2 s | ~1.04-1.05 s | modestly faster |
+| Time to ready, Slow 3G | ~10.3-10.4 s | ~8.02-8.05 s | ~2.3 s faster |
+
+Landed within about 11 kB of the ~318 kB gzip figure #97 projected (329.5 kB measured, including
+header overhead the on-disk-only figure doesn't count, against 317.8 kB projected at #97's
+commit / 319.7 kB at this one) — the "done means" bar ("near the gzip figure") is met. The raw
+(uncompressed) on-disk total also grew a little between #97 and this commit (448,278 B → 453,811
+B, mostly the JS bundle) from unrelated commits that landed on trunk in between; none of that
+growth is from this ticket, which touches only `tools/deploy/tile/server.js` and
+`tools/deploy/check-dist.mjs`.
+
+Not verified here, and the ticket says so plainly: this is all measured against
+`tools/deploy/tile/server.js` directly, the same way `check-dist.mjs` and The Garage's tile do.
+Whether Caddy/Cloudflare in front of the live tile (`docs/DEPLOY.md`) strips, replaces, or leaves
+this `Content-Encoding` alone has not been checked against the live URL — see the deploy body
+for the verification command.
+
 ## Verdict: the event engine's card data (issue #97 step 2)
 
 `packages/content/events/farm.json` (15 cards) and `events/authored.json` (3 cards) are

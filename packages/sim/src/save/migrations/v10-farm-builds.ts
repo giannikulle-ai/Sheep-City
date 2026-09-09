@@ -13,7 +13,11 @@
 // it — never had). Nothing already owned moves, reorders, or duplicates.
 //
 // It never throws: a document with no world, or a world with no banks, is `validateWorld`'s to
-// refuse with a real message, not this file's to blow up on.
+// refuse with a real message, not this file's to blow up on. The one exception is `owned` itself:
+// `fillOwned` treats anything that is not already an array as empty and returns a valid three-id
+// list, so a document whose `banks.owned` was malformed loads clean here rather than being left for
+// `validateWorld` to refuse — deliberately, since every world owns all three from v10 on and there
+// is no meaningful "refuse to fix a field this migration is about to fully own" behaviour to prefer.
 
 import { FARM_BUILDS } from '../../state';
 import type { Migration } from './index';

@@ -87,6 +87,14 @@ for (const c of [NIGHT, WEEK]) {
     // summing backing sets, not by counting rows, and a fresh invariant is checked alongside it:
     // **no two rows, shown or in "and N more", share the same picture** — a page never shows the
     // same card line twice, collapsed or not (#113's own done-means).
+    //
+    // F3 (round 2): a collapsed line's own `entryIds` is itself capped at `MAX_STORED_MORE` (a
+    // card's own repeats in one gap have no bound, and storing one id per telling grows a page's
+    // stored size with the length of the gap itself) — so "every entry kept" below the row cap is
+    // now checked against each row's `count` (`lineCount`, the group's true tally), not against how
+    // many ids happen to be stored; the stored ids themselves are still checked as real chronicle
+    // entries (`bad`, below), and are still capped at `MAX_STORED_MORE` each (unit-tested in
+    // `storybook.test.ts`, not re-checked here at the DOM layer).
     const result = await page.evaluate(
       ({ maxStoredMore, maxPageLines }: { maxStoredMore: number; maxPageLines: number }) => {
         const app = (window as unknown as WithApp).sheepcliff;
@@ -100,7 +108,7 @@ for (const c of [NIGHT, WEEK]) {
         const pictures = new Map<string, number>();
         for (const l of allRows) pictures.set(l.picture, (pictures.get(l.picture) ?? 0) + 1);
         const dupPictures = [...pictures.entries()].filter(([, n]) => n > 1).map(([p]) => p);
-        const accountedFor = new Set(allRows.flatMap(backing));
+        const totalAccounted = allRows.reduce((sum, l) => sum + (l.count ?? backing(l).length), 0);
         const rows = sb.lines.length + sb.more.length;
         const maxRows = maxPageLines + maxStoredMore;
         const reason = bad.length
@@ -109,8 +117,8 @@ for (const c of [NIGHT, WEEK]) {
             ? `the same card line appears in more than one row: ${dupPictures.join(',')}`
             : rows > maxRows
               ? `page keeps ${rows} rows, more than the cap of ${maxRows}`
-              : rows < maxRows && accountedFor.size !== told.length
-                ? `page accounts for ${accountedFor.size} of the gap's ${told.length} entries, under the row cap where nothing should be dropped`
+              : rows < maxRows && totalAccounted !== told.length
+                ? `page accounts for ${totalAccounted} of the gap's ${told.length} entries (by count), under the row cap where nothing should be dropped`
                 : sb.lines.length < 1
                   ? 'no lines shown'
                   : '';

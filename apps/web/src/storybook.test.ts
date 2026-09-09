@@ -7,6 +7,7 @@ import {
   EMPTY_PAGE_STORE,
   gapSpansNight,
   LINE_COUNT_STEPS,
+  lineCount,
   lineCountFor,
   lineEntryIds,
   MAX_PAGE_LINES,
@@ -334,6 +335,35 @@ describe('buildStorybookPage collapses a repeated card into one line (#113)', ()
   it('lineEntryIds falls back to [entryId] for a line with no entryIds (a page saved before #113)', () => {
     expect(lineEntryIds({ entryId: 'x', line: 'l', picture: 'p' })).toEqual(['x']);
     expect(lineEntryIds({ entryId: 'x', line: 'l', picture: 'p', entryIds: ['x', 'y'] })).toEqual(['x', 'y']);
+  });
+
+  // F3 (round 2): a card's own repeats in one gap have no bound — a real week away repeats its most
+  // common small card in the thousands — so storing one id per telling grows a page's stored size
+  // with the length of the gap itself, unboundedly, next to the save. `entryIds` is capped at
+  // `MAX_STORED_MORE`, the same cap the page's own "and N more" already uses; `count` keeps the
+  // group's true tally exact regardless, so the sentence and every other reader after "how many"
+  // never disagrees with what the id list alone would say.
+  it("a card repeated beyond MAX_STORED_MORE times in one gap stores only MAX_STORED_MORE ids, with the group's true tally kept exact in `count`", () => {
+    const total = MAX_STORED_MORE + 23; // well past the cap, so entryIds is capped but count is not
+    const entries = Array.from({ length: total }, (_, i) => crows(`C${i}`, i === 0 ? 0.9 : 0, i));
+    const page = buildStorybookPage(entries, 7 * 24 * 3600_000, 0, 1000, 5000, 180)!;
+    expect(page.lines).toHaveLength(1); // still one collapsed line, however many tellings back it
+    const crowsLine = page.lines[0]!;
+    expect(crowsLine.count).toBe(total);
+    expect(crowsLine.entryIds).toHaveLength(MAX_STORED_MORE); // capped, not `total`
+    // the stored ids are the most notable prefix of the group (C0's notability anchors it first),
+    // in the same order `entries` itself arrived in — a sample, not an arbitrary subset
+    expect(crowsLine.entryIds).toEqual(entries.slice(0, MAX_STORED_MORE).map((e) => e.id));
+    // the sentence's own count is the true tally, not how many ids happen to be stored — an
+    // off-by-one here (`group.length - 1`, or reading `entryIds.length` post-cap instead) fails this
+    expect(crowsLine.line).toBe(`Three crows landed on the hay and Digital Luna sent them packing, ${total} times this week.`);
+    expect(lineCount(crowsLine)).toBe(total);
+  });
+
+  it('lineCount reads the true tally: `count` when the line carries it, else how many ids it names', () => {
+    expect(lineCount({ entryId: 'x', line: 'l', picture: 'p' })).toBe(1); // no entryIds, no count
+    expect(lineCount({ entryId: 'x', line: 'l', picture: 'p', entryIds: ['x', 'y'] })).toBe(2); // no count: falls back
+    expect(lineCount({ entryId: 'x', line: 'l', picture: 'p', entryIds: ['x'], count: 73 })).toBe(73); // count wins
   });
 });
 

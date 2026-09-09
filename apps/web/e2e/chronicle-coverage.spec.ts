@@ -17,6 +17,16 @@ import type { SheepcliffApi } from '../src/api';
 // mechanical count. `expectCardTracesToChronicle` checks that directly rather than relaxing the
 // "only tells" invariant: every backing id must be real, every backing entry must carry the exact
 // same text a collapsed line claims to summarise, and the count in the suffix must equal how many.
+//
+// F3 (round 2): `entryIds` is now capped at `MAX_STORED_MORE` (a card's own repeats in one gap have
+// no bound, so storing one id per telling forever grows a page's stored size with the length of the
+// gap itself) — `count` carries the group's true tally alongside it, always exact regardless of the
+// cap. `expectCardTracesToChronicle` traces a collapsed line through *both*: every stored id must be
+// real (as before), the suffix's own number must equal `count` — not `entryIds.length`, which can
+// now be smaller — and `entryIds.length` itself must equal `Math.min(count, MAX_STORED_MORE)`, never
+// more (the cap held) and never less (nothing was dropped ahead of the cap).
+const MAX_STORED_MORE = 50;
+
 type WithApp = { sheepcliff: SheepcliffApi };
 
 /** The two golden cases (`storybook.spec.ts`'s `NIGHT`/`WEEK`): seed 17, the same `?freeze=1&t=0.2`
@@ -40,10 +50,11 @@ interface CardCoverage {
   hasPage: boolean;
   title: string | null;
   subtitle: string | null;
-  /** every `{entryId, line, entryIds}` the page's JS state carries, lines then "more", in the order
-   * shown — `entryIds` is `lineEntryIds(l)` (#113): `l.entryIds` when the line carries it, else
-   * `[l.entryId]`, computed inline since this runs in the page and cannot import from `storybook.ts`. */
-  apiLines: { entryId: string; line: string; entryIds: string[] }[];
+  /** every `{entryId, line, entryIds, count}` the page's JS state carries, lines then "more", in
+   * the order shown — `entryIds` is `lineEntryIds(l)` (#113), `count` is `lineCount(l)` (F3, round
+   * 2): `l.entryIds`/`l.count` when the line carries them, else `[l.entryId]`/`l.entryIds.length`,
+   * computed inline since this runs in the page and cannot import from `storybook.ts`. */
+  apiLines: { entryId: string; line: string; entryIds: string[]; count: number }[];
   shownCount: number;
   /** the rendered `<span>` text of every currently-visible `.storyline` row, in DOM order */
   domRows: (string | null)[];
@@ -80,7 +91,10 @@ function readCardCoverage(page: Page): Promise<CardCoverage> {
       title: document.querySelector('#storyTitle')?.textContent ?? null,
       subtitle: document.querySelector('#storySubtitle')?.textContent ?? null,
       apiLines: sb
-        ? [...sb.lines, ...sb.more].map((l) => ({ entryId: l.entryId, line: l.line, entryIds: l.entryIds ?? [l.entryId] }))
+        ? [...sb.lines, ...sb.more].map((l) => {
+            const entryIds = l.entryIds ?? [l.entryId];
+            return { entryId: l.entryId, line: l.line, entryIds, count: l.count ?? entryIds.length };
+          })
         : [],
       shownCount: sb ? sb.lines.length : 0,
       domRows: [...document.querySelectorAll('#storyLines .storyline span')].map((s) => s.textContent),
@@ -109,8 +123,10 @@ function expectCardTracesToChronicle(c: CardCoverage): void {
     for (const id of l.entryIds) expect(chronicleIds.has(id), `backing entry id "${id}" on the page is not in sim().chronicle`).toBe(true);
 
     if (l.entryIds.length <= 1) {
-      // the plain, pre-#113 case: the rendered text is exactly this one entry's own line
+      // the plain, pre-#113 case: the rendered text is exactly this one entry's own line, and its
+      // true count (F3, round 2) is exactly one — it names no more entries than it stores.
       expect(l.line, `entry "${l.entryId}"'s rendered line does not match its chronicle text`).toBe(chronicleLine.get(l.entryId));
+      expect(l.count, `plain line "${l.line}" claims a count other than 1`).toBe(1);
       continue;
     }
 
@@ -119,13 +135,23 @@ function expectCardTracesToChronicle(c: CardCoverage): void {
     // and the rendered line must be that shared text with its trailing period swapped for a
     // mechanical "N times ..." suffix — never new prose, and never a count that disagrees with how
     // many entries actually back it.
+    //
+    // F3 (round 2): the stored `entryIds` can now be a capped sample of a much larger group (a card
+    // repeated beyond `MAX_STORED_MORE` times in one gap), so the count the suffix must name is
+    // `l.count` — the group's true tally — not `l.entryIds.length`, which is what is checked next.
     const backingTexts = new Set(l.entryIds.map((id) => chronicleLine.get(id)));
     expect(backingTexts.size, `collapsed line "${l.line}" backs entries with different chronicle text`).toBe(1);
     const base = [...backingTexts][0]!.replace(/\.+$/, '');
     expect(l.line.startsWith(`${base}, `), `collapsed line "${l.line}" does not start with its backing entries' own text`).toBe(true);
     expect(l.line.endsWith('.'), `collapsed line "${l.line}" is not a finished sentence`).toBe(true);
-    const countWord = SMALL_WORDS[l.entryIds.length] ?? String(l.entryIds.length);
-    expect(l.line, `collapsed line "${l.line}" does not name its own backing count (${l.entryIds.length})`).toContain(`${countWord} times`);
+    const countWord = SMALL_WORDS[l.count] ?? String(l.count);
+    expect(l.line, `collapsed line "${l.line}" does not name its own true count (${l.count})`).toContain(`${countWord} times`);
+    // the stored backing set is exactly the true count, capped at MAX_STORED_MORE — never more
+    // (the cap held) and never fewer (nothing was dropped ahead of the cap).
+    expect(
+      l.entryIds.length,
+      `collapsed line "${l.line}" stores ${l.entryIds.length} backing ids for a true count of ${l.count} (expected ${Math.min(l.count, MAX_STORED_MORE)})`,
+    ).toBe(Math.min(l.count, MAX_STORED_MORE));
   }
 
   // the DOM's own rows are exactly the api's *currently visible* lines' text, in the same order —

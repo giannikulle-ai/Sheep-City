@@ -12,7 +12,7 @@ import { CHRONICLE_SOURCES } from '../chronicle/types';
 import { ACT_VERBS, AUTHORED_ACTIONS, DEITY_WEATHER_KINDS, FARM_ACTIONS, INTENT_TYPES, LUNA_ACTIONS, SHEEP_ACTIONS, type IntentType } from '../intents';
 import { cloneState, SAVE_VERSION, type SimState } from '../state';
 import { isPlainObject, SAVE_FORMAT, SaveError, type SaveDoc, type SaveWorld } from './doc';
-import { migrateSave } from './migrations/index';
+import { DEFAULT_MIGRATION_CONTEXT, migrateSave, type MigrationContext } from './migrations/index';
 
 /** A current-version document for `state`. Throws if the state holds something JSON cannot carry. */
 export function toSave(state: SimState): SaveDoc {
@@ -22,12 +22,25 @@ export function toSave(state: SimState): SaveDoc {
   return { format: SAVE_FORMAT, version: SAVE_VERSION, world };
 }
 
+/** What a host can tell `fromSave` about the world outside the document. */
+export interface LoadOptions {
+  /**
+   * Real milliseconds since 1970 (UTC) at the moment of this load. The only wall-clock reading the
+   * sim ever sees, and it comes in as a parameter (charter: "Time comes in as a parameter"). Used
+   * by the v8 calendar migration (#84) to anchor a pre-calendar world to the real present, once,
+   * on its first load. A save already at v8 carries its own epoch and ignores this. Defaults to
+   * `DEFAULT_REAL_EPOCH_MS`, so a caller that does not pass one still loads deterministically.
+   */
+  realNowMs?: number;
+}
+
 /**
  * The state a document describes. Accepts any version this build knows and migrates it up. Throws
  * a `SaveError` for anything else: foreign JSON, a newer version, a world that fails validation.
  */
-export function fromSave(doc: unknown): SimState {
-  const current = migrateSave(doc);
+export function fromSave(doc: unknown, options: LoadOptions = {}): SimState {
+  const context: MigrationContext = options.realNowMs === undefined ? DEFAULT_MIGRATION_CONTEXT : { realNowMs: options.realNowMs };
+  const current = migrateSave(doc, undefined, undefined, context);
   if (current['format'] !== SAVE_FORMAT) {
     throw new SaveError('bad-format', `expected format "${SAVE_FORMAT}", got ${JSON.stringify(current['format'])}`);
   }
@@ -50,14 +63,14 @@ export function toSaveText(state: SimState): string {
 }
 
 /** `fromSave` from text. Malformed JSON is a `SaveError('not-a-save')`, not a bare SyntaxError. */
-export function fromSaveText(text: string): SimState {
+export function fromSaveText(text: string, options: LoadOptions = {}): SimState {
   let doc: unknown;
   try {
     doc = JSON.parse(text);
   } catch (error) {
     throw new SaveError('not-a-save', `save text is not JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
-  return fromSave(doc);
+  return fromSave(doc, options);
 }
 
 /**
@@ -358,6 +371,11 @@ function seasonShape(value: unknown, path: string): void {
   const season = obj(value, path);
   nonNegative(season['elapsedMs'], `${path}.elapsedMs`);
   nullOr(season['override'], `${path}.override`, (v, p) => oneOf(v, p, SEASONS));
+  // The two calendar fields, added in save v8 (#84). `realEpochMs` is a plain number, not a
+  // non-negative one: a real instant before 1970 is nonsense for a Sheepcliff world but it is not
+  // this function's business to say so, and a negative epoch reads a calendar just fine.
+  num(season['realEpochMs'], `${path}.realEpochMs`);
+  uint32(season['seed'], `${path}.seed`);
 }
 
 function weatherShape(value: unknown, path: string): void {

@@ -249,12 +249,20 @@ describe('scripted sheep day', () => {
   // shifts this day's card draws; and every storybook line is filled before it is told (#114), so
   // the chronicle entries inside the hashed state now read "Digital Luna" where they read "{dl}".
   // `EVENTS` above and every sheep transition are byte-for-byte the same as the #86-merge pin.
+  //
+  // It moved a ninth time in **#84**, schema-only: `db82b911ed86c1f8` → `7cbfaceab05ef214`.
+  // `season` now carries `realEpochMs` and `seed` (and so does the Ledger snapshot's copy of it),
+  // the two numbers the real-year calendar is read from, and the state is v8. A world made without
+  // a real time starts on April 1 (`DEFAULT_REAL_EPOCH_MS`), which is spring on every seed — the
+  // same season the old nine-day wheel started every world in — so not one draw, card or NPC
+  // timing moved: `EVENTS` above and every sheep transition are byte-for-byte the same again, and
+  // test/calendar.test.ts pins this day's **v7 view** to `db82b911ed86c1f8`, the value above.
   it('seed 71 twice gives the same day and the same hash', () => {
     const a = scriptedDay(71);
     const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('db82b911ed86c1f8');
+    expect(hashState(a.state)).toBe('7cbfaceab05ef214');
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "the sheep's 91 transitions at seed 71 are

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createClock, createSeason, SEASON_MS } from '../src/clock';
+import { realMsOfCivil } from '../src/calendar';
+import { createClock, createSeason } from '../src/clock';
 import { createRng } from '../src/rng';
 import { RULES } from '../src/rules';
 import { createWeather, setWeather, tickWeather, type Weather } from '../src/weather';
@@ -57,9 +58,13 @@ describe('weather', () => {
   });
 
   it('never rolls snow in summer', () => {
+    // PIN MOVED (#84). Summer used to be reached with `{ ...createSeason(), elapsedMs: SEASON_MS }`
+    // — one turn of the old nine-real-day wheel. The reason is the ticket: seasons follow the real
+    // year now, so summer is reached by making the world on a real summer date. July 15 is inside
+    // summer for every seed (its start never falls later than July 1). Same assertion, same seed.
     const rng = createRng(3);
     let clock = createClock();
-    const season = { ...createSeason(), elapsedMs: SEASON_MS };
+    const season = createSeason(0, realMsOfCivil(2026, 7, 15));
     let w = createWeather();
     for (let i = 0; i < 40000; i++) {
       clock = { ...clock, nowMs: clock.nowMs + 100 };

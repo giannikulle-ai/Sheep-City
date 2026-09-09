@@ -544,18 +544,21 @@ describe('parity: no deity intent moves the pin', () => {
   // derived from the owner's four-in-five target (`SMALL_RATE_FOR_DAYS_IN_FIVE`, 1.25 rather than
   // the bare 8) and storybook lines filled before they are told (#114), which changes the chronicle
   // text the hash covers: `b0c813bd71455c38` → `575fc853e800bd3d` (seed 11) and
-  // `b88ada428b712422` → `db82b911ed86c1f8` (seed 71). Not one of the seven was anything
-  // deity-shaped, which is what this block exists to keep saying.
+  // `b88ada428b712422` → `db82b911ed86c1f8` (seed 71). An eighth move is **#84**, and it is
+  // schema-only: `season` carries `realEpochMs` and `seed` now (the real-year calendar) and the
+  // state is v8, so `575fc853e800bd3d` → `16cca63404b910fb` (seed 11) and `db82b911ed86c1f8` →
+  // `7cbfaceab05ef214` (seed 71), with both days' own transition lists byte-for-byte unchanged.
+  // Not one of the eight was anything deity-shaped, which is what this block exists to keep saying.
   // The engine runs on both days here, as it does in those two files.
   it('luna-day.test.ts, seed 11: the end-of-day hash is unchanged', () => {
     let s = createInitialState(11);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('575fc853e800bd3d');
+    expect(hashState(s)).toBe('16cca63404b910fb');
   });
 
   it('sheep-day.test.ts, seed 71: the end-of-day hash is unchanged', () => {
     let s = createInitialState(71);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('db82b911ed86c1f8');
+    expect(hashState(s)).toBe('7cbfaceab05ef214');
   });
 });

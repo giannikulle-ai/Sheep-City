@@ -30,7 +30,7 @@
 import { tell, type Chronicle } from '../chronicle/store';
 import { coinsMoved, fillStorybookLine } from '../chronicle/storybook-line';
 import { FARM_DISTRICT } from '../chronicle/types';
-import { phaseOf, seasonAt, SEASON_MS, type Phase, type SeasonName } from '../clock';
+import { phaseOf, realMsOf, REAL_YEAR_MS, seasonAtOffset, seasonLengthOf, seasonSpanOf, type Phase, type SeasonName } from '../clock';
 import { FARM_DECK, type AuthoredEvent, type Card, type Deck, type EventHook, type EventHooks, type Predicate, type PredicateOn } from '../engine/deck';
 import type { EventsState } from '../engine/events';
 import { drawChance, msToSimMinutes, NO_REPEAT_SIM_MINUTES, PACING, simHoursToMs, simMinutesToMs, SIZE_PACING, UNWATCHED_LOOK_SIM_MINUTES, WARMUP_SIM_MINUTES } from '../engine/pacing';
@@ -194,18 +194,17 @@ function runLedgerHooks(ledger: Ledger, hooks: EventHooks): { applied: string[];
 /** Which day of its season a Ledger is on, counting from 1. The same reading `engine.ts` does. */
 function ledgerDayOfSeason(ledger: Ledger, atOffsetMs: number): number {
   const dayMs = ledger.clock.periodSec * 1000;
-  const elapsed = ledger.season.elapsedMs + atOffsetMs;
-  const intoSeason = ((elapsed % SEASON_MS) + SEASON_MS) % SEASON_MS;
-  return Math.floor(intoSeason / dayMs) + 1;
+  const span = seasonSpanOf(ledger.season, atOffsetMs);
+  return Math.floor((realMsOf(ledger.season, atOffsetMs) - span.startMs) / dayMs) + 1;
 }
 
 /** The season-day a [0, 1) season fraction falls in. The same reading `engine.ts` does. */
-function ledgerSeasonDayOfFraction(ledger: Ledger, fraction: number): number {
+function ledgerSeasonDayOfFraction(ledger: Ledger, fraction: number, atOffsetMs: number): number {
   const dayMs = ledger.clock.periodSec * 1000;
-  return Math.floor((fraction * SEASON_MS) / dayMs) + 1;
+  return Math.floor((fraction * seasonLengthOf(ledger.season, atOffsetMs)) / dayMs) + 1;
 }
 
-/** Is this authored event's trigger met at this look? `realDate` is deferred to #84, as it is live. */
+/** Is this authored event's trigger met at this look? `realDate` never fires here; see below. */
 function ledgerTriggerMet(view: LedgerView, event: AuthoredEvent, atOffsetMs: number): boolean {
   const t = event.trigger;
   switch (t.kind) {
@@ -214,7 +213,16 @@ function ledgerTriggerMet(view: LedgerView, event: AuthoredEvent, atOffsetMs: nu
     case 'stockThreshold':
       return ledgerHolds(view, { on: t.on, op: t.op, value: t.value });
     case 'simDate':
-      return view.season === t.season && ledgerDayOfSeason(view.ledger, atOffsetMs) === ledgerSeasonDayOfFraction(view.ledger, t.dayOfSeason);
+      return view.season === t.season && ledgerDayOfSeason(view.ledger, atOffsetMs) === ledgerSeasonDayOfFraction(view.ledger, t.dayOfSeason, atOffsetMs);
+    // **Deliberately false on this path, even though #84 made `realDate` live on the watched one.**
+    // This is the unwatched path (catch-up.ts's file header), and a real calendar date is the sort
+    // of thing the owner asked not to miss: plan decision 16, "the big ones should not happen when
+    // I am not watching". Digital Luna's birthday is a big authored event, so the size filter in
+    // `look` already holds it back; returning false here says the same thing a second time and
+    // says it for any `realDate` event of any size, which is the rule rather than a side effect of
+    // one event's size. The consequence is plain and is the owner's to accept or overturn: if
+    // nobody opens the tab on December 15, that year has no birthday — it is not replayed on the
+    // 16th and it is not deferred to the next visit.
     case 'realDate':
       return false;
     default: {
@@ -228,7 +236,7 @@ function ledgerTriggerMet(view: LedgerView, event: AuthoredEvent, atOffsetMs: nu
 function cooldownMsOf(view: LedgerView, entry: Card | AuthoredEvent, kind: 'card' | 'authored'): number {
   if (kind === 'card') return simHoursToMs((entry as Card).limits.cooldownSimHours, view.periodSec);
   const t = (entry as AuthoredEvent).trigger;
-  if (t.kind === 'simDate' || t.kind === 'realDate') return SEASON_MS * 4 * PACING.simDateCooldownCycles;
+  if (t.kind === 'simDate' || t.kind === 'realDate') return REAL_YEAR_MS * PACING.simDateCooldownCycles;
   return t.cooldownSimDays * view.periodSec * 1000;
 }
 
@@ -295,7 +303,6 @@ function look(
   // shipped deck's three authored events are all big, so this loop is empty work on it.
   for (const event of deck.authored) {
     if (event.size === 'big') continue; // the whole point: never while nobody is watching
-    if (event.deferred) continue;
     if (stillRunning(events, at, event.id) > 0) continue;
     const until = events.cooldowns[event.id];
     if (until !== undefined && at < until) continue;
@@ -430,7 +437,7 @@ export function advanceUnwatched(
       const view: LedgerView = {
         ledger: L,
         nowMs: nextLook,
-        season: L.season.override ?? seasonAt(L.season.elapsedMs - (pieceEnd - nextLook)),
+        season: seasonAtOffset(L.season, -(pieceEnd - nextLook)),
         timeOfDay: phaseOf(t),
         lastRainMs: events.lastRainMs,
         periodSec,

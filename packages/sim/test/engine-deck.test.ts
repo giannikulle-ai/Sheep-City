@@ -32,21 +32,23 @@ describe('the farm deck loads from the world lane’s data', () => {
     for (const id of ['dlBirthday', 'cliffStorm', 'firstSnowOfSeason']) expect(FARM_DECK.byId.get(id)?.kind).toBe('authored');
   });
 
-  it('the shipped deck loads with dlBirthday parked: a known trigger kind this engine defers to #84', () => {
+  it('the shipped deck loads dlBirthday with a live realDate trigger, and nothing is parked (#84)', () => {
     // Trunk's #83 moved Digital Luna's birthday onto a `realDate` trigger (December 15, the owner's
-    // calendar decision). This engine cannot answer "is it December 15?" without the real-year
-    // calendar model, which is #84's — so the deck loads it *deferred* rather than throwing, and
-    // `triggerMet` is false for it until #84 lands. Three separate facts, pinned here and in
-    // `engine-events.test.ts`: the deck loads, the event is marked, and an unknown kind still
-    // throws (below).
+    // calendar decision). Between #40 and #84 this engine could not answer "is it December 15?" —
+    // it had no real calendar — so the deck loaded the event *deferred* and `triggerMet` was false
+    // for it every time. #84 gave the sim a real calendar (src/calendar.ts) and a real epoch on
+    // every world, so the deferral is gone along with the `deferred` field itself.
+    //
+    // PIN MOVED (#84). Before: `expect(event!.deferred).toEqual({ kind: 'realDate', ticket: '#84' })`
+    // and `expect(FARM_DECK.authored.filter((e) => e.deferred).map((e) => e.id)).toEqual(['dlBirthday'])`.
+    // The reason is the ticket: nothing is parked any more, and there is no `deferred` field to
+    // read. The trigger itself is pinned unchanged.
     const birthday = FARM_DECK.byId.get('dlBirthday');
     expect(birthday?.kind).toBe('authored');
     const event = birthday!.kind === 'authored' ? birthday!.event : null;
     expect(event!.trigger).toEqual({ kind: 'realDate', month: 12, day: 15 });
-    expect(event!.deferred).toEqual({ kind: 'realDate', ticket: '#84' });
-    // Nothing else in the shipped deck is parked: the storm and the first snow are evaluated today.
-    const parked = FARM_DECK.authored.filter((e) => e.deferred).map((e) => e.id);
-    expect(parked).toEqual(['dlBirthday']);
+    // Every authored event in the shipped deck now carries a trigger kind this engine evaluates.
+    expect(FARM_DECK.authored.map((e) => e.trigger.kind).sort()).toEqual(['predicates', 'realDate', 'stockThreshold']);
   });
 
   it('momentKindOf reads a moment kind off either half of the deck, and null for a stranger', () => {
@@ -76,12 +78,21 @@ describe('the loader refuses what the engine could not evaluate', () => {
     expect(() => stubDeck([], [{ id: 'x', trigger: { kind: 'vibes' } }])).toThrow(/not a trigger kind/);
   });
 
-  it('a deferred kind is loaded, but a malformed one of the same kind still throws', () => {
-    // Deferring `realDate` (#84) is not the same as not reading it: the shape is still checked at
-    // load, so a typo in the world lane's data is caught here rather than at whatever future tick
-    // #84's calendar first looks at it.
-    const parked = stubDeck([], [{ id: 'x', trigger: { kind: 'realDate', month: 12, day: 15 } }]);
-    expect(parked.authored[0]!.deferred).toEqual({ kind: 'realDate', ticket: '#84' });
+  it('a realDate trigger loads with its shape checked, and a malformed one still throws', () => {
+    // PIN MOVED (#84). Before: this case was called "a deferred kind is loaded ..." and asserted
+    // `loaded.authored[0]!.deferred` equalled `{ kind: 'realDate', ticket: '#84' }`. The reason is
+    // the ticket: `realDate` is evaluated now, so nothing is deferred and the field is gone. What
+    // it was really guarding — that the shape is still checked at load, so a typo in the world
+    // lane's data is caught here rather than at whatever tick the calendar first looks at it —
+    // is unchanged and is everything below.
+    const loaded = stubDeck([], [{ id: 'x', trigger: { kind: 'realDate', month: 12, day: 15 } }]);
+    expect(loaded.authored[0]!.trigger).toEqual({ kind: 'realDate', month: 12, day: 15 });
+    expect(stubDeck([], [{ id: 'x', trigger: { kind: 'realDate', month: 12, day: 15, windowSimMinutes: 90 } }]).authored[0]!.trigger).toEqual({
+      kind: 'realDate',
+      month: 12,
+      day: 15,
+      windowSimMinutes: 90,
+    });
     expect(() => stubDeck([], [{ id: 'x', trigger: { kind: 'realDate', month: 13, day: 15 } }])).toThrow(/month 1-12/);
     expect(() => stubDeck([], [{ id: 'x', trigger: { kind: 'realDate', month: 12, day: 0 } }])).toThrow(/day 1-31/);
     expect(() => stubDeck([], [{ id: 'x', trigger: { kind: 'realDate', month: 'December', day: 15 } }])).toThrow(/finite number/);

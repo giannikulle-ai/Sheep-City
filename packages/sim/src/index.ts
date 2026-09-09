@@ -30,19 +30,39 @@ export {
   SEASONS,
   SEASON_TEMP,
   SEASON_ODDS,
-  SEASON_MS,
+  DEFAULT_REAL_EPOCH_MS,
+  MS_PER_REAL_DAY,
+  REAL_YEAR_MS,
   createClock,
   createSeason,
   phaseOf,
   advanceClock,
   advanceSeason,
-  seasonAt,
+  realMsOf,
+  seasonSpanOf,
+  seasonAtOffset,
+  seasonFractionOf,
+  seasonLengthOf,
   currentSeason,
   type Clock,
   type Phase,
   type Season,
   type SeasonName,
+  type SeasonSpan,
+  type CivilDate,
 } from './clock';
+export {
+  civilFromDays,
+  daysFromCivil,
+  realDateAt,
+  realDateMatches,
+  realMsOfCivil,
+  seasonAtRealMs,
+  seasonFractionAtRealMs,
+  seasonSpanAt,
+  seasonStartDriftMs,
+  seasonStartRealMs,
+} from './calendar';
 export { createWeather, setWeather, tickWeather, tempTarget, type Weather, type WeatherKind, type WeatherMode } from './weather';
 export {
   SAVE_VERSION,
@@ -134,8 +154,16 @@ export { tick, tickInPlace, advance } from './tick';
 export { step, type StepOptions } from './step';
 export { hashState, hashValue, canonicalJson, fnv1a, mix32 } from './hash';
 export { SAVE_FORMAT, SaveError, type SaveDoc, type SaveWorld, type SaveErrorCode, type UnknownSaveDoc } from './save/doc';
-export { toSave, fromSave, toSaveText, fromSaveText, validateWorld, findUnserializable } from './save/serialize';
-export { MIGRATIONS, migrateSave, assertMigrationChain, readVersion, type Migration } from './save/migrations/index';
+export { toSave, fromSave, toSaveText, fromSaveText, validateWorld, findUnserializable, type LoadOptions } from './save/serialize';
+export {
+  MIGRATIONS,
+  DEFAULT_MIGRATION_CONTEXT,
+  migrateSave,
+  assertMigrationChain,
+  readVersion,
+  type Migration,
+  type MigrationContext,
+} from './save/migrations/index';
 export {
   LEDGER_STEP_MS,
   dayMs,
@@ -274,7 +302,6 @@ export {
   type EventMoment,
   type Card,
   type AuthoredTrigger,
-  type DeferredTrigger,
   type AuthoredEvent,
   type Deck,
   type DeckEntry,

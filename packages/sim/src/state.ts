@@ -23,7 +23,9 @@ import { createWeather, type Weather } from './weather';
  * adds `ledger` (the district's numbers as the Ledger path last wrote them) and `lastLedgerAt`; v6
  * (#60) adds `chronicle` (the whole world's log; see chronicle/store.ts); v7 (#40) adds `events`
  * (the event engine's own slice: what is running, what is on cooldown, its own generator; see
- * engine/events.ts) and the optional `lost` flag on a `Lamb`.
+ * engine/events.ts) and the optional `lost` flag on a `Lamb`; v8 (#84) adds `realEpochMs` and
+ * `seed` to `season` (and to the `ledger` snapshot's own copy of it), the two numbers the real-year
+ * calendar is read from — see clock.ts and calendar.ts.
  *
  * PR #43 (deity intents) adds `actCmd` to `Sheep` and `Luna`, and `holdUntilMs` / `foggy` to
  * `Weather`, all as optional fields with no stored default: absent means what it always meant
@@ -31,7 +33,7 @@ import { createWeather, type Weather } from './weather';
  * this pattern for a field that needs a real default; it works here only because "absent" was
  * already the correct old behaviour.
  */
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 /** Stable actor ids. Sheep are `sheep-<n>`; Digital Luna is `luna`. */
 export type ActorId = string;
@@ -284,6 +286,14 @@ export interface InitialStateOptions {
    * on his fixed timer — which is what the parity pins in test/engine-parity.test.ts measure.
    */
   events?: boolean;
+  /**
+   * The real instant (UTC ms since 1970) this world is being created at — the host's only way to
+   * tell the sim what day it is in the real world, and the anchor for the real-year season calendar
+   * (#84; see clock.ts and calendar.ts). Default `DEFAULT_REAL_EPOCH_MS`, which lands in spring on
+   * every seed, so a caller that does not pass one still gets a world that is a function of its
+   * seed alone.
+   */
+  realEpochMs?: number;
 }
 
 /** The prototype's `makeTufts`, drawing from `rng` where it drew from Math.random. */
@@ -413,7 +423,7 @@ export function createInitialState(seed: number, options: InitialStateOptions = 
     seed: seed >>> 0,
     rng,
     clock: createClock(),
-    season: createSeason(),
+    season: createSeason(seed, options.realEpochMs),
     weather: createWeather(),
     tufts,
     sheep,

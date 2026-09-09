@@ -13,6 +13,8 @@ import { V4_STAMP_DEFAULTS, v4GroundDefault } from '../src/save/migrations/v4-gr
 import { summarise } from '../src/ledger/ledger';
 import { createChronicle, tell } from '../src/chronicle/store';
 import { v7EventsDefault } from '../src/save/migrations/v7-events';
+import { v8CalendarDefault } from '../src/save/migrations/v8-calendar';
+import { DEFAULT_REAL_EPOCH_MS } from '../src/calendar';
 import { SAVE_FORMAT } from '../src/save/doc';
 import { fromSave, toSave, toSaveText } from '../src/save/serialize';
 import { createInitialState, SAVE_VERSION, type SimState } from '../src/state';
@@ -251,6 +253,14 @@ describe('save fixtures', () => {
     }
     if (from < 6) out = { ...out, chronicle: createChronicle() };
     if (from < 7) out = { ...out, events: v7EventsDefault(out) };
+    if (from < 8) {
+      // The calendar fields (#84). One epoch for the world, and the same one on the Ledger
+      // snapshot's own copy of `season`: it is the same world at an earlier moment, and its own
+      // `elapsedMs` already carries the difference.
+      const fill = v8CalendarDefault(out, DEFAULT_REAL_EPOCH_MS);
+      const withFill = (season: unknown): Record<string, unknown> => ({ ...(season as Record<string, unknown>), ...fill });
+      out = { ...out, season: withFill(out['season']), ledger: { ...(out['ledger'] as Record<string, unknown>), season: withFill((out['ledger'] as { season: unknown }).season) } };
+    }
     return out;
   }
 

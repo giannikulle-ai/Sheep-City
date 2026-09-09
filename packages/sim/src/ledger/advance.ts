@@ -33,7 +33,7 @@
 // Determinism: every draw comes from the `rng` handed in, in a fixed order (births at the top of
 // the step, weather at its rolls), so a ledger, a span, and a generator state give one result.
 
-import { phaseOf, seasonAt, SEASON_ODDS, type SeasonName } from '../clock';
+import { phaseOf, seasonAtOffset, SEASON_ODDS, type SeasonName } from '../clock';
 import { NPC_SIZE, SPOT, type Point } from '../geometry';
 import { buyUpgrades, NPC_FOOT } from '../npcs';
 import { chance, nextFloat, type Rng } from '../rng';
@@ -110,7 +110,10 @@ function stepLedger(L: Ledger, span: number, rng: Rng): void {
     const u = unwrapped(ms);
     return u - Math.floor(u);
   };
-  const seasonAtMs = (ms: number): SeasonName => L.season.override ?? seasonAt(L.season.elapsedMs + (ms - t0));
+  // The season in force at sim instant `ms`, read off the world's real-year calendar (#84; it was
+  // the nine-real-day wheel before). Reads `L.season` live, exactly as the old expression did, so
+  // an override set mid-step is seen the moment it lands.
+  const seasonAtMs = (ms: number): SeasonName => seasonAtOffset(L.season, ms - t0);
 
   // Births are drawn up front, one roll per lamb-less sheep with the actor's odds over the step.
   const births: Birth[] = [];

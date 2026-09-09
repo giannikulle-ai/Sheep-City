@@ -18,7 +18,21 @@ import { advance } from '../src/tick';
 
 /** The state as a v6 build would hash it: no engine slice, version 6. */
 function v6View(s: SimState): Record<string, unknown> {
-  return { ...s, version: 6, events: undefined };
+  return { ...s, version: 6, events: undefined, season: preCalendarSeason(s.season), ledger: preCalendarLedger(s.ledger) };
+}
+
+/**
+ * A `season` as a build before #84 stored it: without `realEpochMs` and `seed`, the two numbers the
+ * real-year calendar reads. `canonicalJson` (src/hash.ts) drops an undefined value, so this is the
+ * same trick the version strips above use. The Ledger snapshot carries a `season` of its own and
+ * needs the same treatment. See test/calendar.test.ts for the v7 view and the reason.
+ */
+function preCalendarSeason(season: SimState['season']): Record<string, unknown> {
+  return { ...season, realEpochMs: undefined, seed: undefined };
+}
+
+function preCalendarLedger(ledger: SimState['ledger']): Record<string, unknown> {
+  return { ...ledger, season: preCalendarSeason(ledger.season) };
 }
 
 /** A world with the engine off: no draws, no authored triggers, no scheduled category actions. */

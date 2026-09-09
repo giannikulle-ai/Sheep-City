@@ -23,7 +23,6 @@ export {
   type EventMoment,
   type Card,
   type AuthoredTrigger,
-  type DeferredTrigger,
   type AuthoredEvent,
   type Deck,
   type DeckEntry,

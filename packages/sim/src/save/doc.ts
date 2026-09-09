@@ -18,6 +18,12 @@
 //                        engine/events.ts): what is running, what is on cooldown and when each id
 //                        last started, the flags, visibility and mood its hooks write, and the
 //                        engine's own generator. Each lamb may also carry an optional `lost`.
+// v8 (#84):              same envelope; `world.season` (and the same object inside `world.ledger`)
+//                        gains `realEpochMs` — the real instant, UTC ms, the world's `elapsedMs`
+//                        counts from — and `seed`, the world's own seed. The two numbers the
+//                        real-year season calendar is read from; see src/calendar.ts. A v7 world
+//                        gets its epoch anchored to the real present at its first load (the host
+//                        passes `realNowMs` to `fromSave`), and is deterministic from then on.
 
 import type { SimState } from '../state';
 

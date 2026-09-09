@@ -31,7 +31,14 @@ export const RULES = {
   tuftRegrowPerSec: b.tuftRegrowPerSec.value, // grass regrowth
   tuftBitePerSec: b.tuftBitePerSec.value, // how fast a sheep eats a tuft
   rain: { rollEveryMs: pair(b.rain.rollEveryMs.value), chance: b.rain.chance.value, lengthMs: pair(b.rain.lengthMs.value) },
-  season: { realDays: b.season.realDays.value }, // one in-world season lasts ~9 real days (10% of a real season)
+  /**
+   * PARITY ONLY since #84. The prototype's `RULES.season = { realDays: 9 }`, kept here and in
+   * balance/farm.json because test/rules-parity.test.ts asserts `rules` leaf for leaf against the
+   * prototype's own literal and this is one of its leaves. **Nothing in the sim's behaviour reads
+   * it any more**: seasons follow the real year now (`calendar` below, and src/calendar.ts). See
+   * the field's own comment in balance/farm.json.
+   */
+  season: { realDays: b.season.realDays.value },
   speed: {
     sheepWander: b.speed.sheepWander.value,
     sheepWalk: b.speed.sheepWalk.value,
@@ -76,8 +83,19 @@ export const RULES = {
 
   /** The prototype's clock: `{ t: .18, period: 180 }` and the `phaseOf` boundaries. One sim-day is 180 sim-seconds. */
   clock: { startT: o.clock.startT.value, periodSec: o.clock.periodSec.value, phases: o.clock.phases.value },
-  /** SEASON_TEMP and SEASON_ODDS from the prototype. The season order is `SEASONS` in clock.ts. */
+  /** SEASON_TEMP and SEASON_ODDS from the prototype. The season order is `SEASONS` in calendar.ts. */
   seasons: { temp: o.seasons.temp.value, odds: o.seasons.odds.value },
+  /**
+   * The real-year season calendar (#83's data, #84's reader): where each season starts in the real
+   * calendar before drift, and how far a world's seed may move that start. `nominalRealDays` and
+   * `lengthDriftRealDays` in the data are documentation of a derived spread and are deliberately
+   * **not** lifted here — a season's length is the gap to the next season's start and is never
+   * sampled. See src/calendar.ts.
+   */
+  calendar: {
+    anchors: o.seasons.calendar.anchors.value,
+    startOffsetDriftRealDays: pair(o.seasons.calendar.startOffsetDriftRealDays.value),
+  },
   /** Sheep on the field at reset. Grown lambs take names from this index on. */
   flock: { initial: o.flock.initial.value },
 

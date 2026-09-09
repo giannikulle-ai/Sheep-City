@@ -61,6 +61,6 @@ export function fixtureView(): FarmView {
     stick: null,
     owned: [],
     woolBank: 0,
-    coins: 0,
+    settlementCoins: 0,
   };
 }

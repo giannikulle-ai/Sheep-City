@@ -157,9 +157,10 @@ export function npcStep(n: Npc, dt: number, now: number, onJob: JobHook): 'done'
  * ticket nothing on the farm earns a coin, so a purse read off `banks` would never buy another
  * build. `owned` stays the farm's own list — the builds are on the farm whoever paid for them.
  *
- * `state.banks` is still a legal purse and the owner's tray still passes it (`intents.ts`, the
- * "+50 coins" test action): that is the owner's hand reaching in, not the farm trading, and the
- * farm's coins are kept in the save for the owner's own build table (plan section 3).
+ * `state.banks` is still a legal purse to pass here, but nothing does any more: the owner's tray
+ * (`intents.ts`, the "+50 coins" test action, #120) now pays into and buys from the **settlement's**
+ * purse too, the same as the market sale. `banks.coins` stays frozen, kept in the save for the
+ * owner's own future build table (plan section 3).
  */
 export function buyUpgrades(purse: { coins: number }, owned: string[]): void {
   for (const [name, cost] of RULES.upgrades) {

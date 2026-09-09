@@ -32,10 +32,10 @@ export interface LedgerDiff {
   /** Wool in the bank now minus then. Negative after a merchant visit sold it. */
   wool: number;
   /**
-   * The farm's coins now minus then. **Zero across every span the sim itself runs since #86**:
-   * nothing on the farm earns or spends them any more (plan decision 12), so this only moves when
-   * a host or the owner's own tray hands the farm coins. Kept because the number is still in the
-   * save and the client still shows it.
+   * The farm's coins now minus then. **Zero across every span the sim itself runs since #86**, and
+   * zero across the owner's tray too since #120: nothing on the farm earns or spends them any more
+   * (plan decision 12), so this only moves by a hand-edited state. Kept because the number is still
+   * in the save, even though the client now shows the settlement's coins instead.
    */
   coins: number;
   /**

@@ -71,7 +71,7 @@ export function hudText(view: FarmView, phase: Phase): string {
   const rain = view.weather === 'rain';
   const glyph = rain ? '☂' : view.weather === 'snow' ? '❄' : night ? '☾' : '☀';
   const flock = view.sheep.length + view.sheep.reduce((n, s) => n + s.lambs.length, 0);
-  return `${glyph} ${clockLabel(view.clockT)}  ${flock} sheep  ${view.woolBank} wool  ${view.coins} coins  ${Math.round(view.temp)}°`;
+  return `${glyph} ${clockLabel(view.clockT)}  ${flock} sheep  ${view.woolBank} wool  ${view.settlementCoins} settlement coins  ${Math.round(view.temp)}°`;
 }
 
 export function drawHud(uc: CanvasRenderingContext2D, view: FarmView, phase: Phase, k: number): void {

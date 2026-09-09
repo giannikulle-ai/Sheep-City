@@ -159,6 +159,8 @@ export function simView(prev: SimState | null, sim: SimState, alpha: number, liv
     stick: l.stick && l.stick.phase === 'out' ? { x: l.stick.x, y: l.stick.y } : null,
     owned: sim.banks.owned.slice(),
     woolBank: sim.banks.wool,
-    coins: sim.banks.coins,
+    // #120: the farm's own `banks.coins` is frozen since #86 (wool sells into the settlement's
+    // purse instead); the HUD reads what actually moves.
+    settlementCoins: sim.settlement.coins,
   };
 }

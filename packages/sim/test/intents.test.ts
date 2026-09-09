@@ -252,10 +252,12 @@ describe('farmAction', () => {
     expect(hashState(b)).toBe(hashState(tickWith(a, { type: 'farmAction', action: 'rabbitOnly' })));
   });
 
-  it('farmer and coins still do what they did', () => {
+  it('farmer still does what it did; coins now lands in the settlement, not the farm (#120)', () => {
     const a = world();
     expect(tickWith(a, { type: 'farmAction', action: 'farmer' }).npcs.farmer).not.toBeNull();
-    expect(tickWith(a, { type: 'farmAction', action: 'coins' }).banks.coins).toBeGreaterThanOrEqual(0);
+    const b = tickWith(a, { type: 'farmAction', action: 'coins' });
+    expect(b.settlement.coins).toBeGreaterThanOrEqual(0);
+    expect(b.banks.coins).toBe(0);
   });
 });
 

@@ -136,6 +136,31 @@ try {
   if (!sawImageAsset) {
     problems.push('no image under assets/ was fetched; relative asset URLs did not resolve');
   }
+
+  // Content-Encoding check (issue #108): the tile server should gzip (or brotli) text assets
+  // when asked. Find the JS bundle from what the page actually requested, then re-request it
+  // directly so we can inspect the raw response headers.
+  const jsRel = requests
+    .map((r) => r.slice(r.indexOf(' ') + 1))
+    .find((rel) => /^\/assets\/.*\.m?js$/.test(rel));
+  if (!jsRel) {
+    problems.push('no JS asset under assets/ was requested; cannot check Content-Encoding');
+  } else {
+    const encoded = await fetch(`${origin}${jsRel}`, { headers: { 'Accept-Encoding': 'gzip' } });
+    const encoding = encoded.headers.get('content-encoding');
+    if (encoding !== 'gzip' && encoding !== 'br') {
+      problems.push(
+        `${jsRel} did not come back compressed when requested with Accept-Encoding: gzip (Content-Encoding: ${encoding ?? 'none'})`,
+      );
+    }
+    // A client that sends no Accept-Encoding at all must still get the plain file (issue #108
+    // done-means), not an error and not a silently-gzipped body it never asked for.
+    const plain = await fetch(`${origin}${jsRel}`, { headers: { 'Accept-Encoding': 'identity' } });
+    if (plain.headers.get('content-encoding') != null) {
+      problems.push(`${jsRel} came back with Content-Encoding: ${plain.headers.get('content-encoding')} for an Accept-Encoding: identity request`);
+    }
+  }
+
   if (screenshot) {
     await page.screenshot({ path: screenshot, fullPage: true });
   }

@@ -73,12 +73,12 @@ describe('the actor tick is untouched (#60 is a new path)', () => {
   // earned. Each line carries its own pre-#86 value. The 1,800-tick worlds below are unaffected —
   // at 45 s the bank is still empty — which is why they still carry their old hashes.
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
-    { seed: 6, sheep: 5, hash: '53f488d46d56a459' }, // moved in #86: the caravan stopped buying the wool bank; was c983956cb0872c74
-    { seed: 6, sheep: 40, hash: '5010fc16d65e38a5' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was e9993651bb41645b
-    { seed: 7, sheep: 5, hash: '25ad0c6d2b8b6363' }, // moved in #86: the caravan stopped buying the wool bank; was 69db4e4556aa8ea2
-    { seed: 7, sheep: 40, hash: 'ff85591f8e1db183' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was fd2edbe2d33a4ebf
-    { seed: 11, sheep: 5, hash: '673e5250571ca4de' }, // moved in #86: the caravan stopped buying the wool bank; was 9c86b689cdc67c8b
-    { seed: 11, sheep: 40, hash: 'd1f811b0deb398a7' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was 250fbccdd321ec55
+    { seed: 6, sheep: 5, hash: '6eb50cbb61c31952' /* PIN MOVED (#126): was '53f488d46d56a459' */ }, // moved in #86: the caravan stopped buying the wool bank; was c983956cb0872c74
+    { seed: 6, sheep: 40, hash: 'ecf162fe29716260' /* PIN MOVED (#126): was '5010fc16d65e38a5' */ }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was e9993651bb41645b
+    { seed: 7, sheep: 5, hash: '5d0fc92815c946f6' /* PIN MOVED (#126): was '25ad0c6d2b8b6363' */ }, // moved in #86: the caravan stopped buying the wool bank; was 69db4e4556aa8ea2
+    { seed: 7, sheep: 40, hash: '56aa3db7c3630589' /* PIN MOVED (#126): was 'ff85591f8e1db183' */ }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was fd2edbe2d33a4ebf
+    { seed: 11, sheep: 5, hash: 'c95c8b40e15677b6' /* PIN MOVED (#126): was '673e5250571ca4de' */ }, // moved in #86: the caravan stopped buying the wool bank; was 9c86b689cdc67c8b
+    { seed: 11, sheep: 40, hash: '6d3c4e0264242a6c' /* PIN MOVED (#126): was 'd1f811b0deb398a7' */ }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was 250fbccdd321ec55
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as pinned on the v5 view`, () => {
@@ -86,10 +86,10 @@ describe('the actor tick is untouched (#60 is a new path)', () => {
     });
   }
   it("Digital Luna's scripted day (seed 11, 1,800 ticks) hashes as before #60 on the v5 view", () => {
-    expect(hashState(v5View(advance(preEngine(11), 1800)))).toBe('067877d6ea96f42c');
+    expect(hashState(v5View(advance(preEngine(11), 1800)))).toBe('a4ecb787a64b9471' /* PIN MOVED (#126): was '067877d6ea96f42c' */);
   });
   it("the sheep's scripted day (seed 71, 1,800 ticks) hashes as before #60 on the v5 view", () => {
-    expect(hashState(v5View(advance(preEngine(71), 1800)))).toBe('779eafbf4da9aa0d');
+    expect(hashState(v5View(advance(preEngine(71), 1800)))).toBe('868ba5cc52e29a94' /* PIN MOVED (#126): was '779eafbf4da9aa0d' */);
   });
 });
 
@@ -339,7 +339,12 @@ describe('chronicleBetween: the read API', () => {
 describe('tellLedgerDiff', () => {
   it('tells one entry per number the diff moved, with that number in facts, and nothing for a quiet span', () => {
     const before = summarise(createInitialState(10));
-    const after = { ...before, banks: { wool: 3, coins: -7, owned: [...before.banks.owned, 'flowerbed'] }, wool: [...before.wool, 0.05], lambs: [{ mother: 1, ageMs: 100 }], weather: { ...before.weather, kind: 'snow' as const, rain: false }, season: { ...before.season, override: 'winter' as const } };
+    // The farm's three builds are already in `before.banks.owned` from the start (#126), so this
+    // hand-built "something got bought" scenario uses a synthetic id outside `FARM_BUILDS` — the
+    // generic upgrades-diff mechanism this pins still exists for a hand-edited state or the owner's
+    // own future build table (plan section 3), even though nothing on the shipped farm grows the
+    // list any more.
+    const after = { ...before, banks: { wool: 3, coins: -7, owned: [...before.banks.owned, 'silo'] }, wool: [...before.wool, 0.05], lambs: [{ mother: 1, ageMs: 100 }], weather: { ...before.weather, kind: 'snow' as const, rain: false }, season: { ...before.season, override: 'winter' as const } };
     const diff = diffLedger(before, after);
     const s = createInitialState(10);
     const entries = tellLedgerDiff(s, diff);
@@ -349,7 +354,7 @@ describe('tellLedgerDiff', () => {
     expect(entries.find((e) => e.picture === 'wool')?.facts).toEqual({ wool: diff.wool });
     expect(entries.find((e) => e.picture === 'coins')?.facts).toEqual({ coins: diff.coins });
     expect(entries.find((e) => e.picture === 'coins')?.line).toBe('7 coins spent');
-    expect(entries.find((e) => e.picture === 'upgrade')?.facts).toEqual({ upgrade: 'flowerbed' });
+    expect(entries.find((e) => e.picture === 'upgrade')?.facts).toEqual({ upgrade: 'silo' });
     expect(s.chronicle.entries).toEqual(entries);
 
     const quiet = diffLedger(before, before);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hashState } from '../src/hash';
-import { RULES, TICK_MS } from '../src/rules';
+import { hay2RegrowMult, RULES, TICK_MS } from '../src/rules';
 import { createInitialState } from '../src/state';
 import { step } from '../src/step';
 import { advance, tick } from '../src/tick';
@@ -64,8 +64,11 @@ describe('fixed-step loop', () => {
     for (let i = 0; i < a.sheep.length; i++) {
       expect(b.sheep[i]!.wool).toBeCloseTo(Math.min(1, a.sheep[i]!.wool + 1 / RULES.woolGrowSec), 9);
     }
+    // PIN MOVED (#126): the regrow term was plain `RULES.tuftRegrowPerSec` — `hay2` is owned from
+    // the start now, so every tuft's regrowth already carries its bonus.
+    const mult = hay2RegrowMult(a.banks.owned);
     for (let i = 0; i < a.tufts.length; i++) {
-      expect(b.tufts[i]!.level).toBeCloseTo(Math.min(1, a.tufts[i]!.level + RULES.tuftRegrowPerSec), 9);
+      expect(b.tufts[i]!.level).toBeCloseTo(Math.min(1, a.tufts[i]!.level + RULES.tuftRegrowPerSec * mult), 9);
     }
     expect(b.clock.nowMs).toBe(10 * TICK_MS);
   });

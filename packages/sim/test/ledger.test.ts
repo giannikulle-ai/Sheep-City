@@ -75,12 +75,12 @@ describe('the actor tick is untouched (#39 is a new path)', () => {
   // earned. Each line carries its own pre-#86 value. The 1,800-tick worlds below are unaffected —
   // at 45 s the bank is still empty — which is why they still carry their old hashes.
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
-    { seed: 6, sheep: 5, hash: 'f9a5c73b7623387a' }, // moved in #86: the caravan stopped buying the wool bank; was e85cbb53bef79387
-    { seed: 6, sheep: 40, hash: 'eb113e2c2907f15f' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was ef34884b93437085
-    { seed: 7, sheep: 5, hash: '9a43e007998a1116' }, // moved in #86: the caravan stopped buying the wool bank; was bf1769cf3184be53
-    { seed: 7, sheep: 40, hash: '64d5ce43913cc937' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was b0f402689eb4e7f4
-    { seed: 11, sheep: 5, hash: '1ed6fe0a0d8cd7cc' }, // moved in #86: the caravan stopped buying the wool bank; was a5735abd6b19878b
-    { seed: 11, sheep: 40, hash: 'a0a602ea942aff6d' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was 1916634dd4c7176a
+    { seed: 6, sheep: 5, hash: '918fc2036add04ee' /* PIN MOVED (#126): was 'f9a5c73b7623387a' */ }, // moved in #86: the caravan stopped buying the wool bank; was e85cbb53bef79387
+    { seed: 6, sheep: 40, hash: '1e3edbd548fb12e2' /* PIN MOVED (#126): was 'eb113e2c2907f15f' */ }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was ef34884b93437085
+    { seed: 7, sheep: 5, hash: 'e8391dcb8fa7de3d' /* PIN MOVED (#126): was '9a43e007998a1116' */ }, // moved in #86: the caravan stopped buying the wool bank; was bf1769cf3184be53
+    { seed: 7, sheep: 40, hash: '21f6f12ea346f3ab' /* PIN MOVED (#126): was '64d5ce43913cc937' */ }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was b0f402689eb4e7f4
+    { seed: 11, sheep: 5, hash: 'f82d5fbb8be4f378' /* PIN MOVED (#126): was '1ed6fe0a0d8cd7cc' */ }, // moved in #86: the caravan stopped buying the wool bank; was a5735abd6b19878b
+    { seed: 11, sheep: 40, hash: 'c1b82d37cb53fe64' /* PIN MOVED (#126): was 'a0a602ea942aff6d' */ }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was 1916634dd4c7176a
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as pinned on the v4 view`, () => {
@@ -88,10 +88,10 @@ describe('the actor tick is untouched (#39 is a new path)', () => {
     });
   }
   it("Digital Luna's scripted day (seed 11, 1,800 ticks) hashes as before #39 on the v4 view", () => {
-    expect(hashState(v4View(advance(preEngine(11), 1800)))).toBe('22fec366499b4508');
+    expect(hashState(v4View(advance(preEngine(11), 1800)))).toBe('a5eae8703d09d48d' /* PIN MOVED (#126): was '22fec366499b4508' */);
   });
   it("the sheep's scripted day (seed 71, 1,800 ticks) hashes as before #39 on the v4 view", () => {
-    expect(hashState(v4View(advance(preEngine(71), 1800)))).toBe('14d17f24e11a589a');
+    expect(hashState(v4View(advance(preEngine(71), 1800)))).toBe('ef283f12be845e1e' /* PIN MOVED (#126): was '14d17f24e11a589a' */);
   });
   it('the snapshot on the state is the one the Ledger path wrote; the tick leaves it alone', () => {
     const a = createInitialState(7);
@@ -374,6 +374,9 @@ describe('advanceLedger: the rules', () => {
     const SPAN_MS = 1000;
     const bare = pinned(7, 'sun', 0);
     bare.grass = bare.grass.map(() => 0);
+    // `pinned` owns the three farm builds from the start now (#126); this test's "plain" baseline
+    // means none of them, hay2 least of all, so it is reset explicitly.
+    bare.banks = { ...bare.banks, owned: [] };
     const dt = SPAN_MS / 1000;
     const plain = advanceLedger(bare, SPAN_MS, createRng(1));
     for (const g of plain.grass) expect(g).toBeCloseTo(dt * RULES.tuftRegrowPerSec, 12);
@@ -390,14 +393,16 @@ describe('advanceLedger: the rules', () => {
   it("hay2's regrow bonus is the same number and the same rule on the actor tick (tick.ts) as on the Ledger (advanceLedger): the parity #63 asks for", () => {
     // Zero sheep on both sides, so nothing bites a tuft and the tick's regrow line is isolated,
     // the same way the Ledger test above isolates advanceLedger's.
+    // `fresh()` owns the three farm builds from the start now (#126); `plain`/`ledgerPlain` below
+    // reset `owned` to none, hay2 least of all, so the isolation this test is about still holds.
     const fresh = () => {
       const s = createInitialState(7, { sheep: 0, events: false });
       s.tufts = s.tufts.map((t) => ({ ...t, level: 0 }));
       return s;
     };
-    const plain = advance(fresh(), 1);
+    const plain = advance({ ...fresh(), banks: { wool: 0, coins: 0, owned: [] } }, 1);
     const withHay2 = advance({ ...fresh(), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, 1);
-    const ledgerPlain = advanceLedger(summarise(fresh()), TICK_MS, createRng(1));
+    const ledgerPlain = advanceLedger({ ...summarise(fresh()), banks: { wool: 0, coins: 0, owned: [] } }, TICK_MS, createRng(1));
     const ledgerHay2 = advanceLedger({ ...summarise(fresh()), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, TICK_MS, createRng(1));
     for (let i = 0; i < plain.tufts.length; i++) {
       expect(plain.tufts[i]!.level).toBeCloseTo(ledgerPlain.grass[i] as number, 12);
@@ -435,9 +440,11 @@ describe('advanceLedger: the rules', () => {
       return s;
     };
     for (const ticks of [1, 10, 50, 100, 300, 400, 500, 530, 550, 556, 600]) {
-      const plain = advance(fresh(), ticks);
+      // `fresh()` owns the three farm builds from the start now (#126); `plain`/`ledgerPlain` reset
+      // `owned` to none so the plain-vs-hay2 comparison this test is about still holds.
+      const plain = advance({ ...fresh(), banks: { wool: 0, coins: 0, owned: [] } }, ticks);
       const withHay2 = advance({ ...fresh(), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, ticks);
-      const ledgerPlain = advanceLedger(summarise(fresh()), ticks * TICK_MS, createRng(1));
+      const ledgerPlain = advanceLedger({ ...summarise(fresh()), banks: { wool: 0, coins: 0, owned: [] } }, ticks * TICK_MS, createRng(1));
       const ledgerHay2 = advanceLedger({ ...summarise(fresh()), banks: { wool: 0, coins: 0, owned: ['hay2'] } }, ticks * TICK_MS, createRng(1));
       for (let i = 0; i < plain.tufts.length; i++) {
         expect(Math.abs((plain.tufts[i]!.level as number) - (ledgerPlain.grass[i] as number))).toBeLessThan(1e-10);
@@ -781,7 +788,9 @@ describe('the catch-up policy', () => {
     expect(d.lambs).toBe(c.after.lambs.length);
     expect(d.wool).toBe(c.after.banks.wool);
     expect(d.coins).toBe(c.after.banks.coins);
-    expect(d.upgrades).toEqual(c.after.banks.owned);
+    // PIN MOVED (#126): was `d.upgrades).toEqual(c.after.banks.owned)` — the farm's three builds are
+    // owned before AND after the gap now (on the farm from the start), so nothing was newly bought.
+    expect(d.upgrades).toEqual([]);
     expect(d.weather.from).toBe('sun');
     expect(d.weather.changed).toBe(d.weather.to !== 'sun');
     expect(d.season).toEqual({ from: 'spring', to: 'spring', changed: false });
@@ -790,6 +799,9 @@ describe('the catch-up policy', () => {
 
   it('diffLedger on hand-made ledgers: births, deaths, wool, coins, weather, season, upgrades', () => {
     const a = summarise(createInitialState(7));
+    // `a` owns the three farm builds from the start now (#126); reset so `b`'s hand-set `owned`
+    // below is a genuine "something got bought" scenario for this generic diff mechanism to catch.
+    a.banks = { ...a.banks, owned: [] };
     const b = cloneLedger(a);
     b.clock = { ...b.clock, nowMs: 5 * DAY, dayCount: 5 };
     b.wool = [...a.wool, 0.05];

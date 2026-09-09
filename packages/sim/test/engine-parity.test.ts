@@ -69,12 +69,12 @@ describe('the pre-engine view (#40 is a new path when the engine is off)', () =>
   // earned. Each line carries its own pre-#86 value. The 1,800-tick worlds below are unaffected —
   // at 45 s the bank is still empty — which is why they still carry their old hashes.
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
-    { seed: 6, sheep: 5, hash: 'be75b0c13d02eea4' }, // moved in #86: the caravan stopped buying the wool bank; was ec16cd89f0d97235
-    { seed: 6, sheep: 40, hash: '1b9b37c787864bd0' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was 146212a4ade8cea1
-    { seed: 7, sheep: 5, hash: 'd7050870cac90835' }, // moved in #86: the caravan stopped buying the wool bank; was 092b1cb807636e88
-    { seed: 7, sheep: 40, hash: '31b59b5e6cf779dd' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was cf5dc67f12ea0812
-    { seed: 11, sheep: 5, hash: '464f9db5052efdf5' }, // moved in #86: the caravan stopped buying the wool bank; was a70633600f30f95c
-    { seed: 11, sheep: 40, hash: '7a95966d0397195f' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was 0a8c9f7ce39d4b7f
+    { seed: 6, sheep: 5, hash: '1f48612efdcb108a' /* PIN MOVED (#126): was 'be75b0c13d02eea4' */ }, // moved in #86: the caravan stopped buying the wool bank; was ec16cd89f0d97235
+    { seed: 6, sheep: 40, hash: '81c4a33b959272d5' /* PIN MOVED (#126): was '1b9b37c787864bd0' */ }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was 146212a4ade8cea1
+    { seed: 7, sheep: 5, hash: 'd478fdc5545d749a' /* PIN MOVED (#126): was 'd7050870cac90835' */ }, // moved in #86: the caravan stopped buying the wool bank; was 092b1cb807636e88
+    { seed: 7, sheep: 40, hash: '4be14116acc3eaa1' /* PIN MOVED (#126): was '31b59b5e6cf779dd' */ }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was cf5dc67f12ea0812
+    { seed: 11, sheep: 5, hash: '118ba9350ef5fd3d' /* PIN MOVED (#126): was '464f9db5052efdf5' */ }, // moved in #86: the caravan stopped buying the wool bank; was a70633600f30f95c
+    { seed: 11, sheep: 40, hash: '10c65355d05a4305' /* PIN MOVED (#126): was '7a95966d0397195f' */ }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was 0a8c9f7ce39d4b7f
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as pinned on the v6 view`, () => {
@@ -83,11 +83,11 @@ describe('the pre-engine view (#40 is a new path when the engine is off)', () =>
   }
 
   it("Digital Luna's scripted day (seed 11, 1,800 ticks) hashes as before #40 on the v6 view", () => {
-    expect(hashState(v6View(advance(preEngine(11), 1800)))).toBe('c69b538ba6cd2e56');
+    expect(hashState(v6View(advance(preEngine(11), 1800)))).toBe('d153203a23e1f2e2' /* PIN MOVED (#126): was 'c69b538ba6cd2e56' */);
   });
 
   it("the sheep's scripted day (seed 71, 1,800 ticks) hashes as before #40 on the v6 view", () => {
-    expect(hashState(v6View(advance(preEngine(71), 1800)))).toBe('d0588aba21596281');
+    expect(hashState(v6View(advance(preEngine(71), 1800)))).toBe('4085e0e9e92b18e6' /* PIN MOVED (#126): was 'd0588aba21596281' */);
   });
 
   it('the engine-off world carries the slice but never writes to it, and tells nothing', () => {

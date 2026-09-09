@@ -7,7 +7,7 @@ import { FETCH_LAMB_PRIORITY } from '../src/engine/pacing';
 import { SPOT } from '../src/geometry';
 import { hashState } from '../src/hash';
 import { applyIntent, type Intent } from '../src/intents';
-import { RULES, TICK_MS } from '../src/rules';
+import { hay2RegrowMult, RULES, TICK_MS } from '../src/rules';
 import { createInitialState, type SimState } from '../src/state';
 import { step } from '../src/step';
 import { tickInPlace } from '../src/tick';
@@ -211,7 +211,9 @@ describe('manual buttons', () => {
     expect(s.luna.tuft).toBeNull();
     expect(tuft.claimed).toBeNull();
     // Two bites per tick (manual chain and routine chain), each .05/s, minus regrowth .018/s.
-    const expected = level - 4 * (0.1 - RULES.tuftRegrowPerSec);
+    // PIN MOVED (#126): the regrowth term was plain `RULES.tuftRegrowPerSec` — `hay2` is owned from
+    // the start now, so the field's ordinary regrowth already carries its bonus.
+    const expected = level - 4 * (0.1 - RULES.tuftRegrowPerSec * hay2RegrowMult(s.banks.owned));
     expect(tuft.level).toBeGreaterThan(expected - 0.03);
     expect(tuft.level).toBeLessThan(expected + 0.03);
   });

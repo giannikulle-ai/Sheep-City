@@ -32,11 +32,17 @@ const MAX_PAGE_LINES = 12;
 //
 // Measured on this head, seed 17, for the four combinations these tests use (frozen is what the
 // goldens capture, running is what the count tests read): frozen night **34** chronicle entries (31
-// of them cards), frozen week **2,261** (2,258), running night **52** (44), running week **3,680**
-// (3,672). Both goldens were regenerated here for two reasons: the small draw rate is now derived
-// from the owner's four-in-five target, so the gaps tell fewer things than they did at the engine's
-// old rate of 8 (frozen night was 41, frozen week 2,863 then), and every line is now filled before
-// it is told (#114), so the page reads "Digital Luna" where it read "{dl}".
+// of them cards), frozen week **2,261** (2,258) — both unmoved by #126 below, the freeze locks the
+// clock before the farm's three builds being owned from tick zero (plan decision 19) has a chance
+// to shift anything — running night **49** (PIN MOVED (#126): was 52), running week **3,676** (was
+// 3,680). The app goldens were regenerated for #126 too: the flowerbed and scarecrow now draw from
+// tick zero on every scene that has them in frame (`packages/render/src/scene.ts`), not only once a
+// farm had earned enough to buy them, and grass itself is a shade greener throughout (hay2's
+// regrow bonus, `packages/sim/src/rules.ts`'s `hay2RegrowMult`). Both goldens were regenerated
+// before that, too, for two reasons: the small draw rate is now derived from the owner's
+// four-in-five target, so the gaps tell fewer things than they did at the engine's old rate of 8
+// (frozen night was 41, frozen week 2,863 then), and every line is now filled before it is told
+// (#114), so the page reads "Digital Luna" where it read "{dl}".
 type WithApp = { sheepcliff: SheepcliffApi };
 
 interface Case {
@@ -157,12 +163,13 @@ test('one tap dismisses the page', async ({ page }) => {
 
 // The owner's change round on #42: "I want more than 5 … it should be based on how long away, with
 // a minimum", and nothing a gap told is dropped **below the `MAX_STORED_MORE` cap** (`storybook.ts`).
-// Both run on a *running* world (no `freeze`). Measured on this head, seed 17: the night gap's real
-// chronicle is **52** entries and the week gap's is **3,680**. The night therefore sits back under
-// the 55-entry cap (5 shown + `MAX_STORED_MORE` 50) and its "and N more" is the gap's own remainder
-// again (47), as it was on #111 alone; at the engine's old rate of 8 with #86's conditions it was
-// 79 and the cap clipped it. The week has been past the cap throughout (1,997 entries on #111
-// alone, 5,568 at rate 8, 3,680 here), so its kept total is the cap either way.
+// Both run on a *running* world (no `freeze`). PIN MOVED (#126): was 52 and 3,680 (see the header
+// comment above for why). Measured on this head, seed 17: the night gap's real chronicle is **49**
+// entries and the week gap's is **3,676**. The night therefore sits back under the 55-entry cap (5
+// shown + `MAX_STORED_MORE` 50); at the engine's old rate of 8 with #86's conditions the raw
+// remainder was 79 and the cap clipped it — #113's collapsing keeps it well under either way now
+// (see this test's own comment below). The week has been past the cap throughout (1,997 entries on
+// #111 alone, 5,568 at rate 8, 3,676 here), so its kept total is the cap either way.
 test('a longer absence shows more of its gap, and a short one keeps the rest behind "and N more"', async ({ page }) => {
   const read = async (gapMinutes: number): Promise<{ shown: number; more: number; rows: number; moreLabel: string | null }> => {
     await page.goto(`/?seed=17&gap=${gapMinutes}`);
@@ -180,28 +187,32 @@ test('a longer absence shows more of its gap, and a short one keeps the rest beh
     };
   };
 
-  // two hours away: the floor, five lines shown, with the rest kept behind "and N more". Measured
-  // on this head: this gap's whole chronicle is 52 entries, but #113 collapses every repeated card
-  // into one row (`buildStorybookPage`'s `collapseCardRepeats`), so "more" no longer counts raw
-  // entries — it counts the gap's *distinct* remaining lines, 10 here (each backed by anywhere from
-  // one entry to a dozen), nowhere near the 50-row cap. Pre-#113 this was 47 (the gap's own raw
-  // remainder, uncapped); the floor of 5 shown is unchanged.
+  // two hours away: the floor, five lines shown, with the rest kept behind "and N more".
+  // PIN MOVED (#126): the farm's three builds are owned from the start now (plan decision 19), so
+  // hay2's grass regrow bonus applies from tick zero on every world and shifts this gap's whole
+  // catch-up draw stream — see the "and N more" test's own comment below for the mechanism. Before:
+  // this gap's whole chronicle was 52 entries, folding into 10 distinct "more" lines. Measured on
+  // this head: 49 entries, folding into 7 (#113: `buildStorybookPage`'s `collapseCardRepeats`
+  // collapses every repeated card into one row before the page is built, so "more" counts the
+  // gap's *distinct* remaining lines, not raw entries) — nowhere near the 50-row cap either way.
+  // The floor of 5 shown is unchanged.
   const night = await read(120);
   expect(night.shown).toBe(5);
   expect(night.rows).toBe(5);
-  expect(night.more).toBe(10);
-  expect(night.moreLabel).toBe('and 10 more');
+  expect(night.more).toBe(7);
+  expect(night.moreLabel).toBe('and 7 more');
 
-  // a week away, same seed: a longer absence draws far more small cards during its catch-up
-  // (measured 3,679 raw entries on this head) — the page shows more of it too, ten lines rather
-  // than the night's five, which is the point of this test's name. #113 collapses the week's own
-  // heavy repeats even harder than the night's: 3,679 raw entries fold into 10 shown + only 4 more
-  // (down from 50, the pre-#113 cap — collapsing leaves this gap nowhere near it any more).
+  // a week away, same seed: a longer absence draws far more small cards during its catch-up — the
+  // page shows more of it too, ten lines rather than the night's five, which is the point of this
+  // test's name. PIN MOVED (#126), same mechanism as `night` above: was 3,679 raw entries folding
+  // into 10 shown + 4 more. Measured on this head: 3,676 raw entries fold into 10 shown + only 1
+  // more (#113 collapses the week's own heavy repeats even harder than the night's; down from 50,
+  // the pre-#113 cap — collapsing leaves this gap nowhere near it either way).
   const week = await read(10_080);
   expect(week.shown).toBe(10);
   expect(week.rows).toBe(10);
-  expect(week.more).toBe(4);
-  expect(week.moreLabel).toBe('and 4 more');
+  expect(week.more).toBe(1);
+  expect(week.moreLabel).toBe('and 1 more');
 });
 
 test('"and N more" opens the rest of the gap in place, and never dismisses the page', async ({ page }) => {
@@ -220,13 +231,18 @@ test('"and N more" opens the rest of the gap in place, and never dismisses the p
     };
   });
   expect(kept.allTold).toBe(true);
-  // decision 16, PR #111: small cards now draw and tell during this gap's catch-up, so the lines
-  // kept behind "and N more" here are mostly card lines, not just Ledger diffs. This gap's raw
-  // chronicle is 52 entries (measured on this head), but #113 collapses every repeated card into
-  // one row before the page is built, so "and N more" reveals 10 rows, not 47 raw entries — each
-  // one still a real chronicle line (`kept.allTold`), several of them now a collapsed "N times" row
-  // backed by more than one.
-  expect(kept.lines.length).toBe(10);
+  // PIN MOVED (#126). The farm's three builds are owned from the start now (plan decision 19), so
+  // hay2's grass regrow bonus applies from tick zero on every world, not only after a farm earned
+  // enough to buy it — the same mechanism `packages/sim/test/sheep-day.test.ts`'s own header
+  // comment describes for a single scripted day, here shifting a whole catch-up's card draws.
+  // Before: this gap's raw chronicle was 52 entries, folding into 10 shown + 10 more. Now: decision
+  // 16, PR #111's small cards still draw and tell during this gap's catch-up, so the lines kept
+  // behind "and N more" here are mostly card lines, not just Ledger diffs; this gap's raw chronicle
+  // is 49 entries (measured on this head), and #113 collapses every repeated card into one row
+  // before the page is built, so "and N more" reveals 7 rows, not 44 raw entries — each one still a
+  // real chronicle line (`kept.allTold`), several of them now a collapsed "N times" row backed by
+  // more than one.
+  expect(kept.lines.length).toBe(7);
 
   await expect(page.locator('#storyLines .storyline')).toHaveCount(5);
   await page.locator('#storyMore').click();
@@ -234,7 +250,7 @@ test('"and N more" opens the rest of the gap in place, and never dismisses the p
   // the page is still open — the row that opens the rest must not be the tap that closes the card
   await expect(page.locator('#storybook')).toBeVisible();
   await expect(page.locator('#storyMore')).toHaveCount(0);
-  await expect(page.locator('#storyLines .storyline')).toHaveCount(15); // 5 shown + the gap's own 10 collapsed rows
+  await expect(page.locator('#storyLines .storyline')).toHaveCount(12); // PIN MOVED (#126): was 15 (5 shown + 10 collapsed); now 5 shown + the gap's own 7 collapsed rows
 
   // and the revealed rows are the kept lines themselves, verbatim, in order
   const revealed = await page.locator('#storyLines .storyline span').allInnerTexts();

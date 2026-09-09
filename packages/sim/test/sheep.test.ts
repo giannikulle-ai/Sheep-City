@@ -5,7 +5,7 @@ import { NEEDS, SHEEP_BEHAVIOURS, pickNeed, sheepContext } from '../src/behaviou
 import { SFOOT, SPOT, insideField, randomFoot } from '../src/geometry';
 import { applyIntent } from '../src/intents';
 import { cloneRng, nextFloat } from '../src/rng';
-import { RULES, TICK_MS, TICK_SEC } from '../src/rules';
+import { hay2RegrowMult, RULES, TICK_MS, TICK_SEC } from '../src/rules';
 import type { SimState } from '../src/state';
 import { tickInPlace } from '../src/tick';
 import { rain, run, runUntil, world } from './luna-helpers';
@@ -273,7 +273,9 @@ describe('walking, arriving, eating', () => {
     const level = t.level;
     s.rng = rngWhereFloats([atLeast(0.5), atLeast(0.5), atLeast(0.5), atLeast(0.5), atLeast(0.5)]);
     run(s, 1);
-    expect(t.level).toBeCloseTo(level - TICK_SEC * RULES.tuftBitePerSec + TICK_SEC * RULES.tuftRegrowPerSec, 9);
+    // PIN MOVED (#126): the regrow term was plain `TICK_SEC * RULES.tuftRegrowPerSec` — `hay2` is
+    // owned from the start now, so every tuft's regrowth already carries its bonus.
+    expect(t.level).toBeCloseTo(level - TICK_SEC * RULES.tuftBitePerSec + TICK_SEC * RULES.tuftRegrowPerSec * hay2RegrowMult(s.banks.owned), 9);
     // Eaten down: below .08 the sheep stops, releases the tuft, and its animation clock resets.
     t.level = S.tuftEmptyAt - 0.001;
     run(s, 1);

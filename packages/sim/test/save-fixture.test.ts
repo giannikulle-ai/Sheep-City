@@ -18,7 +18,7 @@ import { v9SettlementDefault } from '../src/save/migrations/v9-settlement';
 import { DEFAULT_REAL_EPOCH_MS } from '../src/calendar';
 import { SAVE_FORMAT } from '../src/save/doc';
 import { fromSave, toSave, toSaveText } from '../src/save/serialize';
-import { createInitialState, SAVE_VERSION, type SimState } from '../src/state';
+import { createInitialState, FARM_BUILDS, SAVE_VERSION, type SimState } from '../src/state';
 import { step } from '../src/step';
 import { advance } from '../src/tick';
 
@@ -296,6 +296,19 @@ describe('save fixtures', () => {
       // old rule stay where they are, in `banks.coins`. See `v9-settlement.ts`.
       const ledger = out['ledger'] as Record<string, unknown>;
       out = { ...out, settlement: v9SettlementDefault(), ledger: { ...ledger, settlement: ledger['settlement'] ?? v9SettlementDefault() } };
+    }
+    if (from < 10) {
+      // The farm's three builds, on the farm from the start (#126). Anything not already in
+      // `owned` is appended in `FARM_BUILDS`' own order, on the world and, independently, on the
+      // Ledger snapshot. See `v10-farm-builds.ts`.
+      const fillOwned = (owned: unknown): string[] => {
+        const existing = Array.isArray(owned) ? (owned as string[]) : [];
+        return [...existing, ...FARM_BUILDS.filter((id) => !existing.includes(id))];
+      };
+      const banks = out['banks'] as Record<string, unknown>;
+      const ledger = out['ledger'] as Record<string, unknown>;
+      const ledgerBanks = ledger['banks'] as Record<string, unknown>;
+      out = { ...out, banks: { ...banks, owned: fillOwned(banks['owned']) }, ledger: { ...ledger, banks: { ...ledgerBanks, owned: fillOwned(ledgerBanks['owned']) } } };
     }
     return out;
   }

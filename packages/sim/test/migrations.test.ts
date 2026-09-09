@@ -336,8 +336,14 @@ describe('v4 to v5', () => {
     // to every `season` including the snapshot's, while `v5LedgerSnapshot.up` on its own stops at
     // v5 and cannot know about fields two versions in its future. So the comparison drops exactly
     // those two fields, and everything else is still asserted equal.
-    const { realEpochMs: _epoch, seed: _seasonSeed, ...v5Season } = summarise(fromSave(v4)).season;
-    expect(ledger).toEqual({ ...summarise(fromSave(v4)), season: v5Season });
+    const fullLedger = summarise(fromSave(v4));
+    const { realEpochMs: _epoch, seed: _seasonSeed, ...v5Season } = fullLedger.season;
+    // PIN MOVED (#126): `banks.owned` needs the same treatment as `season`'s two calendar fields
+    // above, for the same reason — `fromSave` runs the chain all the way to v10 now, which fills
+    // `owned` with the farm's three builds, while `v5LedgerSnapshot.up` on its own stops at v5 and
+    // only ever summarises the world's own (unmigrated) `banks.owned`.
+    const v4Owned = (v4.world['banks'] as { owned: string[] }).owned;
+    expect(ledger).toEqual({ ...fullLedger, season: v5Season, banks: { ...fullLedger.banks, owned: v4Owned } });
     expect(migrateSave(v4, MIGRATIONS.slice(0, 5), 5)).toEqual(migrated);
   });
 

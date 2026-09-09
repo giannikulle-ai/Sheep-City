@@ -20,9 +20,10 @@
 // - The farmer walks to market at dawn, once a day, on the same `lastVisitKey` slot his two
 //   shearing visits book (#86; the watched world's own `farmerMarketWalk` category action, see
 //   engine/category.ts). The whole wool bank goes with him: `banks.wool` to 0, the settlement's
-//   coins up by `wool * merchant.woolPrice`, and `buyUpgrades` out of that same settlement purse —
-//   the same `sellWoolAtMarket` the actor path calls, so a week away sells at the same price and
-//   in the same order a watched week does.
+//   coins up by `wool * merchant.woolPrice` — the same `sellWoolAtMarket` the actor path calls, so
+//   a week away sells at the same price a watched week does. It buys nothing any more (#126): the
+//   farm's three builds are on the farm from the start now, not something the settlement's purse
+//   affords as it fills.
 // - A lamb-less sheep rolls for a lamb: the actor rolls `lambChancePerSec * TICK_SEC` every fair
 //   tick, so a step rolls once per sheep with the same odds over the step's ticks, and a birth
 //   that lands in rain or over `flockCap` does not happen, as the actor's would not.

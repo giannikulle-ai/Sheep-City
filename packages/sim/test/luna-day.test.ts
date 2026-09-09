@@ -39,35 +39,43 @@ import { tick } from '../src/tick';
 
 const TICKS_PER_DAY = 1800;
 
+// PIN MOVED (#126): the farm's three builds are owned from the start now (plan decision 19), so
+// hay2's grass regrow bonus applies from tick zero on every world, not only after a farm earned
+// enough to buy it. That moves every seed's grass level from the first tick, which — the same way
+// PR #121's own body found for the event deck's `ledger.grass`-weighted card draws — shifts the
+// whole event schedule the engine runs (and, indirectly, DL's own priority chain landing on
+// different ticks as its inputs change). The chain itself and its shape are unmoved: a rabbit
+// chase, a ride, a nibble, bed at dusk, the farmer's afternoon visit again reaching into the night,
+// the dawn stretch, a stick, two flops. Before: see this file's own history below for the moves
+// that came before this one.
 const EXPECTED = [
   '1 sit/- sun day',
   '71 run/-/C sun day',
   '166 sit/- sun day',
-  '237 sit/-/M sun day',
-  '238 run/-/M sun day',
-  '255 run/-/R sun day',
-  '316 pant/- sun day',
-  '342 sit/- sun day',
-  '413 run/- sun day',
-  '422 nibble/- sun day',
+  '237 flop/- sun day',
+  '288 sit/- sun day',
+  '359 stick/- sun day',
+  '397 sit/- sun day',
   '433 run/bed sun dusk',
-  '488 sleep/asleep sun dusk',
+  '486 sleep/asleep sun dusk',
   '613 sleep/asleep sun night',
-  '1054 run/- sun night',
-  '1055 run/bed sun night',
-  '1075 sleep/asleep sun night',
-  '1081 pant/asleep sun night',
-  '1107 sit/asleep sun night',
+  '1146 run/- sun night',
+  '1147 run/bed sun night',
+  '1167 sleep/asleep sun night',
+  '1173 pant/asleep sun night',
+  '1199 sit/asleep sun night',
   '1333 stretch/- sun dawn',
   '1361 sit/- sun dawn',
-  '1432 stick/- sun dawn',
-  '1461 sit/- sun dawn',
-  '1477 sit/- sun day',
-  '1532 flop/- sun day',
-  '1583 sit/- sun day',
-  '1654 flop/- sun day',
-  '1705 sit/- sun day',
-  '1776 flop/- sun day',
+  '1397 sit/-/M sun dawn',
+  '1398 run/-/M sun dawn',
+  '1416 run/-/R sun dawn',
+  '1477 pant/- sun day',
+  '1503 sit/- sun day',
+  '1574 run/- sun day',
+  '1582 nibble/- sun day',
+  '1623 sit/- sun day',
+  '1694 flop/- sun day',
+  '1745 sit/- sun day',
 ];
 
 function describeLuna(s: SimState): string {
@@ -133,7 +141,7 @@ describe('scripted day', () => {
     const b = scriptedDay(11);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('72b482515856e681'); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 16cca63404b910fb
+    expect(hashState(a.state)).toBe('c5a73b7b67dc560d' /* PIN MOVED (#126): was '72b482515856e681' */); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 16cca63404b910fb
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "her 28 transitions at seed 11 are unchanged
@@ -153,7 +161,11 @@ describe('scripted day', () => {
     for (const seed of [1, 2, 5, 42]) {
       const { transitions } = scriptedDay(seed);
       const text = transitions.join('\n');
-      expect(text, `seed ${seed}`).toMatch(/^433 run\/bed sun dusk$/m);
+      // PIN MOVED (#126): was `/^433 run\/bed sun dusk$/m` with no flag allowed — seed 5 now still
+      // reaches bed at the same tick, but with the chasing flag also set (`run/bed/C`): grass moving
+      // from tick zero (see the header comment) shifts exactly when the rabbit chase lands. Bed at
+      // dusk is still the point of the check, so the flag group is now optional rather than absent.
+      expect(text, `seed ${seed}`).toMatch(/^433 run\/bed(?:\/[A-Z]+)? sun dusk$/m);
       expect(text, `seed ${seed}`).toMatch(/^\d+ sleep\/asleep sun dusk$/m);
       // Either the dawn stretch at .92 (tick 1333), or a shower had her up at the door already.
       expect(text, `seed ${seed}`).toMatch(/^1333 stretch\/- sun dawn$|^\d+ \S+\/shelterWait rain (night|dawn)$/m);

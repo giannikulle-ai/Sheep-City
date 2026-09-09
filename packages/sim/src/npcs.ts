@@ -1,8 +1,10 @@
 // The farmer and the merchant, ported at parity from the "NPCs" section of
-// prototype/luna-farm/src/sim_template.html: `summonFarmer`, `summonMerchant`, `npcStep`,
-// `tickNPCs`, and `buyUpgrades`. An NPC walks a job plan: each step is a job name plus an
-// optional foot point; steps without a point run in place. `npcStep` is one frame of that plan
-// and calls back at the start and end of each job.
+// prototype/luna-farm/src/sim_template.html: `summonFarmer`, `summonMerchant`, `npcStep`, and
+// `tickNPCs`. The prototype's `buyUpgrades` is retired (#126, plan decision 19): the farm's three
+// builds are on Luna Farm from a world's first day now, nothing buys them, on the farm or from the
+// settlement. An NPC walks a job plan: each step is a job name plus an optional foot point; steps
+// without a point run in place. `npcStep` is one frame of that plan and calls back at the start and
+// end of each job.
 
 import { bubble, findSheep } from './actors';
 import { tell } from './chronicle/store';
@@ -149,32 +151,16 @@ export function npcStep(n: Npc, dt: number, now: number, onJob: JobHook): 'done'
 }
 
 /**
- * The prototype's `buyUpgrades`: walk the list in order and buy whatever the coins cover.
- *
- * The purse is a parameter since #86, because there are two of them now and the farm's is no longer
- * the one that pays. The farm's builds are bought out of the **settlement's** coins
- * (`state.settlement` / `Ledger.settlement`, the Foreman's proposal on the issue): after this
- * ticket nothing on the farm earns a coin, so a purse read off `banks` would never buy another
- * build. `owned` stays the farm's own list — the builds are on the farm whoever paid for them.
- *
- * `state.banks` is still a legal purse to pass here, but nothing does any more: the owner's tray
- * (`intents.ts`, the "+50 coins" test action, #120) now pays into and buys from the **settlement's**
- * purse too, the same as the market sale. `banks.coins` stays frozen, kept in the save for the
- * owner's own future build table (plan section 3).
- */
-export function buyUpgrades(purse: { coins: number }, owned: string[]): void {
-  for (const [name, cost] of RULES.upgrades) {
-    if (!owned.includes(name) && purse.coins >= cost) {
-      purse.coins -= cost;
-      owned.push(name);
-    }
-  }
-}
-
-/**
  * The market sale (#86): the wool the farmer walked out at dawn, paid for in the settlement's
  * ledger. Zeroes the farm's wool bank, adds `wool * RULES.merchant.woolPrice` to the settlement's
- * coins, buys whatever the farm's build list can now afford, and tells the chronicle one line.
+ * coins, and tells the chronicle one line.
+ *
+ * Retired since #126 (plan decision 19): this used to spend the newly-earned coins on whatever the
+ * farm's build list could now afford (`buyUpgrades`, removed). The flowerbed, hay2, and the
+ * scarecrow are on the farm from a world's first day now — `state.banks.owned` starts with all
+ * three (`FARM_BUILDS`, state.ts) and nothing ever adds to it — so the sale only ever earns; the
+ * settlement's purse keeps accruing here and buys nothing yet, waiting on the owner's own build
+ * table (plan section 3).
  *
  * Nothing is told and nothing moves when the bank is empty: a walk with no wool on it is just the
  * farmer walking past, which the market walk's own category-action line already tells.
@@ -190,7 +176,6 @@ export function sellWoolAtMarket(world: { banks: { wool: number; owned: string[]
   const earned = wool * RULES.merchant.woolPrice;
   world.banks.wool = 0;
   world.settlement.coins += earned;
-  buyUpgrades(world.settlement, world.banks.owned);
   if (log) {
     tell(log.state, {
       atMs: log.atMs,

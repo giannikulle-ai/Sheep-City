@@ -492,12 +492,12 @@ describe('the pre-calendar view (#84 moves the schema, not the tick)', () => {
   // different reason: they run with the engine **on**, so they hold a dawn market walk, and the
   // walk sells.
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
-    { seed: 6, sheep: 5, hash: '3edc3971f6216013' }, // moved in #86: the caravan stopped buying the wool bank; was 0791cd39c7e2aab8
-    { seed: 6, sheep: 40, hash: 'a190c22f091395e9' }, // moved in #86: the caravan stopped buying the wool bank; was ab75ceacb516b7ae
-    { seed: 7, sheep: 5, hash: 'c7b2da6b50368791' }, // moved in #86: the caravan stopped buying the wool bank; was 0ed2243395f4d7e2
-    { seed: 7, sheep: 40, hash: '111b2f494e1c9263' }, // moved in #86: the caravan stopped buying the wool bank; was a33d55048b809e3d
-    { seed: 11, sheep: 5, hash: 'b90a2901c0c39673' }, // moved in #86: the caravan stopped buying the wool bank; was 0e4a4606aab31838
-    { seed: 11, sheep: 40, hash: '240c15df101430ac' }, // moved in #86: the caravan stopped buying the wool bank; was ce2977de7b3d70d2
+    { seed: 6, sheep: 5, hash: 'c5cef5a67dc03fd9' /* PIN MOVED (#126): was '3edc3971f6216013' */ }, // moved in #86: the caravan stopped buying the wool bank; was 0791cd39c7e2aab8
+    { seed: 6, sheep: 40, hash: '29999c2dd713b55d' /* PIN MOVED (#126): was 'a190c22f091395e9' */ }, // moved in #86: the caravan stopped buying the wool bank; was ab75ceacb516b7ae
+    { seed: 7, sheep: 5, hash: '7039353aac6d627c' /* PIN MOVED (#126): was 'c7b2da6b50368791' */ }, // moved in #86: the caravan stopped buying the wool bank; was 0ed2243395f4d7e2
+    { seed: 7, sheep: 40, hash: 'be78095de6bf72e1' /* PIN MOVED (#126): was '111b2f494e1c9263' */ }, // moved in #86: the caravan stopped buying the wool bank; was a33d55048b809e3d
+    { seed: 11, sheep: 5, hash: 'aab5d0e99d09151e' /* PIN MOVED (#126): was 'b90a2901c0c39673' */ }, // moved in #86: the caravan stopped buying the wool bank; was 0e4a4606aab31838
+    { seed: 11, sheep: 40, hash: '1153dcc906066034' /* PIN MOVED (#126): was '240c15df101430ac' */ }, // moved in #86: the caravan stopped buying the wool bank; was ce2977de7b3d70d2
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
     it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as pinned on the v7 view`, () => {
@@ -509,10 +509,10 @@ describe('the pre-calendar view (#84 moves the schema, not the tick)', () => {
   // and the walk now carries the wool bank out and pays the settlement for it. That is a change to
   // the world, not to its shape, so the v7 strip cannot bring these back and they are re-pinned.
   it("Digital Luna's scripted day (seed 11, 1,800 ticks) hashes as pinned on the v7 view", () => {
-    expect(hashState(v7View(advance(createInitialState(11), 1800)))).toBe('b1b26b76c94b3f0d'); // moved in #86: the dawn market walk sells the bank; was 575fc853e800bd3d
+    expect(hashState(v7View(advance(createInitialState(11), 1800)))).toBe('f0a924319ea7542c' /* PIN MOVED (#126): was 'b1b26b76c94b3f0d' */); // moved in #86: the dawn market walk sells the bank; was 575fc853e800bd3d
   });
 
   it("the sheep's scripted day (seed 71, 1,800 ticks) hashes as pinned on the v7 view", () => {
-    expect(hashState(v7View(advance(createInitialState(71), 1800)))).toBe('278dd8ac81253279'); // moved in #86: the dawn market walk sells the bank; was db82b911ed86c1f8
+    expect(hashState(v7View(advance(createInitialState(71), 1800)))).toBe('f2055dd80ac6aa7c' /* PIN MOVED (#126): was '278dd8ac81253279' */); // moved in #86: the dawn market walk sells the bank; was db82b911ed86c1f8
   });
 });

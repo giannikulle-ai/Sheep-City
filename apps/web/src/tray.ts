@@ -16,6 +16,13 @@ export interface Tray {
   selected(): WhoId;
   /** the status line under the verbs */
   say(text: string, waiting?: boolean): void;
+  /** Bumped on every `say` call. main.ts's deferred birthday line (#117 round 2) compares this
+   * against the count it captured when it started waiting, to tell "nothing else has been said"
+   * without keeping its own copy of the tray's text. */
+  sayCount(): number;
+  /** Whether the status line currently shows the "waiting" cue (a dispatched intent whose sim
+   * reaction, or a `call` verb's stage tap, has not landed yet). */
+  isWaiting(): boolean;
   /** rebuild the chips for a changed flock (a lamb grew up); keeps the selection when it still exists */
   setWhos(names: readonly string[], colors: readonly string[]): void;
   /**
@@ -46,6 +53,10 @@ export function buildTray(
   // Refreshed by renderVerbs whenever the sky's verbs are the ones on screen; empty otherwise, so
   // syncWeather has nothing to touch (and nothing to look up) while another chip is selected.
   let weatherButtons = new Map<string, HTMLButtonElement>();
+  // #117 round 2: how many times `say` has written the status line, and whether the cue it wrote
+  // last is "waiting" — read by main.ts's deferred birthday line via `sayCount`/`isWaiting` instead
+  // of the tray keeping any state of its own about who is allowed to write next.
+  let sayCalls = 0;
 
   /**
    * Whether a sky chip should read as lit right now: a kind chip (`sun`/`rain`/`snow`) only while a
@@ -63,9 +74,12 @@ export function buildTray(
     select,
     selected: () => current,
     say(text, waiting = false) {
+      sayCalls++;
       els.say.textContent = text;
       els.say.classList.toggle('waiting', waiting);
     },
+    sayCount: () => sayCalls,
+    isWaiting: () => els.say.classList.contains('waiting'),
     setWhos,
     syncWeather(w, now) {
       weather = w;

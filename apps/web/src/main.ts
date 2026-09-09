@@ -16,9 +16,10 @@ import {
   type BackgroundKey,
   type FarmView,
 } from '@sheepcliff/render';
-import { catchUp, chronicleBetween, SaveError, type SimState } from '@sheepcliff/sim';
+import { catchUp, chronicleBetween, realMsOf, SaveError, type SimState } from '@sheepcliff/sim';
 import type { SheepcliffApi } from './api';
 import { BACKGROUND_URLS, SHEET_META_URL, SHEET_URL } from './assets';
+import { birthdayReminder, trayDwell, traySequence } from './birthday';
 import { buildFixture } from './fixture';
 import { Game, MAX_FRAME_MS } from './game';
 import { hitTest, type SpriteSizes } from './hit';
@@ -41,6 +42,12 @@ import { buildTray } from './tray';
 
 /** Frame length under the QA virtual clock. */
 const QA_FRAME_MS = 1000 / 60;
+
+/** The real-day key the birthday reminder was last shown on (#117), so it shows once per real day.
+ * The player's real world's alone (round 2, finding F1): a scratch/pinned world (`saving` false)
+ * neither reads nor writes it, so `?realNow=` stays reproducible rather than depending on, or
+ * consuming, whatever the player's own real farm already saw today. */
+const BIRTHDAY_REMINDER_KEY = 'sheepcliff-birthday-reminder-shown';
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -273,8 +280,9 @@ async function main(): Promise<void> {
   }
 
   /** Take a restored world over, catch it up on the time away, and open its storybook page if the
-   * gap earned one. */
-  function adopt(text: string, why: string): void {
+   * gap earned one. Returns the tray message it said, so the initial load (below) can keep track
+   * of what is already on the tray without a second, competing source of truth. */
+  function adopt(text: string, why: string): string {
     // `realNowMs` reaches the sim's v8 migration, which anchors a pre-calendar save (v7 or older)
     // to the real present on its first load and leaves it deterministic afterwards (#84). A save
     // that already carries its own epoch ignores it, so this changes nothing for a v8 document.
@@ -285,25 +293,35 @@ async function main(): Promise<void> {
     const awayMs = r.savedAt ? Date.now() - r.savedAt : 0;
     const c = catchUp(r.sim, awayMs);
     game.load(c.state);
-    if (c.ranMs > 0) {
-      tellGap(c.state, c.before, c.after, awayMs);
-      tray.say(`${why}: back after ${awayLabel(awayMs)}`);
-    } else tray.say(`${why}: the farm continues where it was`);
+    if (c.ranMs > 0) tellGap(c.state, c.before, c.after, awayMs);
+    const message = c.ranMs > 0 ? `${why}: back after ${awayLabel(awayMs)}` : `${why}: the farm continues where it was`;
+    tray.say(message);
+    return message;
   }
 
+  // What the tray already says as of this open (#117): `adopt` and the catch branch below both say
+  // it synchronously, and this is captured so the birthday reminder further down never overwrites
+  // it at the same instant — see `traySequence` in birthday.ts.
+  let loadMessage: string | null = null;
+  // When that message went onto the tray, on the client's own monotonic clock — the instant the
+  // reminder's readable dwell is measured from (round 3, blocker B4; `trayDwell` in birthday.ts).
+  // Nothing here reaches the sim: the sim's own "now" is still `realMsOf(game.sim.season)`.
+  let loadMessageAtMs = 0;
   if (saving) {
     if (params.fresh) storage.remove(SAVE_KEY);
     const text = params.fresh ? null : storage.get(SAVE_KEY);
     if (text) {
       try {
-        adopt(text, 'restored');
+        loadMessage = adopt(text, 'restored');
       } catch (err) {
         // keep the unreadable save for the owner, start again, and say so in one line
         storage.set(`${SAVE_KEY}.unreadable`, text);
         const code = err instanceof SaveError ? err.code : 'error';
-        tray.say(`the saved farm could not be read (${code}); starting a new one`);
+        loadMessage = `the saved farm could not be read (${code}); starting a new one`;
+        tray.say(loadMessage);
         console.error(err);
       }
+      if (loadMessage !== null) loadMessageAtMs = performance.now();
     }
     save('load');
   } else noteSave(params.fixture ? 'fixture still (not saved)' : 'scratch world from the URL (not saved)');
@@ -489,6 +507,71 @@ async function main(): Promise<void> {
     drawStill();
     document.body.dataset['ready'] = '1';
     return;
+  }
+
+  // --- Digital Luna's birthday reminder (#117) -------------------------------------------
+  // A quiet tray line once per real day in the three days before December 15, and on the day
+  // itself. Reads the world's own real "now" (`realMsOf(sim.season)`), never the browser clock
+  // directly, so a scratch world pinned by the URL shows nothing unless `?realNow=` puts it in the
+  // window — see birthday.ts. The event itself is the sim's (#84); this only tells.
+  {
+    // A scratch/pinned world (`saving` false) neither reads nor writes the once-per-day key: it is
+    // the player's real world's alone (round 2, finding F1). Otherwise a `?realNow=` visit could
+    // silently consume — or be silenced by — whatever the player's own real farm already saw today,
+    // breaking query.ts's own promise that a pinned scene is identical every time it is opened.
+    const lastShownDayKey = saving ? storage.get(BIRTHDAY_REMINDER_KEY) : null;
+    const r = birthdayReminder(realMsOf(game.sim.season), lastShownDayKey);
+    if (r.line !== null) {
+      const line = r.line;
+      // The once-per-real-day key is spent where the line is actually written, never at decision
+      // time (round 2 finding): a deferred line that is abandoned — the player says something else
+      // first, or closes the tab while a storybook card is still up — must leave the day unspent,
+      // so the next open still has the reminder to give.
+      const showLine = (): void => {
+        if (saving) storage.set(BIRTHDAY_REMINDER_KEY, r.dayKey);
+        tray.say(line);
+      };
+      const seq = traySequence(loadMessage, line);
+      if (seq.length === 1) {
+        // nothing else said on this open — the tray is free and empty of news, say it now
+        showLine();
+      } else {
+        // A load message is already on the tray (said synchronously above), and it is the only
+        // notice the player gets that the farm was restored, or that the save could not be read and
+        // has been replaced. Two things have to be true before the birthday line may take the tray,
+        // and both are `trayDwell`'s (birthday.ts):
+        //
+        //   * the tray is free — nothing live on it, no pending deity `call` prompt, no waiting
+        //     cue, no storybook card over it (round 2, blocker B1 and finding F3). A fixed timer
+        //     alone, which is what round 1 shipped, wiped a player's own tap feedback and open
+        //     prompts four seconds in, silently.
+        //   * that message has been *visible* for `TRAY_READ_DWELL_MS` (round 3, blocker B4). Free
+        //     alone was true on the first polled frame, so round 2 replaced the load message 23 ms
+        //     after writing it and no one ever read it. Card time does not count towards the dwell,
+        //     so dismissing a storybook card starts the four seconds rather than ending them.
+        //
+        // Polled every animation frame rather than scheduled once, so the wait tracks what is
+        // actually on screen; `abandon` stops the chain when the tray has passed to someone else
+        // for good, instead of polling for the rest of the session.
+        const sayCountAtLoad = tray.sayCount();
+        const dwell = trayDwell(loadMessageAtMs);
+        const tryShow = (): void => {
+          const step = dwell.step(performance.now(), {
+            liveMessage: tray.sayCount() !== sayCountAtLoad,
+            awaitingCall: awaitingCall !== null,
+            waitingCue: tray.isWaiting(),
+            storybookVisible: storybook.visible,
+          });
+          if (step === 'abandon') return;
+          if (step === 'wait') {
+            requestAnimationFrame(tryShow);
+            return;
+          }
+          showLine();
+        };
+        requestAnimationFrame(tryShow);
+      }
+    }
   }
 
   // --- absence: save when the tab hides, catch up when it comes back ------------------------

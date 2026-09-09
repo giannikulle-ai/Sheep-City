@@ -8,6 +8,25 @@ import type { SheepcliffApi } from '../src/api';
 // on the card (including behind "and N more" and on a reopened earlier page) must exist in the
 // chronicle, and nothing else on the card is client-composed text except the title, the subtitle,
 // and the "and N more" row's own label.
+//
+// #113: a line can now collapse a card told more than once in the gap into one row plus a count
+// ("Three crows landed on the hay and Digital Luna sent them packing, four times this week.") —
+// `entryIds` (`storybook.ts`'s `lineEntryIds`), not `entryId` alone, is its whole backing set, and
+// the rendered text is no longer expected to equal any one entry's own `line` verbatim; it is
+// expected to equal every backing entry's own (shared) line, with its trailing period swapped for a
+// mechanical count. `expectCardTracesToChronicle` checks that directly rather than relaxing the
+// "only tells" invariant: every backing id must be real, every backing entry must carry the exact
+// same text a collapsed line claims to summarise, and the count in the suffix must equal how many.
+//
+// F3 (round 2): `entryIds` is now capped at `MAX_STORED_MORE` (a card's own repeats in one gap have
+// no bound, so storing one id per telling forever grows a page's stored size with the length of the
+// gap itself) — `count` carries the group's true tally alongside it, always exact regardless of the
+// cap. `expectCardTracesToChronicle` traces a collapsed line through *both*: every stored id must be
+// real (as before), the suffix's own number must equal `count` — not `entryIds.length`, which can
+// now be smaller — and `entryIds.length` itself must equal `Math.min(count, MAX_STORED_MORE)`, never
+// more (the cap held) and never less (nothing was dropped ahead of the cap).
+const MAX_STORED_MORE = 50;
+
 type WithApp = { sheepcliff: SheepcliffApi };
 
 /** The two golden cases (`storybook.spec.ts`'s `NIGHT`/`WEEK`): seed 17, the same `?freeze=1&t=0.2`
@@ -19,12 +38,23 @@ const CASES = [
   { name: 'a week', seed: 17, gapMinutes: 10_080 },
 ] as const;
 
+/** Small counts spelled out, mirroring `storybook.ts`'s own private `SMALL_WORDS` (zero..twenty) —
+ * duplicated here only to read a collapsed line's count back out of its rendered text; not a
+ * second source of truth the app itself reads from. */
+const SMALL_WORDS = [
+  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty',
+];
+
 interface CardCoverage {
   hasPage: boolean;
   title: string | null;
   subtitle: string | null;
-  /** every `{entryId, line}` the page's JS state carries, lines then "more", in the order shown */
-  apiLines: { entryId: string; line: string }[];
+  /** every `{entryId, line, entryIds, count}` the page's JS state carries, lines then "more", in
+   * the order shown — `entryIds` is `lineEntryIds(l)` (#113), `count` is `lineCount(l)` (F3, round
+   * 2): `l.entryIds`/`l.count` when the line carries them, else `[l.entryId]`/`l.entryIds.length`,
+   * computed inline since this runs in the page and cannot import from `storybook.ts`. */
+  apiLines: { entryId: string; line: string; entryIds: string[]; count: number }[];
   shownCount: number;
   /** the rendered `<span>` text of every currently-visible `.storyline` row, in DOM order */
   domRows: (string | null)[];
@@ -60,7 +90,12 @@ function readCardCoverage(page: Page): Promise<CardCoverage> {
       hasPage: !!sb,
       title: document.querySelector('#storyTitle')?.textContent ?? null,
       subtitle: document.querySelector('#storySubtitle')?.textContent ?? null,
-      apiLines: sb ? [...sb.lines, ...sb.more].map((l) => ({ entryId: l.entryId, line: l.line })) : [],
+      apiLines: sb
+        ? [...sb.lines, ...sb.more].map((l) => {
+            const entryIds = l.entryIds ?? [l.entryId];
+            return { entryId: l.entryId, line: l.line, entryIds, count: l.count ?? entryIds.length };
+          })
+        : [],
       shownCount: sb ? sb.lines.length : 0,
       domRows: [...document.querySelectorAll('#storyLines .storyline span')].map((s) => s.textContent),
       moreLabel: document.querySelector('#storyMore')?.textContent ?? null,
@@ -85,7 +120,38 @@ function expectCardTracesToChronicle(c: CardCoverage): void {
   const chronicleLine = new Map(c.chronicleById);
   for (const l of c.apiLines) {
     expect(chronicleIds.has(l.entryId), `entry id "${l.entryId}" on the page is not in sim().chronicle`).toBe(true);
-    expect(l.line, `entry "${l.entryId}"'s rendered line does not match its chronicle text`).toBe(chronicleLine.get(l.entryId));
+    for (const id of l.entryIds) expect(chronicleIds.has(id), `backing entry id "${id}" on the page is not in sim().chronicle`).toBe(true);
+
+    if (l.entryIds.length <= 1) {
+      // the plain, pre-#113 case: the rendered text is exactly this one entry's own line, and its
+      // true count (F3, round 2) is exactly one — it names no more entries than it stores.
+      expect(l.line, `entry "${l.entryId}"'s rendered line does not match its chronicle text`).toBe(chronicleLine.get(l.entryId));
+      expect(l.count, `plain line "${l.line}" claims a count other than 1`).toBe(1);
+      continue;
+    }
+
+    // #113: a collapsed line. Every entry it claims to back must carry the exact same text (a
+    // "backing set" spanning different sentences would be inventing a summary, not reporting one),
+    // and the rendered line must be that shared text with its trailing period swapped for a
+    // mechanical "N times ..." suffix — never new prose, and never a count that disagrees with how
+    // many entries actually back it.
+    //
+    // F3 (round 2): the stored `entryIds` can now be a capped sample of a much larger group (a card
+    // repeated beyond `MAX_STORED_MORE` times in one gap), so the count the suffix must name is
+    // `l.count` — the group's true tally — not `l.entryIds.length`, which is what is checked next.
+    const backingTexts = new Set(l.entryIds.map((id) => chronicleLine.get(id)));
+    expect(backingTexts.size, `collapsed line "${l.line}" backs entries with different chronicle text`).toBe(1);
+    const base = [...backingTexts][0]!.replace(/\.+$/, '');
+    expect(l.line.startsWith(`${base}, `), `collapsed line "${l.line}" does not start with its backing entries' own text`).toBe(true);
+    expect(l.line.endsWith('.'), `collapsed line "${l.line}" is not a finished sentence`).toBe(true);
+    const countWord = SMALL_WORDS[l.count] ?? String(l.count);
+    expect(l.line, `collapsed line "${l.line}" does not name its own true count (${l.count})`).toContain(`${countWord} times`);
+    // the stored backing set is exactly the true count, capped at MAX_STORED_MORE — never more
+    // (the cap held) and never fewer (nothing was dropped ahead of the cap).
+    expect(
+      l.entryIds.length,
+      `collapsed line "${l.line}" stores ${l.entryIds.length} backing ids for a true count of ${l.count} (expected ${Math.min(l.count, MAX_STORED_MORE)})`,
+    ).toBe(Math.min(l.count, MAX_STORED_MORE));
   }
 
   // the DOM's own rows are exactly the api's *currently visible* lines' text, in the same order —
@@ -128,11 +194,9 @@ for (const c of CASES) {
 // farm bar's list, and check every invariant above holds again — a page read back off the store
 // must trace to the chronicle exactly as freshly-shown one does. Uses a *running* world (no
 // `freeze`), the same seed 17 / gap 120 pair `storybook.spec.ts`'s "and N more" test measures at
-// 5 shown + 47 more = 52 lines — the gap's own total, measured on this head. (It was 34 at #111
-// alone and 8 before that; at the engine's old rate of 8 with #86's conditions it was 79 and the
-// `MAX_STORED_MORE` cap clipped it to 55. With the rate derived from the owner's four-in-five
-// target it is back under the cap.) Either way the reopened card is exercised with plenty behind
-// "and N more".
+// 5 shown + 10 more = 15 rows (#113: this gap's raw chronicle is 52 entries, but every repeated
+// card collapses into one row before the page is built, so "and N more" is 10 rows, not 47).
+// Either way the reopened card is exercised with plenty behind "and N more".
 test('reopening a page from "earlier pages" traces to the chronicle exactly as the first showing did', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -167,15 +231,16 @@ test('reopening a page from "earlier pages" traces to the chronicle exactly as t
   expect(reopened.title).toBe(firstShowing.title);
   expect(reopened.subtitle).toBe(firstShowing.subtitle);
   expect(reopened.shownCount).toBe(5);
-  // Measured on this head: 52 (5 shown + 47 more), which is this gap's own chronicle in full — the
-  // `MAX_STORED_MORE` cap of 50 does not bind at 52. Was 34 at #111 alone, 8 before that landed,
-  // and 79 (clipped to 55) at the engine's old rate of 8 with #86's conditions.
-  expect(reopened.apiLines.length).toBe(52);
+  // Measured on this head: 15 rows (5 shown + 10 more) — #113 collapses this gap's 52 raw entries
+  // (`app.sim().chronicle.entries.length`) into 15 distinct lines, several of them a collapsed "N
+  // times" row; `expectCardTracesToChronicle` above already checked every raw entry is accounted
+  // for by exactly one row's backing set.
+  expect(reopened.apiLines.length).toBe(15);
 
   // and the same holds once "and N more" is opened on the reopened card too
   await expect(page.locator('#storyMore')).toHaveCount(1);
   await page.locator('#storyMore').click();
   const reopenedExpanded = await readCardCoverage(page);
   expectCardTracesToChronicle(reopenedExpanded);
-  expect(reopenedExpanded.domRows.length).toBe(52); // 5 shown + the gap's own 47, under the cap
+  expect(reopenedExpanded.domRows.length).toBe(15); // 5 shown + the gap's own 10 collapsed rows
 });

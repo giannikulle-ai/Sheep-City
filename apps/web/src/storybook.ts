@@ -163,6 +163,45 @@ export interface StorybookLine {
   entryId: string;
   line: string;
   picture: string;
+  /** #113: every chronicle entry this line accounts for, most notable first (the order `entries`
+   * itself arrives in — `chronicleBetween`'s own order), `entryId` included as its first element —
+   * length 1 for a plain line, up to `MAX_STORED_MORE` for one that collapses a repeated card
+   * ("Three crows landed on the hay and Digital Luna sent them packing, four times this week.").
+   * F3 (round 2): a card's own repeats in one gap have no bound, so this is capped at
+   * `MAX_STORED_MORE` — the same cap the page's own "and N more" already uses — rather than one id
+   * per telling; `count` carries the group's true tally, always exact regardless of the cap. A
+   * reader after the whole (capped) backing set reads `lineEntryIds`; one after the true count
+   * reads `lineCount`. Optional only so a page stored before this shipped still loads
+   * (`parsePageStore`) without inventing a set it never had; every line this file itself builds
+   * sets it, plain or collapsed alike, so nothing downstream has to special-case "was this
+   * collapsed" — read `lineEntryIds`/`lineCount` instead of `entryId` wherever the whole backing
+   * set, or its true size, is what matters. */
+  entryIds?: string[];
+  /** #113/F3: the true number of chronicle entries this line stands for, set alongside `entryIds`
+   * for a collapsed line (`collapsedLine`) so the "N times ..." suffix and every reader after the
+   * real tally stay exact even once `entryIds` itself is capped. Undefined for a plain,
+   * uncollapsed line (and for a page saved before this existed) — such a line is always exactly
+   * one entry; read `lineCount`, never this field directly. */
+  count?: number;
+}
+
+/** Every chronicle entry id `line` is backed by (#113): `line.entryIds` when the line carries it —
+ * every line `buildStorybookPage` builds does — or `[line.entryId]` for one read off a page saved
+ * before this shipped, where a line was always exactly one entry. For a heavily-repeated card this
+ * is a capped sample (`MAX_STORED_MORE`, F3 round 2), most-notable-first — not necessarily the
+ * line's *whole* backing set; `lineCount` is the true tally. The one place to read a line's stored
+ * backing ids; `pagedEntryIds` and the qa coverage tests use this rather than `entryId` alone. */
+export function lineEntryIds(line: StorybookLine): string[] {
+  return line.entryIds ?? [line.entryId];
+}
+
+/** The true number of chronicle entries `line` stands for (F3, round 2): `line.count` when the
+ * line carries it — a collapsed line whose real tally can exceed its own capped `entryIds` — else
+ * `lineEntryIds(line).length` (a plain line, or one read off a page saved before `count` existed,
+ * is exactly as many entries as it names). The count suffix in a collapsed line's own text
+ * (`spellSmall(group.length)`, `collapsedLine`) is always built from this same number. */
+export function lineCount(line: StorybookLine): number {
+  return line.count ?? lineEntryIds(line).length;
 }
 
 export interface StorybookPage {
@@ -221,7 +260,14 @@ export function lineCountFor(awayMs: number): number {
  * a handful today (one per kind of change, plus one per upgrade bought), but a future source could
  * tell far more in one gap, and a page store lives in the save — so the remainder is bounded while
  * the shown lines never are. A gap that told more than `MAX_PAGE_LINES + MAX_STORED_MORE` lines
- * loses its least notable ones; nothing shipped today comes close. */
+ * loses its least notable ones; nothing shipped today comes close.
+ *
+ * F3 (round 2): also the cap on one collapsed line's own stored `entryIds` (`collapsedLine`) — a
+ * card repeated beyond this many times in a single gap (measured: a real week away repeats its
+ * most common small card in the thousands) keeps only its first `MAX_STORED_MORE` tellings by id,
+ * most notable first; `StorybookLine.count` keeps the "N times ..." suffix, and every other reader
+ * of the true tally, exact regardless. Without this a page store's size grows with the length of
+ * the gap itself, unbounded, next to the save. */
 export const MAX_STORED_MORE = 50;
 
 /**
@@ -233,6 +279,11 @@ export const MAX_STORED_MORE = 50;
  * when one exists" (issue #42). Every source in the chronicle today is 'ledger', so this is a no-op
  * until the event engine (#82) starts telling cards; it is still exercised in the unit tests below
  * with a hand-built entry list, so the rule is proven ahead of that landing.
+ *
+ * Unchanged by #113: `buildStorybookPage` runs this over an already-collapsed list (one entry per
+ * repeated card, not one per telling — `collapseCardRepeats`), so "no two identical card lines"
+ * lives entirely in the collapsing step below, not in this rule. Called directly, as the unit tests
+ * below still do, this sees exactly the entries it is given, repeats and all.
  */
 export function selectLines(entries: readonly ChronicleEntry[], max = MIN_PAGE_LINES): ChronicleEntry[] {
   const picked = entries.slice(0, max);
@@ -250,6 +301,95 @@ export function pageId(entryIds: readonly string[]): string {
   return entryIds.slice().sort().join('+');
 }
 
+// --- collapsing a repeated card into one line (#113) --------------------------------------------
+//
+// A long absence's storybook page used to repeat the same small-card line many times — "crows,
+// windfall, crows, crows, windfall, crows" was the owner's own report of a week away. The sim half
+// (chronicle notability) makes a card's own repeats score no higher than a routine telling, but
+// selection still needs its own rule: a page must never show the same card line twice, and the
+// tellings it does not show on their own are not simply dropped — they are still true, and the
+// storybook only tells, so they are folded into one line that says how many times, backed by every
+// entry it speaks for.
+
+/** The trailing phrase a collapsed line's count suffix reads against — the page's own title word
+ * (`awayTitle`), so a collapsed line never claims a span its own title does not: "four times this
+ * week" only on a page titled "a week". Every other title shape gets a plain, honest phrase rather
+ * than a guess at new prose the title itself does not support. */
+function collapseSpanPhrase(title: string): string {
+  if (title === 'a week') return 'this week';
+  if (title === 'a night') return 'tonight';
+  if (title === 'a moment') return 'just now';
+  return 'this visit';
+}
+
+/**
+ * One collapsed line for a run of same-picture `card` entries, all told the same thing (#113):
+ * `anchor`'s own line, verbatim, its trailing period swapped for a mechanical count suffix — never
+ * new prose, the same numeral words (`spellSmall`) a plain count elsewhere in this file already
+ * uses. "Three crows landed on the hay and Digital Luna sent them packing." + four tellings + "a
+ * week" -> "Three crows landed on the hay and Digital Luna sent them packing, four times this
+ * week." Backed by every entry in `group`, `anchor` included — `entryIds`, read through
+ * `lineEntryIds` — not only the one line's text was drawn from.
+ *
+ * F3 (round 2): `group` itself has no bound (a real week away can repeat one small card in the
+ * thousands), so the *stored* `entryIds` is `group` capped at `MAX_STORED_MORE` — `anchor` is
+ * always `group[0]` (`collapseCardRepeats` builds `group` in `entries`' own most-notable-first
+ * order), so it always survives the cap. `count` carries `group`'s real length regardless, which
+ * is what the count suffix above is built from — never `entryIds.length`, so the sentence stays
+ * exact even once the id list itself is truncated.
+ */
+function collapsedLine(anchor: ChronicleEntry, group: readonly ChronicleEntry[], spanPhrase: string): StorybookLine {
+  const base = anchor.line.replace(/\.+$/, '');
+  return {
+    entryId: anchor.id,
+    line: `${base}, ${spellSmall(group.length)} times ${spanPhrase}.`,
+    picture: anchor.picture,
+    count: group.length,
+    entryIds: group.slice(0, MAX_STORED_MORE).map((e) => e.id),
+  };
+}
+
+/** One logical line: either a single entry (a non-card line, or a card told only once in the gap)
+ * or a repeated card's whole run, `anchor` its most notable telling. */
+interface LogicalLine {
+  anchor: ChronicleEntry;
+  group: ChronicleEntry[];
+}
+
+/**
+ * `entries` (already most-notable-first), with every run of same-`picture` `source: 'card'` entries
+ * folded into one logical line at its most notable member's own position (`entries` is sorted, so
+ * that member is simply the first of its picture the loop meets) — so a card told N times in the
+ * gap occupies exactly the one slot its best telling earned, "placed where the first telling would
+ * have been" (#113), never N slots. A non-card entry, or a card told only once, passes through as
+ * its own one-entry group, unmoved — collapsing a picture never told twice is a no-op, not a
+ * special case a reader has to allow for. Grouped by `picture`, not a card id: `facts`/`repeats`
+ * (`packages/sim/src/chronicle`) deliberately keep a card's own id out of the chronicle entry
+ * itself, and `picture` is already the one field every card's line carries that is unique to it
+ * (`packages/content/events/farm.json`'s `storybook.picture`) — an end's picture is its own card's
+ * picture plus `-end` (`engine/engine.ts`'s `endEvent`), so it is never grouped with that card's own
+ * starts.
+ */
+function collapseCardRepeats(entries: readonly ChronicleEntry[]): LogicalLine[] {
+  const out: LogicalLine[] = [];
+  const byPicture = new Map<string, LogicalLine>();
+  for (const e of entries) {
+    if (e.source === 'card') {
+      const existing = byPicture.get(e.picture);
+      if (existing) {
+        existing.group.push(e);
+        continue;
+      }
+      const line: LogicalLine = { anchor: e, group: [e] };
+      byPicture.set(e.picture, line);
+      out.push(line);
+      continue;
+    }
+    out.push({ anchor: e, group: [e] });
+  }
+  return out;
+}
+
 /**
  * One storybook page for a gap, or null when the chronicle has nothing to tell for it — the
  * storybook only tells, so a quiet gap gets no page rather than an invented "nothing happened"
@@ -262,6 +402,10 @@ export function pageId(entryIds: readonly string[]): string {
  * 1 on #42: the sim's `tellLedgerDiff` stamps every entry of a gap at the instant the gap ends, the
  * same clock instant the next load's window starts from, so the raw window can repeat a previous
  * page's entries — the page store, not the timestamps, is what says what has already been shown).
+ *
+ * #113: `entries` is first collapsed (`collapseCardRepeats`) so a repeated card is one logical line
+ * before `selectLines` ever runs — "and N more" is collapsed the same way, so a page never repeats
+ * a card line anywhere on it, shown or revealed.
  */
 export function buildStorybookPage(
   entries: readonly ChronicleEntry[],
@@ -271,18 +415,29 @@ export function buildStorybookPage(
   createdAt: number,
   periodSec: number,
 ): StorybookPage | null {
-  const chosen = selectLines(entries, lineCountFor(awayMs));
+  const logical = collapseCardRepeats(entries);
+  const anchors = logical.map((l) => l.anchor);
+  const groupByAnchorId = new Map(logical.map((l) => [l.anchor.id, l.group]));
+  const chosen = selectLines(anchors, lineCountFor(awayMs));
   if (chosen.length === 0) return null;
-  const toLine = (e: ChronicleEntry): StorybookLine => ({ entryId: e.id, line: e.line, picture: e.picture });
-  const shown = new Set(chosen.map((e) => e.id));
+  const title = awayTitle(awayMs, fromMs, toMs, periodSec);
+  const spanPhrase = collapseSpanPhrase(title);
+  const toLine = (e: ChronicleEntry): StorybookLine => {
+    const group = groupByAnchorId.get(e.id) ?? [e];
+    return group.length > 1
+      ? collapsedLine(e, group, spanPhrase)
+      : { entryId: e.id, line: e.line, picture: e.picture, entryIds: [e.id] };
+  };
   const lines = chosen.map(toLine);
+  const shown = new Set(lines.flatMap(lineEntryIds));
   // Everything this gap told that the card has no room for, kept in the chronicle's own order:
   // the card offers it as "and N more" rather than dropping it, since no later window can ever
-  // reach these entries again (verdict round 3, S3).
-  const more = entries.filter((e) => !shown.has(e.id)).slice(0, MAX_STORED_MORE).map(toLine);
+  // reach these entries again (verdict round 3, S3). Also collapsed (`anchors` is the collapsed
+  // list, not raw `entries`), so opening "and N more" never reveals the same card line twice either.
+  const more = anchors.filter((e) => !shown.has(e.id)).slice(0, MAX_STORED_MORE).map(toLine);
   return {
     id: pageId(lines.map((l) => l.entryId)),
-    title: awayTitle(awayMs, fromMs, toMs, periodSec),
+    title,
     createdAt,
     awayMs,
     fromMs,
@@ -306,13 +461,22 @@ export function addPage(store: PageStore, page: StorybookPage): PageStore {
 }
 
 /** Every chronicle entry id already told on some stored page. The store, not the chronicle's own
- * timestamps, is the record of what the player has already been shown (fix round 1 on #42). */
+ * timestamps, is the record of what the player has already been shown (fix round 1 on #42).
+ *
+ * F3 (round 2): for a card repeated beyond `MAX_STORED_MORE` times in one gap, `lineEntryIds`
+ * itself only names that many of them — the same accepted loss the page's own "and N more" cap
+ * already carries for a gap that tells more lines than it keeps (this function's own header
+ * comment, one paragraph up, on the pre-#113 cap). A telling this leaves out of every stored page
+ * could in principle be told again as "new" by a later gap; nothing shipped comes close to the cap
+ * on either axis today. */
 export function pagedEntryIds(store: PageStore): Set<string> {
   const ids = new Set<string>();
   for (const page of Object.values(store)) {
-    // both what the page shows and what it keeps behind "and N more": a page tells all of it
-    for (const line of page.lines) ids.add(line.entryId);
-    for (const line of page.more) ids.add(line.entryId);
+    // both what the page shows and what it keeps behind "and N more": a page tells all of it.
+    // `lineEntryIds` (#113), not `entryId` alone — a collapsed line's whole (capped) backing set
+    // has to count as told, or a later gap would show a card's own earlier repeats as new again.
+    for (const line of page.lines) for (const id of lineEntryIds(line)) ids.add(id);
+    for (const line of page.more) for (const id of lineEntryIds(line)) ids.add(id);
   }
   return ids;
 }
@@ -332,7 +496,24 @@ export function pagesNewestFirst(store: PageStore): StorybookPage[] {
 
 function isLine(l: unknown): l is StorybookLine {
   const line = l as StorybookLine | null;
-  return !!line && typeof line.entryId === 'string' && typeof line.line === 'string' && typeof line.picture === 'string';
+  if (!line || typeof line.entryId !== 'string' || typeof line.line !== 'string' || typeof line.picture !== 'string') return false;
+  // #113: `entryIds` is optional (a page saved before it existed has none), but if it is there it
+  // has to be a real, non-empty backing set — a malformed one is dropped like any other bad field,
+  // rather than trusted into `lineEntryIds` as though this file had written it.
+  if (line.entryIds !== undefined && !(Array.isArray(line.entryIds) && line.entryIds.length > 0 && line.entryIds.every((x) => typeof x === 'string'))) {
+    return false;
+  }
+  // F3 (round 2): `count` is optional the same way, but when present it has to be a real, whole,
+  // positive tally that is at least as large as the (possibly capped) `entryIds` it stands beside
+  // — never smaller, which would claim fewer entries than are even named — rather than trusted
+  // into `lineCount` as though this file had written it.
+  if (
+    line.count !== undefined &&
+    !(typeof line.count === 'number' && Number.isInteger(line.count) && line.count >= 1 && line.count >= (line.entryIds?.length ?? 1))
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /** Defensive parse for a page store coming off disk (localStorage, an imported save text): any

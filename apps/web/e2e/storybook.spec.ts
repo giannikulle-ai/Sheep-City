@@ -3,11 +3,12 @@ import { expect, test } from '@playwright/test';
 import type { SheepcliffApi } from '../src/api';
 import { e2eDir, expectGolden } from './lib/golden';
 
-// `storybook.ts`'s own `MAX_STORED_MORE` — not imported directly, since that module pulls in
-// `@sheepcliff/sim`'s JSON content with an import attribute Playwright's own Node loader (this file
-// runs outside Vite) does not handle. Kept as a literal, named the same, so a future change to the
-// real constant is a one-line update here too rather than a silent mismatch.
+// `storybook.ts`'s own `MAX_STORED_MORE` and `MAX_PAGE_LINES` — not imported directly, since that
+// module pulls in `@sheepcliff/sim`'s JSON content with an import attribute Playwright's own Node
+// loader (this file runs outside Vite) does not handle. Kept as literals, named the same, so a
+// future change to either real constant is a one-line update here too rather than a silent mismatch.
 const MAX_STORED_MORE = 50;
+const MAX_PAGE_LINES = 12;
 
 // The storybook page (issue #42). ?gap=<minutes> (query.ts) forces a catch-up on a fresh scratch
 // world of that many real (wall-clock) minutes, deterministically — the same unit the real load/wake
@@ -79,28 +80,52 @@ for (const c of [NIGHT, WEEK]) {
     // MAX_STORED_MORE` lines loses its least notable ones") — nothing a gap told below that cap is
     // dropped (issue #42, the owner's change round), but a gap that tells more than the cap is
     // designed to shed its least notable entries, not keep every one forever. This world is fresh
-    // and caught up once, so its whole chronicle is exactly this gap's; `maxKept` below is what the
-    // cap allows, not always the gap's own total (decision 16, PR #111 + #86: small cards now draw
-    // and tell during an unwatched catch-up, so the `week` case's real chronicle is thousands of
-    // entries long and genuinely exceeds the cap — `night` still does not).
-    const result = await page.evaluate((maxStoredMore: number) => {
-      const app = (window as unknown as WithApp).sheepcliff;
-      const sb = app.storybook.current();
-      if (!sb) return { ok: false, reason: 'no page shown', title: '', lineCount: 0, moreCount: 0 };
-      const told = app.sim().chronicle.entries;
-      const ids = new Set(told.map((e) => e.id));
-      const bad = [...sb.lines, ...sb.more].filter((l) => !ids.has(l.entryId));
-      const kept = sb.lines.length + sb.more.length;
-      const maxKept = Math.min(told.length, sb.lines.length + maxStoredMore);
-      const reason = bad.length
-        ? `unknown entry ids: ${bad.map((l) => l.entryId).join(',')}`
-        : kept !== maxKept
-          ? `page keeps ${kept} of the gap's ${told.length} entries (expected up to ${maxKept}, the "and N more" cap)`
-          : sb.lines.length < 1
-            ? 'no lines shown'
-            : '';
-      return { ok: reason === '', reason, title: sb.title, lineCount: sb.lines.length, moreCount: sb.more.length };
-    }, MAX_STORED_MORE);
+    // and caught up once, so its whole chronicle is exactly this gap's.
+    //
+    // #113: a line's backing set is `entryIds` (`lineEntryIds`), not `entryId` alone — a card told
+    // N times in the gap is one row backed by all N, so "every entry kept" is now checked by
+    // summing backing sets, not by counting rows, and a fresh invariant is checked alongside it:
+    // **no two rows, shown or in "and N more", share the same picture** — a page never shows the
+    // same card line twice, collapsed or not (#113's own done-means).
+    //
+    // F3 (round 2): a collapsed line's own `entryIds` is itself capped at `MAX_STORED_MORE` (a
+    // card's own repeats in one gap have no bound, and storing one id per telling grows a page's
+    // stored size with the length of the gap itself) — so "every entry kept" below the row cap is
+    // now checked against each row's `count` (`lineCount`, the group's true tally), not against how
+    // many ids happen to be stored; the stored ids themselves are still checked as real chronicle
+    // entries (`bad`, below), and are still capped at `MAX_STORED_MORE` each (unit-tested in
+    // `storybook.test.ts`, not re-checked here at the DOM layer).
+    const result = await page.evaluate(
+      ({ maxStoredMore, maxPageLines }: { maxStoredMore: number; maxPageLines: number }) => {
+        const app = (window as unknown as WithApp).sheepcliff;
+        const sb = app.storybook.current();
+        if (!sb) return { ok: false, reason: 'no page shown', title: '', lineCount: 0, moreCount: 0 };
+        const told = app.sim().chronicle.entries;
+        const ids = new Set(told.map((e) => e.id));
+        const allRows = [...sb.lines, ...sb.more];
+        const backing = (l: { entryId: string; entryIds?: string[] }) => l.entryIds ?? [l.entryId];
+        const bad = allRows.flatMap((l) => backing(l).filter((id) => !ids.has(id)));
+        const pictures = new Map<string, number>();
+        for (const l of allRows) pictures.set(l.picture, (pictures.get(l.picture) ?? 0) + 1);
+        const dupPictures = [...pictures.entries()].filter(([, n]) => n > 1).map(([p]) => p);
+        const totalAccounted = allRows.reduce((sum, l) => sum + (l.count ?? backing(l).length), 0);
+        const rows = sb.lines.length + sb.more.length;
+        const maxRows = maxPageLines + maxStoredMore;
+        const reason = bad.length
+          ? `unknown entry ids: ${bad.join(',')}`
+          : dupPictures.length
+            ? `the same card line appears in more than one row: ${dupPictures.join(',')}`
+            : rows > maxRows
+              ? `page keeps ${rows} rows, more than the cap of ${maxRows}`
+              : rows < maxRows && totalAccounted !== told.length
+                ? `page accounts for ${totalAccounted} of the gap's ${told.length} entries (by count), under the row cap where nothing should be dropped`
+                : sb.lines.length < 1
+                  ? 'no lines shown'
+                  : '';
+        return { ok: reason === '', reason, title: sb.title, lineCount: sb.lines.length, moreCount: sb.more.length };
+      },
+      { maxStoredMore: MAX_STORED_MORE, maxPageLines: MAX_PAGE_LINES },
+    );
     expect(result.ok, result.reason).toBe(true);
     // the title and subtitle are the only words the client composes itself (fix round 1, #42: F2) —
     // they must read exactly what this case's real gap supports, not a word or a number the gap does
@@ -155,26 +180,28 @@ test('a longer absence shows more of its gap, and a short one keeps the rest beh
     };
   };
 
-  // two hours away: the floor, five lines shown, with the rest kept behind "and N more". Measured on
-  // this head: this gap's whole chronicle is 52 entries, under the 55-entry cap, so "more" is the
-  // gap's own remainder (52 - 5 = 47) and nothing it told is dropped. It was 34 at #111 alone (also
-  // uncapped, 29 more) and 79 at rate 8 with #86's conditions (capped, 50 more). The floor of 5
-  // shown is unchanged throughout.
+  // two hours away: the floor, five lines shown, with the rest kept behind "and N more". Measured
+  // on this head: this gap's whole chronicle is 52 entries, but #113 collapses every repeated card
+  // into one row (`buildStorybookPage`'s `collapseCardRepeats`), so "more" no longer counts raw
+  // entries — it counts the gap's *distinct* remaining lines, 10 here (each backed by anywhere from
+  // one entry to a dozen), nowhere near the 50-row cap. Pre-#113 this was 47 (the gap's own raw
+  // remainder, uncapped); the floor of 5 shown is unchanged.
   const night = await read(120);
   expect(night.shown).toBe(5);
   expect(night.rows).toBe(5);
-  expect(night.more).toBe(47);
-  expect(night.moreLabel).toBe('and 47 more');
+  expect(night.more).toBe(10);
+  expect(night.moreLabel).toBe('and 10 more');
 
   // a week away, same seed: a longer absence draws far more small cards during its catch-up
-  // (measured 3,680 entries total on this head, against 1,997 at #111 alone and 5,568 at rate 8 —
-  // the cap binds in all three) — the page shows more of it too, ten lines rather than the night's
-  // five, which is the point of this test's name.
+  // (measured 3,679 raw entries on this head) — the page shows more of it too, ten lines rather
+  // than the night's five, which is the point of this test's name. #113 collapses the week's own
+  // heavy repeats even harder than the night's: 3,679 raw entries fold into 10 shown + only 4 more
+  // (down from 50, the pre-#113 cap — collapsing leaves this gap nowhere near it any more).
   const week = await read(10_080);
   expect(week.shown).toBe(10);
   expect(week.rows).toBe(10);
-  expect(week.more).toBe(50);
-  expect(week.moreLabel).toBe('and 50 more');
+  expect(week.more).toBe(4);
+  expect(week.moreLabel).toBe('and 4 more');
 });
 
 test('"and N more" opens the rest of the gap in place, and never dismisses the page', async ({ page }) => {
@@ -194,12 +221,12 @@ test('"and N more" opens the rest of the gap in place, and never dismisses the p
   });
   expect(kept.allTold).toBe(true);
   // decision 16, PR #111: small cards now draw and tell during this gap's catch-up, so the lines
-  // kept behind "and N more" here are mostly card lines, not just Ledger diffs. Re-measured merging
-  // #86 into #101: the gap's real chronicle grew to 79 entries (was 34 at #111 alone, 3 before that
-  // landed), and 52 on this head with the rate derived from the owner's target — back under the
-  // 55-entry cap (5 shown + `MAX_STORED_MORE` 50), so the 47 lines below are the gap's own
-  // remainder rather than the cap.
-  expect(kept.lines.length).toBe(47);
+  // kept behind "and N more" here are mostly card lines, not just Ledger diffs. This gap's raw
+  // chronicle is 52 entries (measured on this head), but #113 collapses every repeated card into
+  // one row before the page is built, so "and N more" reveals 10 rows, not 47 raw entries — each
+  // one still a real chronicle line (`kept.allTold`), several of them now a collapsed "N times" row
+  // backed by more than one.
+  expect(kept.lines.length).toBe(10);
 
   await expect(page.locator('#storyLines .storyline')).toHaveCount(5);
   await page.locator('#storyMore').click();
@@ -207,7 +234,7 @@ test('"and N more" opens the rest of the gap in place, and never dismisses the p
   // the page is still open — the row that opens the rest must not be the tap that closes the card
   await expect(page.locator('#storybook')).toBeVisible();
   await expect(page.locator('#storyMore')).toHaveCount(0);
-  await expect(page.locator('#storyLines .storyline')).toHaveCount(52); // 5 shown + the gap's own 47, under the cap
+  await expect(page.locator('#storyLines .storyline')).toHaveCount(15); // 5 shown + the gap's own 10 collapsed rows
 
   // and the revealed rows are the kept lines themselves, verbatim, in order
   const revealed = await page.locator('#storyLines .storyline span').allInnerTexts();

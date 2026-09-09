@@ -3,15 +3,32 @@
 // runs the whole days on the Ledger, respawns the actors from the numbers, and ticks the actors
 // through the remainder. Deterministic for a given state and gap: the ledger draws from the
 // state's generator, and the respawn seed is its next draw.
+//
+// **This is the unwatched path, and it is the only one** (the owner's decision, 2026-09-09, plan
+// decision 16: "the big ones should not happen when I am not watching"). The client calls `catchUp`
+// on load and again whenever the tab comes back, with the real time away; everything else in the
+// package is the live, watched path. So both branches here run with big things switched off:
+//
+//   * the **actor branch** (under a farm day away) steps the ordinary live code with
+//     `{ watched: false }` — the same engine, the same actors, no big card and no big authored event;
+//   * the **Ledger branch** (a farm day or more) hands the whole days to `advanceUnwatched`
+//     (`ledger/unwatched.ts`), which moves the Ledger exactly as `advanceLedger` did and draws
+//     **small** cards at farm-day resolution against the Ledger's own numbers, telling each one to
+//     the chronicle so the storybook can tell it, then steps the remainder with `{ watched: false }`.
+//
+// Zero big things across any gap, of any length, on any seed. `test/engine-pace.test.ts` asserts it
+// as an absolute rather than a floor.
 
 import { tellLedgerDiff } from '../chronicle/ledger-diff';
+import { cloneChronicle } from '../chronicle/store';
+import { cloneEvents } from '../engine/events';
 import { cloneRng, nextU32 } from '../rng';
 import type { SimState } from '../state';
 import { step } from '../step';
-import { advanceLedger } from './advance';
 import { diffLedger, type LedgerDiff } from './diff';
 import { dayMs, summarise, type Ledger } from './ledger';
 import { respawn } from './respawn';
+import { advanceUnwatched, type UnwatchedDraw } from './unwatched';
 
 /** Which path a catch-up took. */
 export type CatchUpMode = 'none' | 'actors' | 'ledger';
@@ -38,6 +55,13 @@ export interface CatchUp {
   before: Ledger;
   after: Ledger;
   diff: LedgerDiff;
+  /**
+   * The small things the Ledger branch drew while nobody was watching, in time order — each already
+   * told to the chronicle, so this is a report, not the record. Empty on the other two branches
+   * (`none`, and `actors`, where a draw is an ordinary live start on the respawned world's own
+   * chronicle). **Never anything big**, whatever the gap: see the file header.
+   */
+  unwatched: readonly UnwatchedDraw[];
 }
 
 /**
@@ -62,28 +86,35 @@ export function catchUp(state: SimState, awayMs: number, options: CatchUpOptions
   const before = summarise(state);
   const day = dayMs(state);
   if (gap < minMs) {
-    return { state, mode: 'none', awayMs: gap, ranMs: 0, ledgerDays: 0, ledgerMs: 0, actorMs: 0, before, after: before, diff: diffLedger(before, before) };
+    return { state, mode: 'none', awayMs: gap, ranMs: 0, ledgerDays: 0, ledgerMs: 0, actorMs: 0, before, after: before, diff: diffLedger(before, before), unwatched: [] };
   }
   if (gap < day) {
-    const s = step(state, [], gap);
+    // Unwatched: the same live engine on the same actors, with every big thing held back.
+    const s = step(state, [], gap, { watched: false });
     const after = summarise(s);
-    return { state: s, mode: 'actors', awayMs: gap, ranMs: gap, ledgerDays: 0, ledgerMs: 0, actorMs: gap, before, after, diff: diffLedger(before, after) };
+    return { state: s, mode: 'actors', awayMs: gap, ranMs: gap, ledgerDays: 0, ledgerMs: 0, actorMs: gap, before, after, diff: diffLedger(before, after), unwatched: [] };
   }
 
   const ledgerDays = Math.floor(gap / day);
   const ledgerMs = ledgerDays * day;
   const actorMs = gap - ledgerMs;
   const rng = cloneRng(state.rng);
-  const ledger = advanceLedger(before, ledgerMs, rng);
-  // The engine slice crosses the gap with the chronicle: the Ledger ran the whole days with no
-  // actors and no events, and the respawned world picks the engine up where the district left it
-  // (cooldowns intact, anything that was running ended by its first look at the world).
-  let s = respawn(ledger, state.chronicle, nextU32(rng), state.events);
+  // The engine slice and the chronicle cross the gap together, and now they cross it *doing
+  // something*: `advanceUnwatched` moves the Ledger exactly as `advanceLedger` did (same pieces,
+  // same draws from `rng`, same numbers out) and draws small cards against it from the engine's own
+  // generator, telling each one. The respawned world then picks the engine up where the unwatched
+  // days left it — cooldowns and gaps intact, anything that was still running ended by its first
+  // look at the world.
+  const events = cloneEvents(state.events);
+  const log = { chronicle: cloneChronicle(state.chronicle) };
+  const run = advanceUnwatched(before, ledgerMs, rng, events, log);
+  const ledger = run.ledger;
+  let s = respawn(ledger, log.chronicle, nextU32(rng), events);
   s.pendingIntents = state.pendingIntents.slice();
-  s = step(s, [], actorMs);
+  s = step(s, [], actorMs, { watched: false });
   s = { ...s, ledger: summarise(s), lastLedgerAt: s.clock.nowMs };
   const after = summarise(s);
   const diff = diffLedger(before, after);
   tellLedgerDiff(s, diff);
-  return { state: s, mode: 'ledger', awayMs: gap, ranMs: ledgerMs + actorMs, ledgerDays, ledgerMs, actorMs, before, after, diff };
+  return { state: s, mode: 'ledger', awayMs: gap, ranMs: ledgerMs + actorMs, ledgerDays, ledgerMs, actorMs, before, after, diff, unwatched: run.drawn };
 }

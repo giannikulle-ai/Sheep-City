@@ -44,6 +44,8 @@ Budget tier: Standard (about four lanes), set 2026-09-02.
 - 2026-09-08 14:40 UTC, update rhythm (the owner: "I need more regular updates"): a short status to the owner every hour while any worker or Verifier is running, a two-line note the moment a PR opens, a verdict lands, a merge happens, or a worker stalls, and the four-hourly routine as the floor when nothing runs.
 - 2026-09-08 15:35 UTC, wake batching (the owner: "do both"): the Foreman no longer subscribes to PR activity events (CI green, subscription created, check-suite completed each cost a full turn at about 360,000 cached tokens). PR state is read at the hourly check-in and when a worker or Verifier reports; those are the only wakes. The Foreman session runs on Opus from the owner's switch; Fable is not required for coordination.
 
+Rule, 2026-09-09 00:15 UTC (the owner): **every failed deploy is reported to the owner the moment the Foreman sees it**, naming the cause plainly: the Garage (530 / Cloudflare 1033, the host or its tunnel is down, the owner's to fix) or the build (the Foreman's to fix). Silence about a red deploy is a Foreman fault. The hourly check-in reads the newest deploy run first.
+
 ## Phase 0 ticket order
 #2 scaffold (landed) → #4 clock/RNG (landed) → #5 behaviour registry (both parts landed) and #8 save v1 (landed)
 #2 scaffold (landed) → #6 renderer (landed) → #7 input and pin overlay (landed); #9 watch test (landed)

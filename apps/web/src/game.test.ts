@@ -28,7 +28,10 @@ describe('Game', () => {
     expect(g.current().luna.icon).toBe('heart');
     // #120 (Foreman grant): the tray's coins action now pays the settlement, not the farm; before it
     // was g.sim.banks.coins === 50 - 12 - 30.
-    expect(g.sim.settlement.coins).toBe(50 - 12 - 30); // the auto-buy took the flowerbed and hay2 at once, as the prototype's action does
+    // PIN MOVED (#126, Foreman grant): was `50 - 12 - 30` (the auto-buy took the flowerbed and hay2
+    // at once). The farm's three builds are on the farm from the start now, and `buyUpgrades` is
+    // retired, so the button only ever earns: plain 50.
+    expect(g.sim.settlement.coins).toBe(50);
     expect(g.sim.banks.coins).toBe(0);
     expect(g.reactions.cues).toEqual([]);
   });

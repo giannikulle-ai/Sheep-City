@@ -322,14 +322,29 @@ function collapseSpanPhrase(title: string): string {
   return 'this visit';
 }
 
+/** A collapsed line's own count word, AP style (plan section 11, decision 20, 2026-09-09: "Follow
+ * AP style rules"): two reads as the idiom "twice" — never "two times" — so it carries no trailing
+ * "times" of its own; three through nine are spelled out, the same small-number words
+ * (`spellSmall`) a plain count elsewhere in this file already uses, each followed by "times"; ten
+ * and up stays a numeral, "times" after it, with a comma separator once the count itself reaches
+ * 1,000 (the classic thousands-grouping regex, not `toLocaleString`, so the output never depends on
+ * a runtime's own ICU data). Never called for a count of one — a card told only once in the gap
+ * never collapses (`buildStorybookPage`'s `toLine`), so it stays the plain, unsuffixed line and this
+ * helper never has an opinion on it. */
+export function apCountPhrase(n: number): string {
+  if (n === 2) return 'twice';
+  if (n >= 3 && n <= 9) return `${spellSmall(n)} times`;
+  return `${n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')} times`;
+}
+
 /**
  * One collapsed line for a run of same-picture `card` entries, all told the same thing (#113):
  * `anchor`'s own line, verbatim, its trailing period swapped for a mechanical count suffix — never
- * new prose, the same numeral words (`spellSmall`) a plain count elsewhere in this file already
- * uses. "Three crows landed on the hay and Digital Luna sent them packing." + four tellings + "a
- * week" -> "Three crows landed on the hay and Digital Luna sent them packing, four times this
- * week." Backed by every entry in `group`, `anchor` included — `entryIds`, read through
- * `lineEntryIds` — not only the one line's text was drawn from.
+ * new prose, AP-style numbers (`apCountPhrase`, plan decision 20). "Three crows landed on the hay
+ * and Digital Luna sent them packing." + four tellings + "a week" -> "Three crows landed on the hay
+ * and Digital Luna sent them packing, four times this week." Backed by every entry in `group`,
+ * `anchor` included — `entryIds`, read through `lineEntryIds` — not only the one line's text was
+ * drawn from.
  *
  * F3 (round 2): `group` itself has no bound (a real week away can repeat one small card in the
  * thousands), so the *stored* `entryIds` is `group` capped at `MAX_STORED_MORE` — `anchor` is
@@ -342,7 +357,7 @@ function collapsedLine(anchor: ChronicleEntry, group: readonly ChronicleEntry[],
   const base = anchor.line.replace(/\.+$/, '');
   return {
     entryId: anchor.id,
-    line: `${base}, ${spellSmall(group.length)} times ${spanPhrase}.`,
+    line: `${base}, ${apCountPhrase(group.length)} ${spanPhrase}.`,
     picture: anchor.picture,
     count: group.length,
     entryIds: group.slice(0, MAX_STORED_MORE).map((e) => e.id),

@@ -38,13 +38,20 @@ const CASES = [
   { name: 'a week', seed: 17, gapMinutes: 10_080 },
 ] as const;
 
-/** Small counts spelled out, mirroring `storybook.ts`'s own private `SMALL_WORDS` (zero..twenty) —
- * duplicated here only to read a collapsed line's count back out of its rendered text; not a
- * second source of truth the app itself reads from. */
+/** AP style for a collapsed line's own count word (#127, plan section 11 decision 20), mirroring
+ * `storybook.ts`'s own private `apCountPhrase` — duplicated here only to read a collapsed line's
+ * count back out of its rendered text; not a second source of truth the app itself reads from. Two
+ * reads as the idiom "twice" (no trailing "times"); three through nine are spelled out, "times"
+ * after; ten and up stays a numeral, "times" after, with a comma separator from 1,000. */
 const SMALL_WORDS = [
   'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
   'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty',
 ];
+function apCountPhrase(n: number): string {
+  if (n === 2) return 'twice';
+  if (n >= 3 && n <= 9) return `${SMALL_WORDS[n]} times`;
+  return `${n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')} times`;
+}
 
 interface CardCoverage {
   hasPage: boolean;
@@ -144,8 +151,7 @@ function expectCardTracesToChronicle(c: CardCoverage): void {
     const base = [...backingTexts][0]!.replace(/\.+$/, '');
     expect(l.line.startsWith(`${base}, `), `collapsed line "${l.line}" does not start with its backing entries' own text`).toBe(true);
     expect(l.line.endsWith('.'), `collapsed line "${l.line}" is not a finished sentence`).toBe(true);
-    const countWord = SMALL_WORDS[l.count] ?? String(l.count);
-    expect(l.line, `collapsed line "${l.line}" does not name its own true count (${l.count})`).toContain(`${countWord} times`);
+    expect(l.line, `collapsed line "${l.line}" does not name its own true count (${l.count})`).toContain(apCountPhrase(l.count));
     // the stored backing set is exactly the true count, capped at MAX_STORED_MORE — never more
     // (the cap held) and never fewer (nothing was dropped ahead of the cap).
     expect(

@@ -4,6 +4,188 @@ Runs of the watch test and golden screenshots, newest first. Tooling lives in
 `tools/qa/` (usage and the client-lane contracts in `tools/qa/README.md`) and
 `apps/web/e2e/`. Charter: `docs/agents/charters/qa.md`.
 
+## 2026-09-09 — chronicle coverage and moment-kind update (#49)
+
+Retargeted mid-flight: plan decision 16 (2026-09-09) withdrew the five-minute,
+three-distinct-kind bar as the Phase 1 exit line; pace is now described in
+world time only (a small thing most farm days, a big thing a few a farm
+month, big only while watched), and that bar's own coverage is issue #101's
+card-size ticket, not landed tonight. So this run does: (1) an e2e that walks
+the storybook card's *rendered DOM text*, not just its JS objects, against
+`sim().chronicle`, for both golden cases and for "earlier pages" reopened from
+the farm bar; (2) a new `--events` mode for the watch test that reports, per
+farm card and per authored event, whether it was ever seen starting and
+ending over a scripted season × weather span, and fails only a card that is
+statically unfireable; (3) the moment-kind table update, marking the
+five-minute bar withdrawn and documenting the engine's own kinds, the
+chronicle's sources, and one real gap those turned up (filed, not fixed).
+
+### Landed
+
+- `apps/web/e2e/chronicle-coverage.spec.ts`: three tests. Two open the golden
+  cases' own `?seed=17&gap=120|10080&freeze=1&t=0.2` and check, at the DOM
+  layer: every `.storyline span`'s text is exactly its chronicle entry's own
+  `line` (not just the `StorybookPage` object's copy of it), every entry id
+  anywhere on the card — shown or behind "and N more" — exists in
+  `sim().chronicle`, and nothing else on the card is client-composed text
+  except `#storyTitle`, `#storySubtitle`, and the "and N more" label itself
+  (walks every leaf element under `#storybookCard` and fails on any stray
+  text). The third test reproduces "earlier pages": opens a *running* world
+  (seed 17, gap 120 — the same pair `sim.spec.ts`'s "and N more" test already
+  measured at 5 shown + 3 more = 8 lines), dismisses the page, reopens it from
+  the farm bar's "earlier pages" list, and checks every one of the same
+  invariants holds on the reopened card, including after tapping "and N more"
+  again — and that it is the very same page (same lines, same title, same
+  subtitle), not a fresh selection over an unchanged chronicle.
+- `tools/qa/watch-test.mjs --events` (plus `tools/qa/lib/deck.mjs`,
+  `tools/qa/lib/deck-coverage.mjs`): seeds the app on its own QA clock, holds
+  each of 4 seasons × 3 weathers in turn (`send({type:'setSeason'/'setWeather'})`,
+  both of which lock, unlike `setClock`) for a few short simulated days each,
+  then reads `sim().events.starts`/`.cooldowns` (set once and never cleared,
+  so a single read at the end sees the whole span) against every id in
+  `FARM_DECK` (`@sheepcliff/sim`'s own export, via `deck.mjs` — esbuild
+  bundles `engine/deck.ts` in-memory since the package ships as raw
+  TypeScript with no build step, so this is the real `loadDeck()`, not a
+  second parse of the JSON). Fails only on `neverEligibleCards`: a card whose
+  own `season`/`timeOfDay` conditions admit no combination at all — none
+  found in `farm.json` today (checked by hand against all 15, and the tool
+  agrees). Everything else is a report, not a gate.
+- `tools/qa/README.md`: the five-minute bar marked withdrawn, pointing at
+  decision 16 and the farm-day bar following #101; a `--events` usage section;
+  a new subsection distinguishing the client's `moment` DOM kinds from the
+  engine's own `card.moment.kind` vocabulary (same five words, not wired to
+  `diffMoments`, which is why `--events` reads the chronicle directly instead
+  of listening for `moment`) and from `CHRONICLE_SOURCES` (`card`, `authored`,
+  `ledger`, `social`, `economy`, `category`, `deity`), naming `event:start`/
+  `event:end` as a doc-only convention for the chronicle's own two moments per
+  running event id.
+
+### `--events` mode, built app, seed 7, 3 s days, 300 s budget (12 combos × 25 s each)
+
+```
+$ node tools/qa/watch-test.mjs 300 --events --serve apps/web/dist
+
+card/authored coverage over the scripted span (seed 7, 12 combos × 25.0 qa-clock s):
+  id                    kind      moment      start end    note
+  fogMorning            card      weather     no    no
+  crowsOnTheField       card      dl-trick    yes   yes
+  lostLamb              card      lamb        no    no
+  merchantCaravan       card      npc-arrival yes   yes
+  shearingDay           card      bubble      yes   yes
+  rainbowAfterRain      card      weather     no    no
+  strayCatVisits        card      dl-trick    no    no
+  farmersDayOff         card      dl-trick    no    no
+  nightOfTheFireflies   card      dl-trick    no    no
+  lambZoomiesHour       card      lamb        no    no
+  wellRunsLow           card      bubble      no    no
+  windfall              card      bubble      yes   yes
+  stargazingNight       card      dl-trick    no    no
+  flockHuddle           card      dl-trick    no    no
+  farmerMeetsMerchant   card      npc-arrival yes   yes
+  dlBirthday            authored  bubble      no    no     deferred (realDate, ticket #84)
+  cliffStorm            authored  weather     no    no     trigger: stockThreshold
+  firstSnowOfSeason     authored  dl-trick    yes   yes    trigger: predicates
+
+  cards started    5/15
+  authored started 1/3
+  chronicle        56 entries: category=20, card=34, authored=2
+watch-test --events: PASS (no card is statistically unfireable by its own data; coverage above is a report, not a gate — the pace floors are #101's)
+```
+
+Result: PASS as designed — no card is data-unfireable. `dlBirthday` is
+expected `no`/`no` (deferred to #84, never fires on its own). The other nine
+`no` cards are the default budget's own limit, not the tool's: the engine
+draws at most one card roughly every 800 sim-minutes
+(`PACING.minGapSimMinutes`, `engine/pacing.ts`), and 25 qa-clock seconds at a
+3-second day is only about 8.3 farm days (≈12,000 sim-minutes) per combo, so a
+low-weight card competing with thirteen others for the same slot can easily
+go unseen in one pass — `cliffStorm` additionally needs the mean grass level
+to actually cross a drought line, which this span never forced. Widening
+`--day` or the budget would raise coverage; the ticket's own instructions say
+that rate is not this run's job to chase.
+
+### Watch test, default mode (feel gate, now informational only), prototype, 300 s
+
+```
+$ npm run watch-test -w apps/web -- 300
+
+watch-test: adapter=prototype, 300s unattended, gate: at least 3 distinct of bubble/npc-arrival/weather/dl-trick/lamb/deity
+watch-test summary: 31 counted moments (10 extra) in 300s, 13 distinct: dl-trick:flop, dl-trick:rabbit-chase, npc-arrival:farmer, npc-arrival:merchant, bubble:heart, bubble:shears, dl-trick:stretch, dl-trick:stick, lamb:born, weather:rain, weather:sun, dl-trick:ride, lamb:grown
+  bubble      14
+  npc-arrival 4
+  weather     4
+  dl-trick    7
+  lamb        2
+  deity       0
+  extras     bird:land, phase:dusk, phase:night, phase:dawn, phase:day
+  canvas     alive (60 samples)
+watch-test: PASS (13 >= 3)
+```
+
+Result: PASS, 13 distinct of the 6 counted kinds (old gate was 3; the gate
+itself still runs, just no longer decides a PR). `deity` is 0 as always for
+the prototype (nothing sends a deity intent unattended). Unchanged behaviour
+from prior runs — pasted for the record, per this ticket's instructions, not
+because anything about the tool moved tonight.
+
+### Charter checks
+
+```
+npm run typecheck                     clean (web, content, render, sim)
+npm run test -w apps/web              125 passed (13 files)
+npm run e2e                           59 passed, twice in a row; goldens untouched
+npm run watch-test -w apps/web -- 300 PASS (13 >= 3), prototype — pasted above
+npm run watch-test.mjs --events       PASS (0 statically-unfireable cards) — pasted above; not a
+                                       charter check yet, added tonight
+node tools/ci/ownership.mjs           ok, all changed paths inside lane qa
+```
+
+### Bugs found (filed, not fixed)
+
+- **#109** (lane:sim, gate:medium): `CHRONICLE_SOURCES` declares `'deity'` and
+  `chronicle/store.ts`'s own doc comment says a deity intent calls `tell`, but
+  nothing does. A deity `weather` intent's change is told secondhand by the
+  Ledger diff as an ordinary `source: 'ledger'` line — indistinguishable from
+  the season's own roll — and a deity `act` intent (pet, calm, startle, treat,
+  ride-request, fetch-call) writes no chronicle line at all. Found reading
+  `packages/sim/src/intents.ts` and `chronicle/*.ts` for this ticket's #3
+  (the moment-kind table); not the deity mechanism itself misbehaving, just
+  invisible to anything reading the chronicle afterward — a storybook page
+  can never say "the owner reached in."
+
+### Weak spots and notes
+
+- `--events` mode's coverage (5/15 cards, 1/3 authored at the default 300 s
+  budget) is honestly partial — see the table's own note above for why, and
+  the README's warning that this is expected, not a failure. A future PR
+  could widen the default budget or add a `--seed` sweep if the owner wants
+  higher coverage out of the box; not done here since the ticket's own
+  instructions say the rate is #101's to set.
+- `--events` mode does not attempt every season × time-of-day cell on
+  purpose: `setClock` sets the day fraction once and the clock immediately
+  carries past it, so holding a specific time band needs re-asserting it
+  every frame (untried tonight, and risks confusing a running event's own
+  duration math, which is measured from absolute sim time) — instead each
+  combo just runs its own short day/night cycle and lets every band come
+  round on its own. Good enough for the static-eligibility check (which does
+  not need the runtime at all) and honest reporting; not a guarantee every
+  card that *needs* a specific time band got a fair shot in this budget.
+- `neverEligibleCards` only reads `season` and `timeOfDay` predicates. A card
+  could still be practically unfireable through some other combination (an
+  `in`/`not-in` on `weather` crossed with a `ledger.*` threshold that never
+  holds together, say) — the ticket's own wording ("no eligible season × time
+  band") scopes the hard failure to those two axes, and the coverage table
+  reports everything else rather than trying to prove it statically.
+- Did not re-run or touch any golden — `storybook-night.png`/`storybook-week.png`
+  (PR #89) and the phase/weather set are untouched; this ticket's new spec
+  takes its own screenshots nowhere, only DOM/JS assertions.
+- The chronicle-coverage e2e leans on `apps/web/src/pin-overlay.ts`'s modal
+  (`#modal`/`#modalBox`) for the "earlier pages" flow rather than a
+  storybook-owned one — that is the existing app structure (`main.ts`'s
+  `earlierPagesBtn` handler), not something this PR added, but worth naming
+  since a future pin-overlay change could silently break the reopen path this
+  test now covers.
+
 ## CI wiring for the infra lane (paste into `.github/workflows/ci.yml`)
 
 Golden screenshots need no new job: `golden.spec.ts` sits in `apps/web/e2e`, so

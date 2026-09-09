@@ -189,6 +189,6 @@ export function buildFixture(p: FixtureParams, now: number): FarmView {
     stick: null,
     owned: ['flowerbed', 'scarecrow'],
     woolBank: 3,
-    coins: 12,
+    settlementCoins: 12,
   };
 }

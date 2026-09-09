@@ -154,7 +154,11 @@ export interface FarmView {
   /** bought upgrades: flowerbed, hay2, scarecrow */
   owned: string[];
   woolBank: number;
-  coins: number;
+  /**
+   * The settlement's coin stand-in (#86, #120), not `banks.coins` — nothing on the farm has moved
+   * that purse since #86, so the HUD reads what the world is actually earning.
+   */
+  settlementCoins: number;
   /** deity `weather` flourish (issue #44): a sky ripple shows until this render-clock ms */
   skyRippleUntil?: number;
 }

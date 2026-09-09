@@ -8,7 +8,8 @@ describe('simView', () => {
     applyIntent(sim, { type: 'setClock', t: 0.7 });
     applyIntent(sim, { type: 'setWeather', weather: 'snow' });
     applyIntent(sim, { type: 'setSeason', season: 'winter' });
-    sim.banks = { wool: 4, coins: 12, owned: ['flowerbed'] };
+    sim.banks = { wool: 4, coins: 999, owned: ['flowerbed'] };
+    sim.settlement = { coins: 12 };
     expect(simScalars(sim)).toEqual({ t: 0.7, weather: 'snow', season: 'winter', temp: sim.weather.temp, foggy: false });
     const v = simView(null, sim, 0, false);
     expect(v.clockT).toBe(0.7);
@@ -17,7 +18,8 @@ describe('simView', () => {
     expect(v.temp).toBe(sim.weather.temp);
     expect(v.foggy).toBe(false);
     expect(v.woolBank).toBe(4);
-    expect(v.coins).toBe(12);
+    // #120: the HUD reads the settlement's purse, not the farm's frozen banks.coins
+    expect(v.settlementCoins).toBe(12);
     expect(v.owned).toEqual(['flowerbed']);
     expect(v.sheep.map((s) => [s.name, s.x, s.y, s.wool, s.t0])).toEqual(sim.sheep.map((s) => [s.name, s.x, s.y, s.wool, s.t0Ms]));
     expect(v.luna).toMatchObject({ x: 120, y: 280, anim: 'sit', riding: false, inBarn: false });

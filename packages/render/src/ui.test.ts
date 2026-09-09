@@ -34,9 +34,9 @@ describe('hudText', () => {
     const v = fixtureView();
     v.clockT = 0.25;
     v.woolBank = 2;
-    v.coins = 7;
+    v.settlementCoins = 7;
     v.temp = 13.6;
-    expect(hudText(v, 'day')).toBe('☀ 12:00  3 sheep  2 wool  7 coins  14°');
+    expect(hudText(v, 'day')).toBe('☀ 12:00  3 sheep  2 wool  7 settlement coins  14°');
     v.weather = 'rain';
     expect(hudText(v, 'night')).toMatch(/^☂ /);
     v.weather = 'snow';

@@ -230,3 +230,28 @@ export function realDateMatches(realMs: number, month: number, day: number, wind
   if (windowMs === undefined) return true;
   return realMs - realMsOfCivil(date.year, month, day) < windowMs;
 }
+
+/**
+ * The most recent (`month`, `day`) at or before `realMs`, as that day's UTC midnight — the
+ * **occurrence** an event on that date is currently owed. `undefined` when there has not been one
+ * inside `maxYearsBack`.
+ *
+ * This is what lets a dated event be *held* rather than missed (the owner's decision, 2026-09-09,
+ * on #84: "a year where nobody watches on that day gets no birthday — that is not good. Maybe it
+ * should hold until I am viewing"). The engine does not have to be looking on the day: it asks
+ * which occurrence is the current one and whether it has already been served, so a birthday that
+ * passed while nobody was watching is still owed in January.
+ *
+ * Eight years back, and each candidate is round-tripped through the calendar before it is accepted,
+ * so February 29 walks back to the previous leap year instead of quietly becoming March 1.
+ */
+export function lastRealDateOccurrence(realMs: number, month: number, day: number, maxYearsBack = 8): number | undefined {
+  const year = realDateAt(realMs).year;
+  for (let y = year; y >= year - maxYearsBack; y--) {
+    const at = realMsOfCivil(y, month, day);
+    if (at > realMs) continue;
+    const back = realDateAt(at);
+    if (back.year === y && back.month === month && back.day === day) return at;
+  }
+  return undefined;
+}

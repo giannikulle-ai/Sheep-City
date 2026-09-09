@@ -100,6 +100,7 @@ export {
   liveWeight,
   pacingNow,
   preemptedByAuthored,
+  realDateDue,
   readyAuthored,
   runningMoments,
   seasonDayOfFraction,

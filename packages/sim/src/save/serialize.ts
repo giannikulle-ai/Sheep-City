@@ -30,8 +30,11 @@ export interface LoadOptions {
    * by the v8 calendar migration (#84) to anchor a pre-calendar world to the real present, once,
    * on its first load. A save already at v8 carries its own epoch and ignores this. Defaults to
    * `DEFAULT_REAL_EPOCH_MS`, so a caller that does not pass one still loads deterministically.
+   *
+   * Typed `number | undefined` rather than a bare optional so a host can pass a value it may not
+   * have straight through under `exactOptionalPropertyTypes`; undefined means the same as absent.
    */
-  realNowMs?: number;
+  realNowMs?: number | undefined;
 }
 
 /**

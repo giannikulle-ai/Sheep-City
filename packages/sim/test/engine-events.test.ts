@@ -38,7 +38,11 @@ function card(id: string) {
 }
 
 describe('authored triggers', () => {
-  it('a real date (DL’s birthday, December 15) is met on that real day and on no other', () => {
+  it('a real date (DL’s birthday, December 15) comes round on that real day and on no other', () => {
+    // `at()` re-anchors the world's epoch at every probe, so each reading below is a farm **made at
+    // that instant** — which is what isolates "has the date come round" from "is it still owed".
+    // A birthday nobody watched is held and stays due (the owner's decision, 2026-09-09); that half
+    // is pinned in calendar.test.ts, which is where the holding cases live.
     // The owner's calendar decision (plan section 2 and decision 10): Digital Luna's birthday is
     // December 15, a real calendar date, not a point in the sim's own season wheel. The world lane
     // put the event on a `realDate` trigger in #83; #84 gave the sim the real calendar to read it

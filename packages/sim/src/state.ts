@@ -292,8 +292,12 @@ export interface InitialStateOptions {
    * (#84; see clock.ts and calendar.ts). Default `DEFAULT_REAL_EPOCH_MS`, which lands in spring on
    * every seed, so a caller that does not pass one still gets a world that is a function of its
    * seed alone.
+   *
+   * Typed `number | undefined` rather than a bare optional so a host can pass a value it may not
+   * have (`{ realEpochMs: maybeNow() }`) straight through under `exactOptionalPropertyTypes`;
+   * undefined means the same as absent.
    */
-  realEpochMs?: number;
+  realEpochMs?: number | undefined;
 }
 
 /** The prototype's `makeTufts`, drawing from `rng` where it drew from Math.random. */

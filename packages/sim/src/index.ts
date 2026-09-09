@@ -39,6 +39,7 @@ export {
   advanceClock,
   advanceSeason,
   realMsOf,
+  realMsAtSim,
   seasonSpanOf,
   seasonAtOffset,
   seasonFractionOf,
@@ -54,6 +55,7 @@ export {
 export {
   civilFromDays,
   daysFromCivil,
+  lastRealDateOccurrence,
   realDateAt,
   realDateMatches,
   realMsOfCivil,
@@ -284,6 +286,7 @@ export {
   pacingNow,
   preemptedByAuthored,
   readyAuthored,
+  realDateDue,
   runningMoments,
   seasonDayOfFraction,
   seasonFraction,

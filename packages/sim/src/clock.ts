@@ -100,6 +100,16 @@ export function realMsOf(season: Season, offsetMs = 0): number {
   return season.realEpochMs + season.elapsedMs + offsetMs;
 }
 
+/**
+ * The real instant a stored sim timestamp stands at — `state.clock.nowMs`, a cooldown, an event's
+ * own `startedMs`. `Season.elapsedMs` and `Clock.nowMs` are the same count (both start at zero and
+ * both advance by every step's `dtMs`, paused or not; see `advanceClock` and `advanceSeason`), so
+ * the epoch plus one is the epoch plus the other.
+ */
+export function realMsAtSim(season: Season, simMs: number): number {
+  return season.realEpochMs + simMs;
+}
+
 /** The real calendar season this world is in, with its start and end. Ignores `override`. */
 export function seasonSpanOf(season: Season, offsetMs = 0): SeasonSpan {
   return seasonSpanAt(season.seed, realMsOf(season, offsetMs));

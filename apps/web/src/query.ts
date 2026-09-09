@@ -6,6 +6,12 @@
 //                                                               (real minutes away; 10080 = a week — the
 //                                                               same unit the real load/wake path's awayMs
 //                                                               is in, never the gate's day-scaled minutes)
+// ?realNow=1797292800000                                       QA: the real instant the sim takes as "now"
+//                                                               for its real-year season calendar (UTC ms;
+//                                                               this one is 2026-12-15, DL's birthday).
+//                                                               Pins the calendar on a scratch world, which
+//                                                               would otherwise use the sim's own
+//                                                               DEFAULT_REAL_EPOCH_MS. See `worldRealNowMs`.
 import type { Season, Weather } from '@sheepcliff/render';
 
 export interface SceneParams {
@@ -30,11 +36,17 @@ export interface SceneParams {
   /** QA: force a storybook page on the fresh scratch world, this many real (wall-clock) minutes
    * away (?gap=), or null when absent — the same unit `awayMs` is in on the real load/wake path. */
   gapMinutes: number | null;
+  /**
+   * QA: the real instant (UTC ms since 1970) the sim should take as "now" for its real-year season
+   * calendar (?realNow=), or null when absent. Only a URL says this; the page never invents one for
+   * a pinned world. See `worldRealNowMs` below for what it is for.
+   */
+  realNow: number | null;
 }
 
 const WEATHERS: readonly Weather[] = ['sun', 'rain', 'snow'];
 const SEASONS: readonly Season[] = ['spring', 'summer', 'autumn', 'winter'];
-const SCENE_KEYS = ['seed', 't', 'weather', 'season', 'temp', 'now', 'freeze', 'live', 'fixture', 'gap'] as const;
+const SCENE_KEYS = ['seed', 't', 'weather', 'season', 'temp', 'now', 'freeze', 'live', 'fixture', 'gap', 'realNow'] as const;
 
 function pick<T extends string>(v: string | null, allowed: readonly T[], fallback: T): T {
   return v && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
@@ -68,5 +80,36 @@ export function parseSceneParams(search: string): SceneParams {
     scratch: SCENE_KEYS.some((k) => q.has(k)),
     fresh: q.get('fresh') === '1',
     gapMinutes: q.has('gap') ? num(q.get('gap'), 0) : null,
+    realNow: q.has('realNow') ? num(q.get('realNow'), 0) : null,
   };
+}
+
+/**
+ * The real instant the sim should take as "now" — the epoch a fresh world's season calendar is
+ * anchored to (`createInitialState(seed, { realEpochMs })`) and the real time a pre-v8 save is
+ * migrated against (`fromSave(doc, { realNowMs })`). `undefined` means "do not tell the sim what
+ * time it is", and the sim falls back to its own fixed `DEFAULT_REAL_EPOCH_MS`.
+ *
+ * The rule, and the reason for each half (#84):
+ *
+ *   * **A real player's farm gets the wall clock.** That is the whole point of the ticket — the
+ *     owner's world should be in the season the world outside the window is in, and Digital Luna's
+ *     birthday should be her birthday. The sim itself never reads a clock (its charter forbids it);
+ *     this is the one place the host tells it.
+ *   * **A world the URL pins, or one a QA hook reseeded, does not.** A scratch world (`?seed=`,
+ *     `?t=`, `?gap=`, the fixture, …) and a `window.sheepcliff.qa.seed()` world exist to be
+ *     identical every time they are opened — the e2e goldens and the storybook goldens are exactly
+ *     that. Handing them `Date.now()` would make the season, and so the temperature, the snowy
+ *     ground and every card with a `season` condition, depend on the real date the suite happened
+ *     to run on. So they get the sim's fixed default instead.
+ *   * **`?realNow=` overrides both**, so a pinned world can still be put on a chosen real date —
+ *     December 15, say — and stay reproducible.
+ *
+ * `wallNow` is passed in rather than called here so a test can prove the pinned path never reaches
+ * for the clock at all, which is the property that keeps the goldens byte-identical.
+ */
+export function worldRealNowMs(params: Pick<SceneParams, 'realNow' | 'scratch'>, qaDriven: boolean, wallNow: () => number): number | undefined {
+  if (params.realNow !== null) return params.realNow;
+  if (params.scratch || qaDriven) return undefined;
+  return wallNow();
 }

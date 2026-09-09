@@ -35,15 +35,34 @@ import { viewOf } from '../src/engine/view';
 import { hashState } from '../src/hash';
 import { catchUp } from '../src/ledger/catch-up';
 import { dayMs } from '../src/ledger/ledger';
+import { fromSave, toSave } from '../src/save/serialize';
 import { createInitialState, type SimState } from '../src/state';
 import { advance } from '../src/tick';
+import { stubDeck } from './engine-helpers';
 
 const SEEDS = [1, 2, 3] as const;
+/**
+ * One real day of sim time. The host maps wall time to sim time one to one (`catchUp`'s own doc
+ * comment), so a real day away is this many sim ms whatever the farm's day length — not a wall-clock
+ * estimate, the mapping the sim itself uses.
+ */
+const REAL_DAY_IN_SIM_MS = MS_PER_REAL_DAY;
 const BIRTHDAY = FARM_DECK.authored.find((e) => e.id === 'dlBirthday')!;
 
 /** Put a world on a real instant without moving its sim clock (see engine-events.test.ts). */
 function at(s: SimState, realMs: number): SimState {
   return { ...s, season: { ...s.season, realEpochMs: realMs - s.season.elapsedMs } };
+}
+
+/**
+ * The same world, later in its own life: its sim clock moves and its epoch does not, so it is the
+ * world it was, older. Time is moved without running the sim because these cases are about the
+ * *trigger*, not about what a year of ticks does; the step is one to one with real time, the same
+ * mapping `catchUp` uses. The cases that need real days actually to pass go through `catchUp`.
+ */
+function later(s: SimState, realMs: number): SimState {
+  const dt = realMs - realMsOf(s.season);
+  return { ...s, season: { ...s.season, elapsedMs: s.season.elapsedMs + dt }, clock: { ...s.clock, nowMs: s.clock.nowMs + dt } };
 }
 
 const iso = (realMs: number): string => {
@@ -218,10 +237,15 @@ describe('a world reads its own calendar', () => {
 });
 
 describe('Digital Luna’s birthday, December 15', () => {
-  it('is due on exactly one real day a year, on three seeds and over five real years', () => {
+  it('comes round on exactly one real day a year, on three seeds and over five real years', () => {
     // Walked one real day at a time through five real years — the calendar functions directly, not
     // a year of ticks. `triggerMet` is the engine's own reader, so this is the trigger, not a
     // paraphrase of it.
+    //
+    // `at()` re-anchors the world's epoch at every probe, so each of these 1,827 readings is a farm
+    // **made that morning** — which is exactly what isolates the date from the hold. A farm made on
+    // the morning of the 16th was not alive on the 15th and is owed nothing; a farm made on the
+    // morning of the 15th is owed that day. The holding cases are the three below.
     for (const seed of SEEDS) {
       const world = createInitialState(seed, { events: false });
       const due: string[] = [];
@@ -249,35 +273,94 @@ describe('Digital Luna’s birthday, December 15', () => {
     }
   });
 
-  it('the date cooldown bars a second birthday in the same December and clears before the next one', () => {
-    // `cooldownMs` in engine.ts: just under one real year. It has to outlast a whole December and
-    // fall short of the next one, whatever the leap year does.
-    const s = createInitialState(1, { events: false });
-    const before = s.events.cooldowns['dlBirthday'];
-    expect(before).toBeUndefined();
-    const started = at(s, realMsOfCivil(2026, 12, 15) + 3_600_000);
-    expect(triggerMet(started, viewOf(started), BIRTHDAY)).toBe(true);
-    // The bar itself, read through the engine rather than restated: start it, end it, and look at
-    // what it wrote. `applyAuthoredIntent` is the owner's hand; the cooldown it leaves is the one
-    // a natural start leaves too.
+  it('a world watched on the day has its birthday that day', () => {
     const played = advance(createInitialState(1, { realEpochMs: realMsOfCivil(2026, 12, 15) }), 1);
-    const runs = played.events.running.map((r) => r.id);
-    expect(runs, 'the birthday starts on its own on December 15, watched').toContain('dlBirthday');
+    expect(played.events.running.map((r) => r.id), 'the birthday starts on its own on December 15, watched').toContain('dlBirthday');
+    expect(played.chronicle.entries.some((e) => e.line.includes('birthday'))).toBe(true);
   });
 
-  it('is held back on the unwatched path, whatever the real date (plan decision 16)', () => {
-    // The owner's rule: big things do not happen while nobody is watching, and `realDate` returns
-    // false on the Ledger path on top of that (ledger/unwatched.ts). So a world left alone across
-    // December 15 comes back without a birthday. This is the consequence the PR body puts to the
-    // owner rather than deciding: that year has no birthday, and it is not replayed later.
+  it('never on the unwatched path, whatever the real date (plan decision 16)', () => {
+    // Big things do not happen while nobody is watching, and `realDate` answers false on the Ledger
+    // path on top of that (ledger/unwatched.ts), so the debt can never be quietly settled by a
+    // catch-up. A world left alone across December 15 comes back with the birthday still owed.
     for (const seed of SEEDS) {
       const s = createInitialState(seed, { realEpochMs: realMsOfCivil(2026, 12, 14) });
-      const away = catchUp(s, 3 * dayMs(s)); // across the 15th, in sim time, at farm-day resolution
+      const away = catchUp(s, 3 * REAL_DAY_IN_SIM_MS); // across the 15th and out the far side
       expect(away.mode).toBe('ledger');
       expect(away.unwatched.map((d) => d.id), `seed ${seed}`).not.toContain('dlBirthday');
       const told = away.state.chronicle.entries.filter((e) => e.line.toLowerCase().includes('birthday'));
       expect(told.map((e) => e.line), `seed ${seed}`).toEqual([]);
+      expect(away.state.events.starts['dlBirthday'], `seed ${seed}`).toBeUndefined();
+      // Still owed on the far side of the 17th: this is the hold.
+      expect(triggerMet(away.state, viewOf(away.state), BIRTHDAY), `seed ${seed}`).toBe(true);
     }
+  });
+
+  it('a world with no watched step on December 15 has its birthday on its first watched step in January', () => {
+    // The owner's decision, 2026-09-09: "a year where nobody watches on that day gets no birthday —
+    // that is not good. Maybe it should hold until I am viewing." Twenty real days away, crossing
+    // December 15 with nobody watching, and the birthday is waiting on the other side.
+    for (const seed of SEEDS) {
+      const s = createInitialState(seed, { realEpochMs: realMsOfCivil(2026, 12, 14) });
+      const away = catchUp(s, 20 * REAL_DAY_IN_SIM_MS);
+      expect(away.mode).toBe('ledger');
+      expect(iso(realMsOf(away.state.season))).toBe('2027-01-03'); // the calendar really did cross
+      expect(away.state.events.starts['dlBirthday'], `seed ${seed}: it fired while nobody watched`).toBeUndefined();
+      // The first watched step pays it, three real weeks late and not lost.
+      const back = advance(away.state, 1);
+      expect(back.events.running.map((r) => r.id), `seed ${seed}`).toContain('dlBirthday');
+      expect(back.chronicle.entries.some((e) => e.line.includes('birthday')), `seed ${seed}`).toBe(true);
+    }
+  });
+
+  it('a held birthday survives a save and a reload, because what holds it is what is saved', () => {
+    // Nothing new is stored for the hold: it is `season.realEpochMs` and `events.starts`, both of
+    // them already in the v8 document. So a player who closes the tab in December and opens it in
+    // January still gets the birthday.
+    const s = createInitialState(2, { realEpochMs: realMsOfCivil(2026, 12, 14) });
+    const away = catchUp(s, 20 * REAL_DAY_IN_SIM_MS);
+    expect(triggerMet(away.state, viewOf(away.state), BIRTHDAY)).toBe(true);
+    const reloaded = fromSave(toSave(away.state));
+    expect(triggerMet(reloaded, viewOf(reloaded), BIRTHDAY), 'the debt did not survive the save').toBe(true);
+    expect(advance(reloaded, 1).events.running.map((r) => r.id)).toContain('dlBirthday');
+  });
+
+  it('once per real year even when held: a birthday still owed on the next December 15 fires once, not twice', () => {
+    // The owner's own qualifier. A world that goes a whole year unwatched is owed one birthday when
+    // it comes back, not two — the debt is for the *current* occurrence, and one start settles it.
+    const december2026 = at(createInitialState(3, { events: false }), realMsOfCivil(2026, 12, 20));
+    expect(triggerMet(december2026, viewOf(december2026), BIRTHDAY)).toBe(false); // born on the 20th, owed nothing
+
+    // Born on December 14 2026 and not looked at again until December 20 **2027**: two December
+    // 15ths went by unwatched, and it is owed one birthday, not two.
+    const world = createInitialState(3, { events: false, realEpochMs: realMsOfCivil(2026, 12, 14) });
+    const late = later(world, realMsOfCivil(2027, 12, 20));
+    expect(triggerMet(late, viewOf(late), BIRTHDAY)).toBe(true);
+    // One start settles it, and no second one is owed — that is the "once, not twice".
+    const paid = { ...late, events: { ...late.events, starts: { ...late.events.starts, dlBirthday: late.clock.nowMs } } };
+    expect(triggerMet(paid, viewOf(paid), BIRTHDAY)).toBe(false);
+    // And the next December is owed again on its own day, not before it.
+    const nextNovember = later(paid, realMsOfCivil(2028, 11, 30));
+    expect(triggerMet(nextNovember, viewOf(nextNovember), BIRTHDAY)).toBe(false);
+    const next = later(paid, realMsOfCivil(2028, 12, 15) + 3_600_000);
+    expect(triggerMet(next, viewOf(next), BIRTHDAY)).toBe(true);
+  });
+
+  it('a window opts an event out of holding: it is due inside its window and never after it', () => {
+    // `windowSimMinutes` is the "narrow door on the day, or not at all" reading, kept for an event
+    // that wants it. Nothing in the shipped deck sets one; the birthday holds.
+    const windowed = stubDeck([{ id: 'c' }], [{ id: 'noonish', trigger: { kind: 'realDate', month: 12, day: 15, windowSimMinutes: 90 } }]).authored[0]!;
+    const world = createInitialState(1, { events: false, realEpochMs: realMsOfCivil(2026, 12, 15) });
+    // 90 sim-minutes is 11.25 seconds of sim time at the 180-second farm day (`simMinuteMs`), so
+    // "inside the window" is a second in, not a minute.
+    const inside = later(world, realMsOfCivil(2026, 12, 15) + 1_000);
+    expect(triggerMet(inside, viewOf(inside), windowed)).toBe(true);
+    const past = later(world, realMsOfCivil(2026, 12, 15) + 60_000);
+    expect(triggerMet(past, viewOf(past), windowed), 'still on the day, but past the window').toBe(false);
+    const afterwards = later(world, realMsOfCivil(2026, 12, 20));
+    expect(triggerMet(afterwards, viewOf(afterwards), windowed), 'a window does not hold').toBe(false);
+    // The birthday, on the same instant of the same world, does hold.
+    expect(triggerMet(afterwards, viewOf(afterwards), BIRTHDAY)).toBe(true);
   });
 });
 

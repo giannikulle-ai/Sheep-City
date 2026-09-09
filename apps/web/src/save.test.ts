@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advance, createInitialState, hashState, SaveError } from '@sheepcliff/sim';
+import { advance, createInitialState, currentSeason, DEFAULT_REAL_EPOCH_MS, hashState, realDateAt, realMsOf, SaveError, type SimState } from '@sheepcliff/sim';
 import { awayLabel, ENVELOPE_FORMAT, restore, saveText } from './save';
 import { addPage, EMPTY_PAGE_STORE, type StorybookPage } from './storybook';
 
@@ -55,6 +55,62 @@ describe('save text', () => {
     doc.pages = 'not an object';
     const r = restore(JSON.stringify(doc));
     expect(r.pages).toEqual({});
+  });
+
+  describe('the real-year calendar epoch on load (#84)', () => {
+    // A v7 envelope: the shape the owner's live world is in today. Built by taking a current
+    // document apart rather than by hand, so it is a real save minus exactly what v8 added — the
+    // two calendar fields on `season` and on the Ledger snapshot's copy of it — and stamped v7.
+    function v7Envelope(sim: SimState, savedAt: number): string {
+      const doc = JSON.parse(saveText(sim, savedAt)) as {
+        save: { version: number; world: { season: Record<string, unknown>; ledger: { season: Record<string, unknown> } } };
+      };
+      const strip = (season: Record<string, unknown>): Record<string, unknown> => {
+        const { realEpochMs: _epoch, seed: _seed, ...rest } = season;
+        return rest;
+      };
+      doc.save.version = 7;
+      doc.save.world.season = strip(doc.save.world.season);
+      doc.save.world.ledger.season = strip(doc.save.world.ledger.season);
+      return JSON.stringify(doc);
+    }
+
+    const DECEMBER_15 = 1_797_292_800_000; // 2026-12-15T00:00:00Z
+
+    it('a v7 save loaded with a real time lands on that real date', () => {
+      const text = v7Envelope(advance(createInitialState(5), 200), 1_700_000_000_000);
+      const r = restore(text, { realNowMs: DECEMBER_15 });
+      expect(r.sim.version).toBe(8);
+      // The world's own real date is the time the host passed: the migration anchors the epoch so
+      // that `realEpochMs + elapsedMs` comes out at exactly `realNowMs` on this first load.
+      expect(realMsOf(r.sim.season)).toBe(DECEMBER_15);
+      expect(realDateAt(realMsOf(r.sim.season))).toEqual({ year: 2026, month: 12, day: 15 });
+      expect(r.sim.season.seed).toBe(5);
+      // The Ledger snapshot is the same world at an earlier moment, so it shares the epoch rather
+      // than getting one of its own.
+      expect(r.sim.ledger.season.realEpochMs).toBe(r.sim.season.realEpochMs);
+      // Deterministic from here: the same document loaded again at the same instant is the same
+      // world, and the calendar is a function of the stored epoch, not of when it is asked.
+      expect(hashState(restore(text, { realNowMs: DECEMBER_15 }).sim)).toBe(hashState(r.sim));
+    });
+
+    it('a v7 save loaded with no real time falls back to the sim’s own default epoch', () => {
+      // The pinned path (a scratch or QA world): reproducible whatever the real day.
+      const text = v7Envelope(createInitialState(6), 1);
+      const r = restore(text);
+      expect(r.sim.season.realEpochMs).toBe(DEFAULT_REAL_EPOCH_MS);
+      expect(currentSeason(r.sim.season)).toBe('spring');
+      expect(hashState(r.sim)).toBe(hashState(restore(text, { realNowMs: undefined }).sim));
+    });
+
+    it('a save that already carries its own epoch ignores the real time it is loaded at', () => {
+      // Everything from v8 on. The calendar is the world's, set once when it was made.
+      const sim = createInitialState(7, { realEpochMs: DECEMBER_15 });
+      const text = saveText(sim, 2);
+      const r = restore(text, { realNowMs: 0 });
+      expect(r.sim.season.realEpochMs).toBe(DECEMBER_15);
+      expect(hashState(r.sim)).toBe(hashState(sim));
+    });
   });
 
   it('refuses junk with a SaveError code', () => {

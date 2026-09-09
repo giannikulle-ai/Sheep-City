@@ -36,8 +36,8 @@
 import { coinsMoved, fillStorybookLine } from '../chronicle/storybook-line';
 import { tell } from '../chronicle/store';
 import { FARM_DISTRICT } from '../chronicle/types';
-import { realDateMatches } from '../calendar';
-import { currentSeason, realMsOf, REAL_YEAR_MS, seasonFractionOf, seasonLengthOf, seasonSpanOf } from '../clock';
+import { lastRealDateOccurrence, MS_PER_REAL_DAY, realDateMatches } from '../calendar';
+import { currentSeason, realMsAtSim, realMsOf, REAL_YEAR_MS, seasonFractionOf, seasonLengthOf, seasonSpanOf } from '../clock';
 import { nextFloat } from '../rng';
 import type { SimState } from '../state';
 import { runScheduledCategoryActions } from './category';
@@ -103,6 +103,61 @@ export function seasonFraction(state: SimState): number {
 export function seasonDayOfFraction(state: SimState, fraction: number): number {
   const dayMs = state.clock.periodSec * 1000;
   return Math.floor((fraction * seasonLengthOf(state.season)) / dayMs) + 1;
+}
+
+/**
+ * Is a `realDate` event owed right now? **The birthday is never lost** (the owner's decision,
+ * 2026-09-09, on #84: "a year where nobody watches on that day gets no birthday — that is not good.
+ * Maybe it should hold until I am viewing").
+ *
+ * So a real date is not a door that is open for one day and shut afterwards. It is a **debt**: the
+ * event's current occurrence is the most recent December 15 at or before now
+ * (`lastRealDateOccurrence`), and it is owed until it has actually been served. Nobody watching on
+ * the day does not cancel it — it stays owed and is paid on the first watched step after, whenever
+ * that is, in January or in March.
+ *
+ * Three conditions, and each is one line of the owner's rule:
+ *
+ *   1. **there is an occurrence** — the date has come round at least once;
+ *   2. **the world was alive on it** — a farm started in June 2026 is not owed December 15 *2025*,
+ *      which it was not alive for, and one started on December 16 is not owed the 15th; one started
+ *      at nine in the morning on the 15th is;
+ *   3. **nothing has started this event since it** — `events.starts[id]` is the sim time of the last
+ *      start, and the epoch turns it into a real one. This is what makes it **once per occurrence**:
+ *      the moment the birthday starts, that December 15 is served and the same day cannot ask again.
+ *      It is also what makes a birthday held from one year and still unpaid when the *next* December
+ *      15 arrives fire **once, not twice** — the occurrence simply moves on to the new one, and one
+ *      start settles it.
+ *
+ * There is no new field on the state for this. What is held is held in two numbers the save already
+ * carries — `season.realEpochMs` and `events.starts[id]` — so a held birthday survives a save, a
+ * reload and an offline catch-up for free, and the v8 schema did not need a third thing in it. (An
+ * explicit `pending` map would work too and would be a small change; this is the same behaviour with
+ * nothing to keep in sync.)
+ *
+ * The one opt-out is `windowSimMinutes`. An event that names a window is asking for a narrow door on
+ * its own day rather than a debt — "the first ninety sim-minutes of December 15, or not at all" — so
+ * a window turns holding off. Nothing in the shipped deck uses one; `dlBirthday` holds.
+ *
+ * Unwatched is untouched by all of this: `readyAuthored` holds every big authored event back while
+ * nobody is watching, and `ledger/unwatched.ts` answers false for `realDate` whatever its size, so
+ * the debt is never quietly settled by a catch-up. It is only ever paid on a step somebody could
+ * have seen (plan decision 16).
+ */
+export function realDateDue(state: SimState, id: string, trigger: { month: number; day: number; windowSimMinutes?: number }): boolean {
+  const now = realMsOf(state.season);
+  if (trigger.windowSimMinutes !== undefined) {
+    return realDateMatches(now, trigger.month, trigger.day, simMinutesToMs(trigger.windowSimMinutes, state.clock.periodSec));
+  }
+  const occurrence = lastRealDateOccurrence(now, trigger.month, trigger.day);
+  if (occurrence === undefined) return false;
+  // Was the world alive at any point during that day? The occurrence is the date's own midnight and
+  // a world is made at some hour of some day, so the test is against the end of the occurrence's
+  // day, not its start: a farm created at nine in the morning on December 15 is owed that December
+  // 15, and one created on the 16th is not.
+  if (occurrence + MS_PER_REAL_DAY <= state.season.realEpochMs) return false;
+  const started = state.events.starts[id];
+  return started === undefined || realMsAtSim(state.season, started) < occurrence;
 }
 
 /** Does this card write, or is it, a parameter the name covers? */
@@ -287,14 +342,21 @@ function cooldownMs(state: SimState, event: Card | AuthoredEvent, kind: 'card' |
   const periodSec = state.clock.periodSec;
   if (kind === 'card') return simHoursToMs((event as Card).limits.cooldownSimHours, periodSec);
   const trigger = (event as AuthoredEvent).trigger;
-  // A date has no cooldown of its own: it is barred for just under one real year, so "the first
-  // day of spring" and "December 15" each come round once a year and neither can fire twice in the
-  // same one. Just under, not exactly: `PACING.simDateCooldownCycles` (0.95) leaves about eighteen
-  // days of slack, which has to cover both the drift in a seeded season start (±10 real days each
-  // side, so up to 20 days between one year's start and the next's) and a leap day. It was four
-  // times the old nine-real-day `SEASON_MS` before #84; now that a season really is about a
-  // quarter of a real year, it is the real year itself.
-  if (trigger.kind === 'simDate' || trigger.kind === 'realDate') return REAL_YEAR_MS * PACING.simDateCooldownCycles;
+  // A sim date has no cooldown of its own: it is barred for just under one real year, so "the first
+  // day of spring" comes round once a year and cannot fire twice in the same spring. Just under, not
+  // exactly: `PACING.simDateCooldownCycles` (0.95) leaves about eighteen days of slack, which has to
+  // cover both the drift in a seeded season start (±10 real days each side, so up to 20 days between
+  // one year's start and the next's) and a leap day. It was four times the old nine-real-day
+  // `SEASON_MS` before #84; now that a season really is about a quarter of a real year, it is the
+  // real year itself.
+  if (trigger.kind === 'simDate') return REAL_YEAR_MS * PACING.simDateCooldownCycles;
+  // A **real** date shares none of that, and must not: once-a-year is enforced by the occurrence
+  // itself (`realDateDue` — the date is owed until it is served, and served exactly once), not by a
+  // bar on the clock. A year-long bar here would be actively wrong now the birthday can be held: a
+  // birthday missed in December and paid in January would push the next December's behind a bar that
+  // does not lift until the January after. So this is only the ordinary "do not immediately start
+  // again" courtesy, one farm day, and `realDateDue` is already false the moment it has started.
+  if (trigger.kind === 'realDate') return simDaysToMs(1, periodSec);
   return simDaysToMs(trigger.cooldownSimDays, periodSec);
 }
 
@@ -317,14 +379,12 @@ export function triggerMet(state: SimState, view: EventView, event: AuthoredEven
     // June waits about half a real year for its first birthday, and a world made on December 15
     // has one on its first day, which is the answer that needs no apology.
     //
-    // The whole real day counts unless the trigger names a narrower door: `windowSimMinutes` is
-    // measured in **sim** minutes from UTC midnight, which under the one-to-one mapping is the
-    // same number of real milliseconds. A day that does not exist in a given year (February 29 in
-    // a common year) simply does not come round that year.
-    case 'realDate': {
-      const window = trigger.windowSimMinutes === undefined ? undefined : simMinutesToMs(trigger.windowSimMinutes, state.clock.periodSec);
-      return realDateMatches(realMsOf(state.season), trigger.month, trigger.day, window);
-    }
+    // And it is **never lost**: if nobody is watching on the day, the date stays owed and is paid
+    // on the first watched step after it (the owner's decision, 2026-09-09). `realDateDue` above is
+    // that rule and the reasoning behind it; `windowSimMinutes` is the one opt-out. A day that does
+    // not exist in a given year (February 29 in a common year) simply does not come round that year.
+    case 'realDate':
+      return realDateDue(state, event.id, trigger);
     default: {
       const never: never = trigger;
       throw new Error(`authored trigger: unknown kind ${JSON.stringify(never)}`);

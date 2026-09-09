@@ -103,13 +103,29 @@ export function parseSceneParams(search: string): SceneParams {
  *     ground and every card with a `season` condition, depend on the real date the suite happened
  *     to run on. So they get the sim's fixed default instead.
  *   * **`?realNow=` overrides both**, so a pinned world can still be put on a chosen real date —
- *     December 15, say — and stay reproducible.
+ *     December 15, say — and stay reproducible. It is a chosen UTC instant, unadjusted: no offset
+ *     is applied to it, so a test or a golden that pins it keeps meaning exactly what it says.
+ *
+ * **The real player's half is local civil time, not the UTC instant** (decision 18, 2026-09-09 —
+ * the owner: "my day, not the world's day"). `calendar.ts` reads a civil date in UTC by
+ * construction (Hinnant's arithmetic, no `Date`, no time zone anywhere in the sim), so without an
+ * adjustment "December 15" would be the UTC day — for the owner in US Central that day runs
+ * 18:00 the 14th to 18:00 the 15th, local. The fix is entirely here, one line: shift `wallNow()` by
+ * the local offset before it ever reaches the sim, so the instant the sim reads *as* UTC carries the
+ * owner's own wall-clock fields. `tzOffsetMinutes` defaults to the real `Date.prototype.getTimezoneOffset`
+ * (positive west of UTC — Central Standard Time is `+360`), passed in the same way `wallNow` is, so
+ * a test can pin it without depending on the runner's own time zone.
  *
  * `wallNow` is passed in rather than called here so a test can prove the pinned path never reaches
  * for the clock at all, which is the property that keeps the goldens byte-identical.
  */
-export function worldRealNowMs(params: Pick<SceneParams, 'realNow' | 'scratch'>, qaDriven: boolean, wallNow: () => number): number | undefined {
+export function worldRealNowMs(
+  params: Pick<SceneParams, 'realNow' | 'scratch'>,
+  qaDriven: boolean,
+  wallNow: () => number,
+  tzOffsetMinutes: () => number = () => new Date().getTimezoneOffset(),
+): number | undefined {
   if (params.realNow !== null) return params.realNow;
   if (params.scratch || qaDriven) return undefined;
-  return wallNow();
+  return wallNow() - tzOffsetMinutes() * 60_000;
 }

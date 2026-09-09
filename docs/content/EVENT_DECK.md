@@ -92,12 +92,42 @@ watching; the weight is for what is big or small." That replaces the earlier rea
 outright — "about three moments per five real minutes" (decision 11) and "three distinct kinds in
 a majority of seeds" (decision 14, restated for the deck on this issue) are both **withdrawn**,
 not just superseded. Pace is described in farm days from here on, split by a card's `size`
-(`small` or `big`) once the engine can read one.
+(`small` or `big`), which every card now carries.
 
-This branch was written before this deck had a `size` field; sizing every card and teaching the
-engine what `size` means landed separately, on trunk, as **#101** (the engine) and **#102** (this
-deck's own `small`/`big` values and their write-ups — see "Small or big" below, merged in here from
-trunk). This PR's own job stays what it always was: the coverage work — the widened `conditions`
+**What this deck does to the pace, and the number that sets it.** The widened conditions below do
+more than fill the empty cells in the table: they make small cards eligible far more of the time —
+on about 40 % of the engine's looks, against 14 % before — and the engine's per-look draw chance is
+linear in the eligible weight. Measured over thirty seeds and thirty farm days, watched throughout
+(`packages/sim/test/engine-pace.test.ts`'s own harness, two independent rulers agreeing seed for
+seed):
+
+| | farm days of 30 with a small thing | small starts a farm month |
+|---|---|---|
+| trunk before this deck (#111's pacing, small rate 8) | 18 (mean 17.93, range 15–21) | 23 |
+| this deck at that same rate 8 | **30** (mean 29.57, range 28–30) | 57 |
+| **this deck as it ships, small rate 1.25** | **24** (mean 23.90, range 21–28) | 31 |
+
+The owner's own shape is *four farm days in five*, which is 24 of 30. The middle row is a small
+thing on **every** farm day, about two a day — a quarter past the target — and nothing in the repo
+could have failed for it: `PACE_TARGETS.smallDaysInFive` was read by nothing in the draw, and the
+engine's only assertions on the outcome were floors. This PR makes the target real. The small draw
+rate is now looked up from it (`SMALL_RATE_FOR_DAYS_IN_FIVE`, `packages/sim/src/engine/pacing.ts`),
+the shipped rate is the measured point that delivers four in five **on this deck**, and
+`engine-pace.test.ts` checks the measurement against the target from both sides, so too busy fails
+as loudly as too quiet. **The rate is the owner's number, not this lane's**: if four days in five
+is the wrong feel, `PACE_TARGETS.smallDaysInFive` is the single line to move — 3 and 5 sit beside
+it with their own measured rates (0.6 gives 18 days of 30; 8 gives 30 of 30).
+
+The gap was the other way to get there and was deliberately not taken: at
+`PACING.smallGapFarmHours: 28` the same 24 days arrive with exactly 24 starts on every seed, one
+thing a day and never two — a metronome. The rate keeps the unevenness: most days one, some days
+two, about one farm day in five with nothing on it at all, which is decision 16's own "a quiet farm
+day is allowed".
+
+Sizing every card and teaching the engine what `size` means landed separately, on trunk, as
+**#101** (the engine) and **#102** (this deck's own `small`/`big` values and their write-ups — see
+"Small or big" below, merged in here from trunk). This PR's own job stays what it always was: the
+coverage work — the widened `conditions`
 below, and the moved `stargazingNight` moment kind (see its own card, below) — with the round-1
 pace retune dropped entirely: every card's `weight.base` this PR ships is back at trunk's own
 value, except `merchantCaravan` (kept at 10, not trunk's 14 — its own card entry below says why)
@@ -128,28 +158,28 @@ engine (`tickInPlace`, the same per-tick function `advance()` wraps) for 54,000 
 thirty farm days at 1,800 ticks/day, which is also 43,200 sim-minutes at `timeScale`'s own
 1,440 sim-minutes/day — across seeds 1-30, with two independent rulers on every card start (new
 `events.running` entries, and non-`-end` `card`/`authored` chronicle lines) agreeing seed for
-seed. Without a `size` field this deck cannot yet show "small most days, big a few a month" — that
-split is #102's job — so the test asserts only the one thing decision 16 says in plain language
-regardless of size (nothing is forced, so a month should not go by with nothing at all) and
-records the rest as a measurement for #102 to build on, not a floor:
+seed. It counts the deck as a whole, both sizes together; the per-size measurement against the
+owner's targets is `packages/sim/test/engine-pace.test.ts`, which is where the engine can tell a
+small thing from a big one. What this test asserts is the one clause decision 16 states regardless
+of size — nothing is forced, so a month should not go by with nothing at all — and it records the
+rest as a measurement, not a floor. **Measured on this head, at the shipped rate** (every figure
+below is printed by the test's own output, so it can be checked against a run):
 
 - **No seed goes fully silent across the thirty days: 0 of 30** (asserted).
-- **Card starts per farm day, median across seeds: 1.43** (per-seed mean range 1.37–1.53; full
-  per-seed list, seeds 1-30: 1.47, 1.40, 1.50, 1.47, 1.47, 1.47, 1.40, 1.43, 1.50, 1.47, 1.53, 1.40,
-  1.43, 1.40, 1.47, 1.43, 1.53, 1.43, 1.43, 1.37, 1.40, 1.50, 1.47, 1.40, 1.40, 1.47, 1.47, 1.43,
-  1.43, 1.43).
-- **Days with no card: 7 of 900 seed-days** (silent days per seed, seeds 1-30: 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0) — a quiet day here and there,
-  never a quiet month; decision 16's own "nothing is forced" allows a quiet farm day.
-- **Distinct moment kinds over the thirty days, per seed: median 4.5, range 4–5** (seeds 1-30:
-  5, 5, 5, 4, 5, 4, 5, 5, 5, 5, 4, 4, 4, 4, 4, 4, 4, 5, 4, 5, 4, 4, 4, 4, 5, 5, 5, 5, 4, 5).
+- **Card starts per farm day, median across seeds: 1.1** (per-seed list, seeds 1-30: 1.10, 1.10,
+  1.17, 1.27, 1.20, 1.00, 1.10, 1.00, 1.03, 1.10, 1.10, 1.10, 1.10, 1.03, 1.17, 1.17, 1.07, 1.17,
+  1.10, 1.13, 1.07, 1.13, 1.23, 1.00, 1.00, 1.10, 1.03, 1.23, 1.03, 1.20).
+- **Days with no card at all: 170 of 900 seed-days** (silent days per seed, seeds 1-30: 8, 5, 5, 1,
+  5, 8, 4, 7, 6, 2, 7, 7, 8, 3, 8, 6, 9, 4, 6, 9, 4, 4, 5, 8, 9, 3, 7, 3, 6, 3) — about one farm day
+  in five with nothing on it, which is the shape four-in-five asks for and what decision 16's
+  "nothing is forced" allows.
+- **Distinct moment kinds over the thirty days, per seed: median 4, range 3–5** (seeds 1-30: 5, 4,
+  5, 4, 5, 3, 4, 4, 5, 4, 5, 5, 5, 3, 4, 4, 5, 5, 5, 3, 4, 5, 5, 3, 4, 5, 5, 4, 3, 4).
 
-These numbers are measured with every card's weight back at trunk's own value (`merchantCaravan`
-and `windfall` the two named exceptions above), on the engine as it stood before #101's world-time
-pacing rewrite landed — they are what the coverage work alone, with no size-aware rebalance, gave
-the world over a month. #102 (below) is the size-aware measurement against decision 16's actual
-targets (small on about four days in five, big about three a farm month); this section's own
-numbers are a baseline for that comparison, not the same measurement restated.
+The figures this section carried before — 1.43 starts a day, 7 silent days of 900, median 4.5 kinds
+— were measured before #101's world-time pacing rewrite landed and were stale by the time #111
+merged into this branch; at the engine's old small rate of 8 the same harness read 1.9667 starts a
+day, 13 silent days of 900 and a median of 5 kinds. They are replaced above rather than re-labelled.
 
 ## Small or big
 
@@ -174,11 +204,15 @@ watching; the weight is for what is big or small."* So:
 `weight` still decides *which* card of a size is drawn; `size` decides how often, and
 whether unwatched. The two are different questions and they are now different fields.
 
-A note on what the sizes cost. Making the caravan big makes the merchant rarer: measured
-over thirty seeds, he comes on 27 of 30 in a farm month (median one visit) where he used
-to turn up on a given *day* on 6 of 30. That is the intended shape — decision 12 already
-made him a passer-by rather than the farm's economy — but it is a real change and it is
-written down rather than discovered.
+A note on what the sizes cost. Making the caravan big makes the merchant rarer, and this
+deck makes him rarer again: measured over thirty seeds and a farm month, he comes on **19
+of 30** (median one visit, never more than two), where the same measurement read 27 of 30
+on trunk before this deck and 20 of 30 with this deck at the engine's old small rate. The
+day-only window this PR gives him (decision 12: a road event has no reason to keep the old
+trade window) is most of that. That is the intended shape — he is a passer-by, not the
+farm's economy — but it is a real change, it is written down rather than discovered, and
+`packages/sim/test/sheep-day.test.ts`'s floor of 18 of 30 now has only one seed of margin,
+which is called out in that test and in the PR's weak spots.
 
 | Card | Size | Why |
 |---|---|---|
@@ -193,7 +227,7 @@ written down rather than discovered.
 | Night of the fireflies | small | The owner named it. A summer night with lights in it. |
 | Lamb zoomies hour | small | The owner named it. A lamb runs in circles for an hour. Nothing else. |
 | The well runs low | small | Judgement: a background worry the field shows rather than a set piece. It changes no stock, it has no beat beyond the look of the place, and the real drought is the cliff storm's own trigger below. |
-| A windfall | small | The owner named it. Twelve coins found; the only small card that moves a Ledger number, which is why it is also the one whose hook still applies on an unwatched day. |
+| A windfall | small | The owner named it. Something bright dug up by the tree — since decision 12 it moves no coins and no Ledger number at all (its `coins` hook is gone; see its own entry below), so what it costs the world is a moment's attention and nothing else. |
 | Stargazing night | small | The owner named it. A clear night and a dog on her back. |
 | Rain, and a flock to gather | small | The owner named it as "the flock huddle". A minute of shepherding in a shower, which is Digital Luna's ordinary job rather than an exception to it. |
 | The farmer meets the merchant | small | Judgement: a vignette that can only happen when the world has already put two people in the field. It is a thing you catch, not a thing that is staged — and it needs both of them present, so it never draws unwatched. |
@@ -209,6 +243,38 @@ meets the merchant** (it needs both of them standing there), and it makes the
 **Rainbow** effectively unreachable, since its twenty-sim-minute window after rain is
 finer than the Ledger's own resolution. The other nine draw unwatched exactly as they do
 watched.
+
+## Story lines and their placeholders (#114)
+
+Every card and authored event carries one past-tense line under 90 characters, and a line may name
+the world through a placeholder in braces. **The sim fills them before the line reaches the
+chronicle** — `fillStorybookLine` in `packages/sim/src/chronicle/storybook-line.ts`, called from
+both places a card becomes a chronicle entry: the watched draw (`engine/engine.ts`'s `startEvent`)
+and the unwatched one (`ledger/unwatched.ts`), from the same table, so a week away reads exactly as
+a watched night does. The chronicle stores the finished sentence and the client never sees a brace.
+Before this, it did: the storybook page showed *"Three crows landed on the hay and {dl} sent them
+packing"* to the player, on the site and in this repo's own goldens.
+
+| Placeholder | Becomes | Used by |
+|---|---|---|
+| `{dl}` | `Digital Luna` — her name as the client already shows it (the action tray, the pin, the intent line) | 14 lines |
+| `{lamb}` | `a lamb` — lambs carry no name in the sim, and the unwatched path has no actors to name one from | 2 lines |
+| `{flock}` | the flock's own sheep count, e.g. `5` | 1 line (shearing day) |
+| `{sheep}` | `a sheep` | none today |
+| `{farmer}` | `the farmer` | none today |
+| `{merchant}` | `the merchant` | none today |
+| `{coins}` | the coins the card's own hook moves, or the word `no` when none do | none today — decision 12 retired the farm's one transaction |
+
+A substitution that lands at the very start of a line is capitalised, so `{lamb} got the zoomies`
+tells as *"A lamb got the zoomies"*.
+
+**The allowed set is exactly what the substitution can fill**, and a line that uses anything else
+fails three times over rather than reaching a player: the schema's own `line` pattern rejects it in
+`npm run validate:content`, `@sheepcliff/content` throws on it when the deck is loaded, and
+`fillStorybookLine` throws the first time such a line is told. Adding a placeholder means adding it
+to the sim's table, to `STORYBOOK_PLACEHOLDERS` in `packages/content/src/index.ts`, and to the
+schema's pattern; `packages/content/src/index.test.ts` pins the first two equal and the schema's own
+list is what the `node:test` suite reads.
 
 ## The fifteen cards
 
@@ -583,7 +649,6 @@ in her mouth.* (notability 0.85)
 - **No cross-district cards.** The harbour and the wildwood arrive in Phase 3 with the deck at fifty.
 - **`simMinutesSinceRain`, the `simDate` trigger's day-of-season, the new `realDate` trigger, the calendar it reads (`outsideRules.seasons.calendar`), and `lambFarFromMother` are proposed, not confirmed.** All are flagged to sim, `simMinutesSinceRain` and `lambFarFromMother` on #40 and the calendar and both date triggers on #84, in the schema and in this page, the same way v1 flagged `recentWeather`. The sim has a running `dayCount` and a season cycle but no explicit real-calendar concept yet, and still reads the old fixed nine-real-day season (`rules.season.realDays`) rather than the new calendar; no authored event uses `simDate` today (`dlBirthday` moved to `realDate` on #83), so its fraction-of-a-season `dayOfSeason` is untested against real sim behaviour until #84 lands. `lambFarFromMother` is structurally always false in today's sim: every lamb is sprung to a fixed point behind its mother each tick, with no detachment behaviour yet — `lostLamb`'s strongest multiplier is written for the sim #40 will build, not the one that exists today.
 - **No chained cards.** The farmer's day off leaves the flock woolly, which makes the next shearing day bigger; that is the Ledger doing the chaining (via `ledger.wool`, now a real condition), not the deck. A `recentEvents` predicate would let a card follow another on purpose.
-- **Weights are still a first guess, and still trunk's own numbers.** #86's two earlier fix rounds tried retuning nine `weight.base` values against a real-minute pace target and a three-kind floor; decision 16 (2026-09-09) withdrew both of those, so this round reverted every card's weight back to trunk's own value (`merchantCaravan` the one deliberate exception — see its own card entry above — and `windfall`, whose only change here is dropping the coins condition its removed coins hook no longer justifies). What ships is the coverage work alone (widened `conditions`, `stargazingNight`'s moment kind) with no weight retune riding along. **#102** is where the weights move next: a `size` field (`small`/`big`) on every card, rebalanced to decision 16's own world-time targets (small on about four days in five, big about three a farm month) once the sim ticket **#101** teaches the engine to read a size at all. See "Deck coverage" above for what this deck already shows over thirty farm days without sizes.
-- **`size` does not exist on this schema yet.** Every card and authored event needs one, `small` or `big`, before #102's rebalance can mean anything to the engine; #101 is the sim half (the engine reads it, fails loudly on a missing one, and treats big cards as watched-only).
+- **Weights are still a first guess, and still trunk's own numbers.** #86's two earlier fix rounds tried retuning nine `weight.base` values against a real-minute pace target and a three-kind floor; decision 16 (2026-09-09) withdrew both of those, so this round reverted every card's weight back to trunk's own value (`merchantCaravan` the one deliberate exception — see its own card entry above — and `windfall`, whose only change here is dropping the coins condition its removed coins hook no longer justifies). What ships is the coverage work alone (widened `conditions`, `stargazingNight`'s moment kind) with no weight retune riding along. Sizes landed on trunk with #101 and #102, and every card carries one. What this PR adds on top is the *rate* the small draw runs at, derived from the owner's four-in-five target rather than left at the engine's own guess of 8 — one number in `packages/sim/src/engine/pacing.ts`, measured on this deck, and the owner's to move. The weights themselves are still a first guess: a per-card rebalance by size, if the mix ever reads wrong, is still ahead of us. See "Deck coverage" above for what this deck shows over thirty farm days at the shipped rate.
 - **`merchantCaravan`'s code path still sells wool — in three places, not one.** The world half of #86 rewrote the card's data to be a passer-by with no coins or wool hook, but three code paths in `packages/sim` still run the sale regardless of what the data says: `packages/sim/src/engine/hooks.ts`'s `REFERENCE_EFFECTS.merchantCaravan.start`, which unconditionally summons the merchant NPC; `packages/sim/src/npcs.ts:238-249`, that NPC's `trade` job, which empties the wool bank for coins and buys upgrades; and `packages/sim/src/ledger/advance.ts:259-266`, the **offline catch-up's** own `MERCHANT` case, which does the same sale with no card involved at all — a week away from the farm still empties the wool bank even if the first two are fixed. Retiring all three, and moving the sale to the farmer's dawn market walk, is the sim half of #86.
 - **Authored `variables` are open by design**, unlike every other closed shape in these two schemas (`additionalProperties: false` holds everywhere else). Each of the three events needs a different bag of named values; nothing enforces what's inside one beyond "at least one". Worth an owner's eye if that looseness turns out to matter before more authored events are written.

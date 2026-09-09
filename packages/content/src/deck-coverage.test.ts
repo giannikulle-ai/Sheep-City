@@ -2,9 +2,11 @@
 // schema alone cannot check: that every season × time-band has a way in for at least two cards
 // (docs/content/EVENT_DECK.md's coverage table), and a plain measurement of the deck over thirty
 // farm days — decision 16 (plan section 11, 2026-09-09) describes pace in world time only, not
-// real minutes, and this deck has no `size` field yet (that is #102, after the sim ticket #101
-// teaches the engine what a size means), so the only thing this test can honestly assert without
-// sizes is the bar decision 16 states in plain language regardless of size: nothing is forced,
+// real minutes. Every card in this deck now carries a `size` (#101/#111 landed the field and the
+// engine that reads it), and the per-size pace — a small thing on four farm days in five, a big
+// thing a few times a month, none while unwatched — is measured where the engine can split the two
+// apart, in `packages/sim/test/engine-pace.test.ts`. What this test measures is the deck as a
+// whole: the bar decision 16 states in plain language regardless of size, that nothing is forced,
 // so no seed goes fully silent over a month of farm days. The three-kind-in-five-minutes bar
 // (plan decision 14) and the "about three moments per five minutes" line (decision 11) are both
 // withdrawn by decision 16 and are not asserted or measured here.
@@ -132,12 +134,12 @@ describe('deck coverage: every season × time band has a way in (#86)', () => {
 describe('thirty farm days: nothing forced (#86, decision 16)', () => {
   // Decision 16 (plan section 11, 2026-09-09): "a farm day holds a small thing on most days and a
   // big thing a few times a farm month ... nothing is forced ... measured over thirty seeds and
-  // thirty farm days." This deck has no `size` field yet — #102 adds it once the sim ticket #101
-  // teaches the engine to read one — so this test cannot yet split "small" from "big" or assert
-  // either floor. What it CAN honestly assert today is the one clause decision 16 states in plain
-  // language regardless of size: nothing is forced, so a seed does not go fully silent across a
-  // month of farm days. Everything else below (starts per day, no-card days, distinct kinds) is
-  // recorded as a measurement, not a floor, so #102's own rebalance has real numbers to move from.
+  // thirty farm days." Every card carries a `size` now, and the per-size floors are asserted in
+  // `packages/sim/test/engine-pace.test.ts`, which is the file that can split "small" from "big"
+  // and check each against the owner's own target. What this test asserts is the one clause
+  // decision 16 states in plain language regardless of size: nothing is forced, so a seed does not
+  // go fully silent across a month of farm days. Everything else below (starts per day, no-card
+  // days, distinct kinds) is recorded as a measurement of the whole deck, not a floor.
   //
   // A farm day is 1,800 ticks: `RULES.clock.periodSec` (180 sim-seconds/day) at the engine's fixed
   // `TICK_MS` (100 sim-ms/tick) is 1,800 ticks/day; thirty farm days is 54,000 ticks, which is also
@@ -201,19 +203,24 @@ describe('thirty farm days: nothing forced (#86, decision 16)', () => {
     }
     expect(rulerDisagreements, `starts counted differently by the two rulers:\n${rulerDisagreements.join('\n')}`).toEqual([]);
 
-    // Measured at this head, this deck (weights back at trunk's own values, per decision 16 —
-    // see docs/content/EVENT_DECK.md's "Deck coverage" section for the full numbers), seeds 1-30,
-    // 30 farm days (54,000 ticks) each, 2026-09-09 (world lane, #86, fix round 2):
-    //   - card starts per farm day, median across seeds: 1.43 (per-seed mean starts/day range
-    //     1.37-1.53; per-seed values: 1.47,1.40,1.50,1.47,1.47,1.47,1.40,1.43,1.50,1.47,1.53,1.40,
-    //     1.43,1.40,1.47,1.43,1.53,1.43,1.43,1.37,1.40,1.50,1.47,1.40,1.40,1.47,1.47,1.43,1.43,1.43)
-    //   - days with no card: 7 of 900 seed-days (silent days per seed, seeds 1-30 in order:
-    //     0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,1,0,1,0,2,0,0,0,1,0,0,0,0,0,0)
-    //   - distinct moment kinds over the thirty days, seeds 1-30: 5,5,5,4,5,4,5,5,5,5,4,4,4,4,4,4,
-    //     4,5,4,5,4,4,4,4,5,5,5,5,4,5 (median 4.5, range 4-5)
+    // **Measured on this head**, seeds 1-30, 30 farm days (54,000 ticks) each — every figure below
+    // is printed by this test's own `console.info` at the bottom, so it can be checked against the
+    // run rather than taken on trust. (The figures this block used to carry — 1.43 starts a day, 7
+    // silent days of 900, median 4.5 kinds — were measured before #101's world-time pacing rewrite
+    // landed and were stale by the time #111 merged; they are gone rather than re-labelled.)
+    //   - card starts per farm day, median across seeds: 1.1 (per-seed: 1.10,1.10,1.17,1.27,1.20,
+    //     1.00,1.10,1.00,1.03,1.10,1.10,1.10,1.10,1.03,1.17,1.17,1.07,1.17,1.10,1.13,1.07,1.13,
+    //     1.23,1.00,1.00,1.10,1.03,1.23,1.03,1.20)
+    //   - days with no card at all: 170 of 900 seed-days (per seed: 8,5,5,1,5,8,4,7,6,2,7,7,8,3,8,
+    //     6,9,4,6,9,4,4,5,8,9,3,7,3,6,3) — about one farm day in five, which is decision 16's own
+    //     "a quiet farm day is allowed" and the shape the owner's four-in-five target asks for
+    //   - distinct moment kinds over the thirty days, seeds 1-30: 5,4,5,4,5,3,4,4,5,4,5,5,5,3,4,4,
+    //     5,5,5,3,4,5,5,3,4,5,5,4,3,4 (median 4, range 3-5)
     //   - no seed goes fully silent (zero starts across all thirty days): 0 of 30
-    // The exact numbers move with #102's own weight rebalance (small/big) and are not pinned here
-    // as a floor beyond the one decision 16 actually asks for below.
+    // Card starts here count both sizes together and are lower than they were at the engine's old
+    // small rate of 8, which this same harness read as 1.9667 a day, 13 silent days of 900 and a
+    // median of 5 kinds (measured by PR #99's round-2 Verifier on the previous head, from this
+    // test's own console output).
     const fullySilentSeeds = seedTotals.filter((n) => n === 0).length;
     expect(
       fullySilentSeeds,
@@ -226,5 +233,11 @@ describe('thirty farm days: nothing forced (#86, decision 16)', () => {
     console.info('thirty farm days, seeds 1-30 — median starts/day:', median(seedStartsPerDay));
     console.info('thirty farm days, seeds 1-30 — no-card days:', seedSilentDays.reduce((a, b) => a + b, 0), 'of', 30 * TOTAL_DAYS);
     console.info('thirty farm days, seeds 1-30 — median distinct kinds:', median(seedDistinctKinds));
+    // The per-seed lists too, so the comment above can be checked against this run rather than
+    // taken on trust: a comment that carries numbers nothing prints is a comment that goes stale
+    // silently, which is what happened to the pre-#111 figures this block replaced.
+    console.info('thirty farm days, seeds 1-30 — starts/day per seed:', seedStartsPerDay.map((n) => n.toFixed(2)).join(','));
+    console.info('thirty farm days, seeds 1-30 — silent days per seed:', seedSilentDays.join(','));
+    console.info('thirty farm days, seeds 1-30 — distinct kinds per seed:', seedDistinctKinds.join(','));
   }, 60000);
 });

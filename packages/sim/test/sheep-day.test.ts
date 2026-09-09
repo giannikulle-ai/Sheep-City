@@ -229,9 +229,12 @@ describe('scripted sheep day', () => {
   // slice is on the state. It moved a fourth time in Round 2 (#82), for the warm-up fix, and a
   // fifth in Round 3, because deferring `dlBirthday`'s new `realDate` trigger to #84 takes the
   // birthday out of the first tenth of a second of every world and shifts every seed's draw stream
-  // with it (see `EVENTS`'s own comment above). The *sheep* list above did not move by a single
-  // line on any of the five; test/engine-parity.test.ts pins this day with the engine off, on its
-  // v6 view, to the hash from before #40.
+  // with it (see `EVENTS`'s own comment above). It moved a sixth time in **#101**, where the draw
+  // became two decisions a look instead of one (a small one and a big one, each with its own gap
+  // and its own chance), so the engine's generator is consumed differently from the first look
+  // onwards and every seed's card draws shift with it: `24517bbf7e9a89d5` → `550c55dafd2ae243`. The
+  // *sheep* list above did not move by a single line on any of the six; test/engine-parity.test.ts
+  // pins this day with the engine off, on its v6 view, to the hash from before #40.
   it('seed 71 twice gives the same day and the same hash', () => {
     const a = scriptedDay(71);
     const b = scriptedDay(71);

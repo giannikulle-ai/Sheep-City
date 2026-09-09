@@ -208,7 +208,18 @@ describe('an unwatched span: small things happen, big things do not', () => {
       const s = started(seed);
       const c = catchUp(s, 5 * dayMs(s));
       const movedCoins = c.unwatched.some((d) => d.applied.includes('coins'));
-      if (!movedCoins) expect(c.after.banks.coins, `seed ${seed}`).toBe(c.before.banks.coins + (c.after.banks.wool === c.before.banks.wool ? 0 : c.after.banks.coins - c.before.banks.coins));
+      if (!movedCoins) {
+        if (c.after.banks.wool === c.before.banks.wool) {
+          // No shearing and no sale happened at all across the gap: with no card hook touching the
+          // bank either, coins cannot have moved by a single coin.
+          expect(c.after.banks.coins, `seed ${seed}`).toBe(c.before.banks.coins);
+        } else {
+          // The wool bank did move — a fleece was shorn, sold, or both. Either way `advance.ts`'s own
+          // trade (`banks.coins += banks.wool * RULES.merchant.woolPrice`) only ever adds; a real,
+          // one-directional claim, not the value asserted against itself.
+          expect(c.after.banks.coins, `seed ${seed}`).toBeGreaterThanOrEqual(c.before.banks.coins);
+        }
+      }
       // Whatever else a hook wanted, it was recorded and not applied: no spawn, no fog, no flag.
       for (const d of c.unwatched) {
         expect(d.applied.every((op) => op === 'coins'), `seed ${seed}: ${d.id} applied ${d.applied.join(',')}`).toBe(true);

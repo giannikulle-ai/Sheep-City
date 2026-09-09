@@ -104,7 +104,8 @@ describe('scripted day', () => {
   // this engine deferred that trigger to #84 so `dlBirthday` no longer started at tick 0 of every
   // world; and now in **#101**, where the draw is two decisions a look instead of one (a small one
   // and a big one, each with its own gap and its own chance), so the engine's generator is consumed
-  // differently from the first look at the world onwards and every seed's card draws shift with it.
+  // differently from the first look at the world onwards and every seed's card draws shift with it:
+  // `b3da5ab0c4e981ed` → `7c413f504c6d5a57`.
   // Her transitions above did not move by a line on any of the three — the test below pins that as
   // an equality, not by eye, and it is the point of re-pinning the hash rather than loosening it.
   it('seed 11 twice gives the same day and the same hash', () => {

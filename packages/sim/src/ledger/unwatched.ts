@@ -313,8 +313,10 @@ function look(
   // touched nothing. A roll below it is a *candidate*: the conditions are read for real and the
   // same number is compared against the actual chance. That is exactly the distribution the direct
   // method gives (the roll is uniform, and the actual chance can never exceed the ceiling), it
-  // costs one number from the generator either way, and it is checked against the direct method in
-  // `test/engine-unwatched.test.ts`.
+  // costs one number from the generator either way, and `advanceUnwatched`'s own `ceilingOverride`
+  // lets `test/engine-unwatched.test.ts` run the same seed past this early exit and down the same
+  // read-the-conditions path unconditionally, then assert the two runs' draws come out identical —
+  // the direct-method comparison, not just the ceiling's own bound.
   const roll = nextFloat(events.rng);
   if (roll >= ceiling) return;
 
@@ -376,6 +378,14 @@ export function unwatchedCeiling(deck: Deck = FARM_DECK): number {
  * `events` and `chronicle` are **mutated**: the engine slice records what was drawn (its own
  * generator, the starts, the cooldowns) and the chronicle is told each one. The caller passes the
  * copies it is going to hand on to `respawn`; `catchUp` does exactly that.
+ *
+ * `ceilingOverride` is test-only (`test/engine-unwatched.test.ts`, "the roll-first shortcut is
+ * exact"): passing a ceiling of `Infinity` disables the early exit in `look` without changing
+ * anything else about it, so every look falls through to the same read-the-conditions comparison
+ * the shortcut makes when a roll gets past it. Run the same seed once with the real ceiling and
+ * once with this override and the two `drawn` lists come out identical if and only if the real
+ * ceiling never sat below a real look's chance — which is the whole of what "exact" claims. Never
+ * passed on the live path.
  */
 export function advanceUnwatched(
   ledger: Ledger,
@@ -384,6 +394,7 @@ export function advanceUnwatched(
   events: EventsState,
   chronicle: { chronicle: Chronicle },
   deck: Deck = FARM_DECK,
+  ceilingOverride?: number,
 ): UnwatchedRun {
   if (!Number.isFinite(spanMs) || spanMs < 0) throw new Error(`advanceUnwatched: spanMs must be a finite non-negative number, got ${spanMs}`);
   // The engine off is the pre-engine world exactly (`EventsState.enabled`, engine/events.ts), and
@@ -394,7 +405,7 @@ export function advanceUnwatched(
   const startMs = ledger.clock.nowMs;
   const lookMs = simMinutesToMs(UNWATCHED_LOOK_SIM_MINUTES, periodSec);
   const drawn: UnwatchedDraw[] = [];
-  const ceiling = unwatchedCeiling(deck);
+  const ceiling = ceilingOverride ?? unwatchedCeiling(deck);
   let L = ledger;
   let done = 0;
   let looks = 0;

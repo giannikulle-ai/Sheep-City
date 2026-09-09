@@ -3,7 +3,7 @@
 // where one card with known conditions says exactly what the engine decided and why.
 import { describe, expect, it } from 'vitest';
 import { createChronicle } from '../src/chronicle/store';
-import { loadDeck, type Deck } from '../src/engine/deck';
+import { FARM_DECK, loadDeck, type Deck } from '../src/engine/deck';
 import { createEvents } from '../src/engine/events';
 import { PACING, SIZE_PACING, UNWATCHED_LOOK_SIM_MINUTES, WARMUP_SIM_MINUTES } from '../src/engine/pacing';
 import { advanceLedger } from '../src/ledger/advance';
@@ -166,6 +166,48 @@ describe('what an unwatched look reads, and what it does not', () => {
     expect(unwatchedCeiling(deck)).toBeGreaterThanOrEqual(
       Math.min(PACING.maxDrawChance, (500 / 10) * SIZE_PACING.small.perFarmDay * (UNWATCHED_LOOK_SIM_MINUTES / 1440)),
     );
+  });
+
+  it('the roll-first shortcut draws exactly what the direct method would, seed for seed', () => {
+    // The bound above says the ceiling is never beaten; this checks the consequence that actually
+    // matters — that skipping the condition read on a roll at or above the ceiling never changes
+    // which looks draw. `advanceUnwatched`'s `ceilingOverride: Infinity` disables the early exit
+    // (every roll is "below" an infinite ceiling) without touching anything else in `look`, so every
+    // look falls through to the same read-the-conditions comparison a roll under the real ceiling
+    // already gets. Same seed, same deck, same span, real ceiling against no ceiling at all: if the
+    // shortcut is exact the two runs draw the same cards at the same instants, every time.
+    const decks: { label: string; deck: Deck }[] = [
+      // The shipped deck's own shape — several small cards, real conditions, real cooldowns.
+      { label: 'FARM_DECK', deck: FARM_DECK },
+      // A stub deck close to the ceiling itself: nearly every roll is a candidate, which is where a
+      // ceiling that undershot the real chance would be found fastest.
+      {
+        label: 'stub near-ceiling deck',
+        deck: stubDeck([
+          { id: 'a', size: 'small', base: 40, minGapSimMinutes: 0, cooldownSimHours: 0 },
+          { id: 'b', size: 'small', base: 40, minGapSimMinutes: 0, cooldownSimHours: 0 },
+          { id: 'c', size: 'small', base: 40, minGapSimMinutes: 0, cooldownSimHours: 0, multipliers: [{ when: { on: 'ledger.flock', op: 'gte', value: 0 }, times: 3 }] },
+        ]),
+      },
+    ];
+    for (const { label, deck } of decks) {
+      for (const seed of [2, 5, 9, 13, 17, 21]) {
+        const before = ledgerOf(seed, 3);
+        const span = 20 * DAY;
+        const shortcut = advanceUnwatched(before, span, cloneRng({ s: seed } as never), createEvents(seed, before.clock.nowMs), { chronicle: createChronicle() }, deck);
+        const direct = advanceUnwatched(
+          before,
+          span,
+          cloneRng({ s: seed } as never),
+          createEvents(seed, before.clock.nowMs),
+          { chronicle: createChronicle() },
+          deck,
+          Number.POSITIVE_INFINITY,
+        );
+        expect(direct.drawn, `seed ${seed}, ${label}`).toEqual(shortcut.drawn);
+        expect(direct.looks, `seed ${seed}, ${label}`).toBe(shortcut.looks);
+      }
+    }
   });
 });
 

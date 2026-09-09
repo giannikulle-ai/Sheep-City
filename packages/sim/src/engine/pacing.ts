@@ -84,9 +84,12 @@ export const PACE_TARGETS = {
    * at 5, 17.93 at the shipped 8, 18.83 at 12, 20.00 at 20 and 20.77 at 100** — a ceiling of about
    * two days in three however hard the engine pushes, because on the other days no small card's
    * conditions hold at all. Twelve of the fifteen cards are small, but a thirty-farm-day month never
-   * leaves one season (a season is 4,320 farm days), and in one season only about eight of the
-   * twelve can ever be eligible — the fireflies are summer nights, the crows summer and autumn days,
-   * the well a summer drought — several of them for one time band of four.
+   * leaves one season (a season is 4,320 farm days), and by season condition alone the twelve split
+   * unevenly — **spring 8, summer 11, autumn 10, winter 8** (counted card by card against
+   * `farm.json`) — the fireflies are summer nights, the crows summer and autumn days, the well a
+   * summer drought, several of them for one time band of four. A fresh world always starts in
+   * spring (`createSeason()`), which is why this sweep, run from a fresh world every seed, sees the
+   * lower figure of 8; a save already in summer has 11 to draw from over the same thirty days.
    *
    * **The lever is the deck, and it is the world lane's** — #102's own line, "the weights are
    * rebalanced by size for the world-time targets", plus PR #99's coverage work ("every season ×
@@ -132,9 +135,10 @@ export const PACING = {
    * traced most of the remaining gap to `farmerMarketWalk` (`engine/category.ts`), a feature the
    * owner asked for, rather than to the engine's decision logic, and added the `couldStartSomething`
    * early-out in `engine.ts`; Round 3 re-measured across three interleaved matrices and found the
-   * engine's own share +43.1 to +76.4 ms with a run-to-run spread as wide as the effect. The
-   * Foreman's round-3 ruling stands: **the catch-up bench line is advisory until #78 lands**, the
-   * market walk is not traded for the bench, and nothing here claims the branch is under or over it.
+   * engine's own share +43.1 to +76.4 ms across the three (this file's own history, commit 08224da,
+   * carries the matrix-by-matrix numbers that range is drawn from). The Foreman's round-3 ruling
+   * stands: **the catch-up bench line is advisory until #78 lands**, the market walk is not traded
+   * for the bench, and nothing here claims the branch is under or over it.
    */
   evalEverySimMinutes: 2,
 
@@ -302,8 +306,9 @@ export const NO_REPEAT_SIM_MINUTES = farmHoursToSimMinutes(PACING.noRepeatMoment
  * own multi-day gap then hold what is left apart. 8 is the setting measured to put the delivered
  * outcome as near the owner's target as this deck can reach without stacking two and three small
  * things onto the days that do have one (at 8: 22.6 small starts spread over 17.9 days of 30; at 12
- * it is 24.3 over 18.8, at 100 it is 29.7 over 20.6 — more crowding on the same days, not more
- * days). The big number *is* the plain reading: 3 in 30 farm days is 0.1 a day, and the big cards'
+ * it is 24.3 over 18.8, at 100 it is 31.9 over 20.8 — more crowding on the same days, not more
+ * days; re-measured with `PACE_TARGETS.smallDaysInFive`'s own sweep, same harness, same seeds).
+ * The big number *is* the plain reading: 3 in 30 farm days is 0.1 a day, and the big cards'
  * conditions are wide enough that it lands.
  */
 export const SIZE_PACING = {

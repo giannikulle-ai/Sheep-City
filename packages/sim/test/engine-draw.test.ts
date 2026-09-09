@@ -459,7 +459,9 @@ describe('seed 9, the plan’s own seed: the readable demonstration of a watched
     }
     expect(order.map((k) => k.split('@')[0])).toEqual(SEED_9_IDS);
     expect(kindOrder).toEqual(SEED_9_KINDS);
-    expect(kinds.size).toBeGreaterThanOrEqual(1);
+    // Two distinct kinds (dl-trick, then bubble) — SEED_9_IDS above already pins the exact sequence;
+    // this restates it as the kind-count the "never the same kind twice" rule below is about.
+    expect(kinds.size).toBe(2);
     // `PACING.noRepeatMomentKind`: never two of the same kind back to back. Nothing lifts it now,
     // so unlike the pre-#101 pin this holds on every seed, not only on the ones the relaxation
     // never reached — `engine-pace.test.ts` measures that over the population.

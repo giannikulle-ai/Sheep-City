@@ -26,7 +26,16 @@ export const REQUIRED_CARD_IDS = [
   "windfall", "stargazingNight", "flockHuddle", "farmerMeetsMerchant",
 ];
 export const REQUIRED_AUTHORED_IDS = ["dlBirthday", "cliffStorm", "firstSnowOfSeason"];
-const PLACEHOLDERS = ["dl", "lamb", "sheep", "farmer", "merchant", "coins", "flock"];
+// The placeholder vocabulary, read out of the deck schema's own `line` pattern rather than kept as
+// a fourth hand-written copy of it (#114). The schema is what `validate.mjs` enforces on the data;
+// the content package's `STORYBOOK_PLACEHOLDERS` and the sim's substitution table
+// (packages/sim/src/chronicle/storybook-line.ts) are pinned to each other by src/index.test.ts.
+const PLACEHOLDERS = (() => {
+  const pattern = json("schema/events.schema.json").$defs.storybook.properties.line.pattern;
+  const alternation = /\\\{\(([a-z|]+)\)\\\}/.exec(pattern);
+  assert.ok(alternation, "the schema's storybook line pattern no longer lists its placeholders");
+  return alternation[1].split("|");
+})();
 const WATCH_KINDS = ["bubble", "npc-arrival", "weather", "dl-trick", "lamb", "phase", "bird", "rabbit"];
 const COUNTED_KINDS = ["bubble", "npc-arrival", "weather", "dl-trick", "lamb"];
 const CONDITION_ON = [

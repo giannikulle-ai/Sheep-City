@@ -57,6 +57,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Drop the runner's Google Chrome apt source
+        # The runner image ships Google's Chrome repository in apt's sources; Playwright's
+        # `--with-deps` runs `apt-get update`, and when Google's mirror is mid-update the whole
+        # install fails with "Hash Sum mismatch" before any build or test runs (PR #121, 2026-09-09,
+        # twice). This project only ever uses Playwright's own Chromium, so the source is dead weight.
+        run: sudo rm -f /etc/apt/sources.list.d/google-chrome*.list /etc/apt/sources.list.d/google*.list
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - run: npm run e2e

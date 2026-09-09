@@ -817,10 +817,14 @@ describe('determinism and speed', () => {
     expect(ms).toBeLessThan(50);
   });
 
-  // Measured at about 60 ms on the build machine: 28 ms of ledger, the rest the 450 actor ticks
-  // of the remainder. The bound is loose so a slow CI runner does not fail it; the ticket's bound
+  // Measured at about 60 ms on the build machine before #101: 28 ms of ledger, the rest the 450
+  // actor ticks of the remainder. #101 (decision 16) draws small cards across the unwatched span,
+  // about 80,640 looks for a real week, and the same run measures about 150 ms locally and about
+  // 250 ms on GitHub's runner. The bound rose from 200 to 400 ms on 2026-09-09 by the owner's
+  // decision, the same way the bundle budget rose for the engine; making the unwatched draw cheaper
+  // is its own ticket. The bound is loose so a slow CI runner does not fail it; the ticket's bound
   // is the 7-day one above.
-  it('a real week away (3,360 sim-days of 180 s, plus a remainder) resolves under 200 ms', () => {
+  it('a real week away (3,360 sim-days of 180 s, plus a remainder) resolves under 400 ms', () => {
     const s = advance(createInitialState(7), 50);
     const week = 7 * 24 * 3600 * 1000 + 45_000;
     catchUp(s, week);
@@ -831,6 +835,6 @@ describe('determinism and speed', () => {
     expect(c.actorMs).toBe(45_000);
     expect(c.state.clock.dayCount).toBe(3360);
     expect(currentSeason(c.state.season)).toBe('spring'); // seven of the season's nine days
-    expect(ms).toBeLessThan(200);
+    expect(ms).toBeLessThan(400);
   });
 });

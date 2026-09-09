@@ -539,18 +539,23 @@ describe('parity: no deity intent moves the pin', () => {
   // (seed 71). A sixth move merges **#86 into #101**: `7c413f504c6d5a57` → `b0c813bd71455c38` (seed
   // 11) and `550c55dafd2ae243` → `b88ada428b712422` (seed 71) — the world lane's widened
   // `conditions` shift which card each seed's day draws (seed 71's own comment in
-  // `sheep-day.test.ts` traces its move to `windfall`'s dropped `coins` hook, decision 12). Not one
-  // of the six was anything deity-shaped, which is what this block exists to keep saying. The
-  // engine runs on both days here, as it does in those two files.
+  // `sheep-day.test.ts` traces its move to `windfall`'s dropped `coins` hook, decision 12).
+  // A seventh move is this branch's round 3, in one step and for two reasons — the small draw rate
+  // derived from the owner's four-in-five target (`SMALL_RATE_FOR_DAYS_IN_FIVE`, 1.25 rather than
+  // the bare 8) and storybook lines filled before they are told (#114), which changes the chronicle
+  // text the hash covers: `b0c813bd71455c38` → `575fc853e800bd3d` (seed 11) and
+  // `b88ada428b712422` → `db82b911ed86c1f8` (seed 71). Not one of the seven was anything
+  // deity-shaped, which is what this block exists to keep saying.
+  // The engine runs on both days here, as it does in those two files.
   it('luna-day.test.ts, seed 11: the end-of-day hash is unchanged', () => {
     let s = createInitialState(11);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('b0c813bd71455c38');
+    expect(hashState(s)).toBe('575fc853e800bd3d');
   });
 
   it('sheep-day.test.ts, seed 71: the end-of-day hash is unchanged', () => {
     let s = createInitialState(71);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('b88ada428b712422');
+    expect(hashState(s)).toBe('db82b911ed86c1f8');
   });
 });

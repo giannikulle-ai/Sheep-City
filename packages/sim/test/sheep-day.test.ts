@@ -238,16 +238,23 @@ describe('scripted sheep day', () => {
   // pins this day with the engine off, on its v6 view, to the hash from before #40.
   //
   // It moved a seventh time merging **#86 into #101**: `550c55dafd2ae243` → `b88ada428b712422`.
-  // `EVENTS` above and every sheep transition are byte-for-byte the same as the #101-alone pin — the
-  // world lane's widened `conditions` do not touch this scripted day's own card draw or NPC timing
-  // — the only thing that moved is the state itself, because `windfall`'s dropped `coins` hook
-  // (decision 12, see the coins assertion above) leaves `state.banks.coins` at 0 instead of 12.
+  // `EVENTS` above and every sheep transition were byte-for-byte the same as the #101-alone pin —
+  // the world lane's widened `conditions` do not touch this scripted day's own card draw or NPC
+  // timing — the only thing that moved was the state itself, because `windfall`'s dropped `coins`
+  // hook (decision 12, see the coins assertion above) leaves `state.banks.coins` at 0 instead of 12.  //
+  // It moved an eighth time in the same branch's round 3: `b88ada428b712422` →
+  // `db82b911ed86c1f8`, for two reasons at once and neither of them the sheep. The small draw rate
+  // is now derived from the owner's own target (four farm days in five, `PACE_TARGETS`'
+  // `smallDaysInFive` through `SMALL_RATE_FOR_DAYS_IN_FIVE`: 1.25 rather than the bare 8), which
+  // shifts this day's card draws; and every storybook line is filled before it is told (#114), so
+  // the chronicle entries inside the hashed state now read "Digital Luna" where they read "{dl}".
+  // `EVENTS` above and every sheep transition are byte-for-byte the same as the #86-merge pin.
   it('seed 71 twice gives the same day and the same hash', () => {
     const a = scriptedDay(71);
     const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('b88ada428b712422');
+    expect(hashState(a.state)).toBe('db82b911ed86c1f8');
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "the sheep's 91 transitions at seed 71 are
@@ -291,18 +298,23 @@ describe('scripted sheep day', () => {
   // thirty-farm-day month behind a four-farm-day gap. Asking "did he come today" of a card paced a
   // few times a month measures luck, not the pace.
   //
-  // **Re-measured a second time merging #86 into #101**, `advance()`-driven, thirty farm days each,
-  // no scripting: **20 of 30 seeds see at least one visit, median 1 visit, range 0 to 3** — down
-  // from the #101-alone measurement of 27 of 30 (the ten that now see none are seeds 2, 5, 6, 7, 8,
-  // 9, 14, 17, 21, 25). The world lane's own #86 merge narrowed `merchantCaravan`'s window from day
-  // or dusk to day-only (decision 12: a road event has no reason to keep the old trade window) —
-  // half the eligible clock the card competes for its share of the generator against every other
-  // `big` card in — so a rarer merchant here is the narrowed window doing exactly what its own
-  // `farm.json` comment says it does, not a regression.
+  // Re-measured twice on this branch, `advance()`-driven, thirty farm days each, no scripting.
+  // Merging #86 into #101 took it from the #101-alone 27 of 30 to **20 of 30**: the world lane's
+  // own #86 narrowed `merchantCaravan`'s window from day or dusk to day-only (decision 12: a road
+  // event has no reason to keep the old trade window) — half the eligible clock the card competes
+  // for its share of the generator against every other `big` card in. **Re-measured again at the
+  // small draw rate the owner's four-in-five target sets (1.25 rather than the bare 8): 19 of 30
+  // seeds see at least one visit, median 1, range 0 to 2**, the eleven that see none being seeds 2,
+  // 6, 8, 10, 14, 15, 20, 24, 25, 29 and 30. Both moves are the same story — a rarer merchant is
+  // the narrowed window and the quieter draw doing what their own comments say they do, not a
+  // regression.
   //
-  // The floor is 18 of 30, still under the measured 20, so several seeds may drift without failing
-  // and a collapse cannot pass; the failure message names the seeds that survived so the next
-  // reader can see which ones went rather than just that a count moved. Nothing yet implements plan
+  // The floor is 18 of 30 and the measurement is 19, which is **one seed of margin** — the
+  // thinnest it has been. It is deliberately not lowered (a floor that follows the measurement down
+  // is not a floor), and it is called out in PR #99's own weak spots: the next thing that narrows
+  // this card, or the next rate change, should re-measure here first. The failure message names the
+  // seeds that survived so the next reader can see which ones went rather than just that a count
+  // moved. Nothing yet implements plan
   // line 11's "the merchant comes when there is wool to sell" — his card's only conditions are "he
   // isn't here already" and "it's day" (`packages/content/events/farm.json`, the world lane's, day
   // and no longer dusk as of #86) — so which day he comes is still a coin flip, only a rarer one.
@@ -326,9 +338,9 @@ describe('scripted sheep day', () => {
     }
     expect(
       seen.length,
-      `the merchant came on ${seen.length} of seeds 1-30 over a farm month (measured 20 at this head, after #86 merged into #101; missed 2, 5, 6, 7, 8, 9, 14, 17, 21, 25). Seen on: ${seen.join(', ')}. Missed: ${misses.join(', ')}. Visits: ${visits.join(',')}`,
+      `the merchant came on ${seen.length} of seeds 1-30 over a farm month (measured 19 at this head, at the small rate the four-in-five target sets; missed 2, 6, 8, 10, 14, 15, 20, 24, 25, 29, 30). Seen on: ${seen.join(', ')}. Missed: ${misses.join(', ')}. Visits: ${visits.join(',')}`,
     ).toBeGreaterThanOrEqual(18);
-    expect(Math.max(...visits), `visits per farm month: ${visits.join(',')} (measured max 3)`).toBeLessThanOrEqual(8);
+    expect(Math.max(...visits), `visits per farm month: ${visits.join(',')} (measured max 2)`).toBeLessThanOrEqual(8);
   }, 900_000);
 });
 

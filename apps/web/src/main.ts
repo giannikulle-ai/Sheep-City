@@ -16,9 +16,10 @@ import {
   type BackgroundKey,
   type FarmView,
 } from '@sheepcliff/render';
-import { catchUp, chronicleBetween, SaveError, type SimState } from '@sheepcliff/sim';
+import { catchUp, chronicleBetween, realMsOf, SaveError, type SimState } from '@sheepcliff/sim';
 import type { SheepcliffApi } from './api';
 import { BACKGROUND_URLS, SHEET_META_URL, SHEET_URL } from './assets';
+import { birthdayReminder } from './birthday';
 import { buildFixture } from './fixture';
 import { Game, MAX_FRAME_MS } from './game';
 import { hitTest, type SpriteSizes } from './hit';
@@ -41,6 +42,9 @@ import { buildTray } from './tray';
 
 /** Frame length under the QA virtual clock. */
 const QA_FRAME_MS = 1000 / 60;
+
+/** The real-day key the birthday reminder was last shown on (#117), so it shows once per real day. */
+const BIRTHDAY_REMINDER_KEY = 'sheepcliff-birthday-reminder-shown';
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -489,6 +493,19 @@ async function main(): Promise<void> {
     drawStill();
     document.body.dataset['ready'] = '1';
     return;
+  }
+
+  // --- Digital Luna's birthday reminder (#117) -------------------------------------------
+  // A quiet tray line once per real day in the three days before December 15, and on the day
+  // itself. Reads the world's own real "now" (`realMsOf(sim.season)`), never the browser clock
+  // directly, so a scratch world pinned by the URL shows nothing unless `?realNow=` puts it in the
+  // window — see birthday.ts. The event itself is the sim's (#84); this only tells.
+  {
+    const r = birthdayReminder(realMsOf(game.sim.season), storage.get(BIRTHDAY_REMINDER_KEY));
+    if (r.line !== null) {
+      tray.say(r.line);
+      storage.set(BIRTHDAY_REMINDER_KEY, r.dayKey);
+    }
   }
 
   // --- absence: save when the tab hides, catch up when it comes back ------------------------

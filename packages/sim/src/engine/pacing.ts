@@ -70,33 +70,35 @@ export function msToSimMinutes(ms: number, periodSec: number): number {
  * time band that is a slice of the day. So the outcome is **measured**, in
  * `test/engine-pace.test.ts` (thirty seeds, thirty farm days, two independent rulers agreeing seed
  * for seed), and the measured figure sits beside each target here — including where it falls short.
+ * Both targets now reach the draw: the big one as a plain rate, the small one through the measured
+ * table under `SMALL_RATE_FOR_DAYS_IN_FIVE`. Neither is documentation any more.
  */
 export const PACE_TARGETS = {
   /**
-   * Small things: "a small thing most days" — the owner's own shape is **four farm days in five**.
+   * Small things: "a small thing most days" — the owner's own shape is **four farm days in five**,
+   * which is 24 farm days of 30.
+   *
+   * **This number now sets the rate.** Until #86's deck merged it was read by nothing in the draw —
+   * PR #99's round-2 Verifier measured that exactly: a pinned constant with no effect, while the
+   * engine's real small knob (`SIZE_PACING.small.perFarmDay`) sat at a bare 8 and the outcome went
+   * wherever the deck put it. With #86's widened conditions that was **30 farm days of 30, about
+   * two small things a day** — past the owner's own target, with nothing in the repo that could
+   * ever fail for being too busy. The rate is now looked up from this target
+   * (`SMALL_RATE_FOR_DAYS_IN_FIVE` below), measured point by measured point, and
+   * `test/engine-pace.test.ts` asserts the delivered outcome against it in **both** directions: too
+   * busy fails as loudly as too quiet.
    *
    * **Measured on this head** (seeds 1-30, thirty farm days each, watched throughout, two
    * independent rulers agreeing seed for seed — see `test/engine-pace.test.ts`): farm days with at
-   * least one small start, **median 18 of 30, mean 17.93, range 15 to 21**. That is three days in
-   * five, not four, and the shortfall is the deck's rather than the pacing's: pushing the rate does
-   * not close it. Swept in-process at this head (mutating `SIZE_PACING.small.perFarmDay`, control
-   * run reproduces the shipped row exactly), the same measurement reads **14.37 days at 3.2, 16.13
-   * at 5, 17.93 at the shipped 8, 18.83 at 12, 20.00 at 20 and 20.77 at 100** — a ceiling of about
-   * two days in three however hard the engine pushes, because on the other days no small card's
-   * conditions hold at all. Twelve of the fifteen cards are small, but a thirty-farm-day month never
-   * leaves one season (a season is 4,320 farm days), and by season condition alone the twelve split
-   * unevenly — **spring 8, summer 11, autumn 10, winter 8** (counted card by card against
-   * `farm.json`) — the fireflies are summer nights, the crows summer and autumn days, the well a
-   * summer drought, several of them for one time band of four. A fresh world always starts in
-   * spring (`createSeason()`), which is why this sweep, run from a fresh world every seed, sees the
-   * lower figure of 8; a save already in summer has 11 to draw from over the same thirty days.
+   * least one small start, **median 24 of 30, mean 23.90, range 21 to 28**, over **31 small starts**
+   * in the month (mean 31.47, range 28 to 35). Most farm days hold one thing, some hold two, and
+   * **183 of the 900 seed-days hold nothing at all** — one day in five with nothing on it, which is
+   * decision 16's "a quiet farm day is allowed" rather than a gap to close.
    *
-   * **The lever is the deck, and it is the world lane's** — #102's own line, "the weights are
-   * rebalanced by size for the world-time targets", plus PR #99's coverage work ("every season ×
-   * time band has at least two small cards that can draw"). This PR deliberately does not touch a
-   * weight or a condition in `farm.json` — it adds `size` and nothing else, so #99 merges cleanly
-   * behind it. Until that lands, four days in five is not a number this deck can deliver, and
-   * saying so is better than quietly re-pointing the target at what it can.
+   * The shape of the deck is still what decides how much rate that costs: a card is only eligible
+   * while its own conditions hold, and the twelve small cards split unevenly by season (spring 8,
+   * summer 11, autumn 10, winter 8, counted against `farm.json`), so the same rate reads busier in
+   * summer than in spring. That is why the target is met by measurement and not by arithmetic.
    */
   smallDaysInFive: 4,
 
@@ -104,9 +106,11 @@ export const PACE_TARGETS = {
    * Big things: "a big thing a few a month" — about **three in thirty farm days**.
    *
    * **Measured on this head**, same thirty seeds and thirty farm days, watched throughout: big
-   * starts per thirty farm days, **median 2, mean 2.30, range 0 to 5**; between one and five on 28
-   * of 30 seeds, and zero on two of them (seeds 8 and 14 — nothing is forced, and a quiet month is
-   * allowed). This one lands about where the owner asked.
+   * starts per thirty farm days, **median 2, mean 1.77, range 0 to 3**; between one and five on 27
+   * of 30 seeds, and zero on three of them (seeds 6, 8 and 14 — nothing is forced, and a quiet
+   * month is allowed). This one lands about where the owner asked. It moved a little under #86
+   * (which was median 2, mean 2.30, range 0 to 5 on #111 alone) because `merchantCaravan`, one of
+   * the three big cards, narrowed from day-or-dusk to day-only; the small rate does not touch it.
    *
    * Zero on an unwatched span, always, by construction and not by luck — see
    * `PACING.bigDrawsWhileWatchedOnly`.
@@ -205,9 +209,12 @@ export const PACING = {
    * already allow. It exists because retiring the relaxation without it would have made the lockout
    * *permanent*: `lastMomentKind` is never cleared, six of the twelve small cards are `dl-trick`,
    * and in a season where only `dl-trick` cards are eligible the first one to draw would have shut
-   * the rest out for good. Measured at this head, the bound is worth about half a day of the thirty
-   * (17.5 farm days with a small start without it, 17.9 with it): it is a correctness fix, not a
-   * pacing lever, and it is reported as such.
+   * the rest out for good. Measured when it landed — at the engine's then-rate of 8, on the deck as
+   * it stood before #86 — the bound was worth about half a day of the thirty (17.5 farm days with a
+   * small start without it, 17.9 with it). **That pair of numbers has not been re-measured at the
+   * shipped rate and is left labelled rather than restated**, because the bound is a correctness
+   * fix and not a pacing lever: what it buys is that a `dl-trick`-only season is not locked out
+   * for good, and that does not change with the rate.
    */
   noRepeatMomentKindFarmHours: 12,
 
@@ -255,13 +262,17 @@ export const PACING = {
    * rolling before it reads anything (see `unwatchedCeiling`), so a look that cannot land costs one
    * number from the generator and no predicate reads at all.
    *
-   * **The honest caveat.** A farm hour is a big enough slice that `maxDrawChance` binds: a lone
-   * ordinary card would want 0.33 a look at the small rate and is held to 0.2, so the unwatched path
-   * runs at about three fifths of its nominal rate when a card is eligible for a long stretch. The
-   * measured outcome is still better than watched play manages — a small thing on 4.93 of 7 farm
-   * days against 17.93 of 30 — because an unwatched look walks every band of every day while a
-   * watched world's actors are elsewhere. Worth revisiting with the host's wall-to-sim mapping (the
-   * plan's "about one real day when away", which is not what the client does today).
+   * **The caveat that used to live here has gone.** A farm hour is a big enough slice that
+   * `maxDrawChance` used to bind: at the engine's old rate of 8 a lone ordinary card wanted 0.33 a
+   * look and was held to 0.2, so the unwatched path ran at about three fifths of its nominal rate
+   * wherever a card was eligible for a long stretch. At the rate the owner's four-in-five target now
+   * sets (1.25) the same card wants 0.052, a quarter of the cap, so the unwatched path runs at
+   * exactly its nominal rate and only a fat eligible set is still clipped —
+   * `test/engine-draw.test.ts` pins that arithmetic both ways round. The measured outcome is still
+   * better than watched play manages — a small thing on 6.07 of 7 farm days against 23.90 of 30 —
+   * because an unwatched look walks every band of every day while a watched world's actors are
+   * elsewhere. Worth revisiting with the host's wall-to-sim mapping (the plan's "about one real day
+   * when away", which is not what the client does today).
    */
   unwatchedLookFarmHours: 1,
 } as const;
@@ -292,27 +303,62 @@ export const UNWATCHED_LOOK_SIM_MINUTES = farmHoursToSimMinutes(PACING.unwatched
 export const NO_REPEAT_SIM_MINUTES = farmHoursToSimMinutes(PACING.noRepeatMomentKindFarmHours);
 
 /**
+ * What the owner's small target costs in engine rate, on **this deck**, measured — not derived.
+ *
+ * `drawChance` is linear in the eligible weight, so the rate maps cleanly onto *how often a draw
+ * lands while a small card is eligible*. It does not map cleanly onto **how many farm days hold
+ * something**, which is what the owner asked for: that depends on how much of each day any small
+ * card is eligible at all, which is the deck's shape and not a formula. So each target here carries
+ * the rate that was measured to deliver it, with the measurement beside it (seeds 1-30, thirty farm
+ * days each, watched throughout — the harness in `test/engine-pace.test.ts`, whose control run at
+ * the shipped rate reproduces the shipped row exactly).
+ *
+ * Move `PACE_TARGETS.smallDaysInFive` and the rate moves with it. A target with no measured point
+ * here will not compile, which is the honest failure: it needs somebody to measure the deck at that
+ * rate, not an interpolation between two points that were.
+ */
+const SMALL_RATE_FOR_DAYS_IN_FIVE = {
+  /**
+   * Three days in five. Measured: median 18 of 30 days (mean 18.37, range 15 to 22), 22 small
+   * starts a month (mean 21.67), 349 of 900 seed-days quiet. This is, near enough, the pace trunk
+   * had before #86's conditions widened (18 of 30 days, 23 starts) — the deck got wider, so the
+   * same feel now costs a lower rate.
+   */
+  3: 0.6,
+  /**
+   * Four days in five, the owner's own shape and what this deck ships at. Measured: **median 24 of
+   * 30 days** (mean 23.90, range 21 to 28), **31 small starts** a month (mean 31.47, range 28 to
+   * 35), 183 of 900 seed-days quiet.
+   */
+  4: 1.25,
+  /**
+   * Five days in five — something every single day. Measured: median 30 of 30 days (mean 29.57,
+   * range 28 to 30), 57 small starts a month (mean 56.90), 13 of 900 seed-days quiet. This is what
+   * the bare 8 the engine shipped with delivered once #86's conditions widened; it is kept here as
+   * the measured point it is, so the cost of "every day" is visible rather than implied.
+   */
+  5: 8,
+} as const;
+
+/**
  * The two sizes' pacing, side by side, so a caller asks the size for its numbers rather than
  * branching on it.
  *
  * `perFarmDay` is the engine's knob: how often a draw of this size lands per farm day **of eligible
- * time** at `REFERENCE_WEIGHT`. It is not the outcome — see `PACE_TARGETS` for the owner's targets
- * and what this deck actually delivers against them. `gapSimMinutes` is the global start-to-start
- * gap between two draws of this size, derived from the farm-day and farm-hour constants above.
+ * time** at `REFERENCE_WEIGHT`. Neither number is a free parameter any more — both come from
+ * `PACE_TARGETS`, the small one through the measured table above and the big one through the plain
+ * arithmetic its own conditions allow (3 in 30 farm days is 0.1 a day, and the big cards are
+ * eligible widely enough that it lands). `gapSimMinutes` is the global start-to-start gap between
+ * two draws of this size, derived from the farm-day and farm-hour constants above.
  *
- * Why the small number is 8 and not 0.8. If a small card were eligible all day, 0.8 would be
- * exactly "a small thing on four days in five". No card in this deck is: the widest are eligible for
- * one time band of four, in one weather, in some seasons, and the six-farm-hour gap and each card's
- * own multi-day gap then hold what is left apart. 8 is the setting measured to put the delivered
- * outcome as near the owner's target as this deck can reach without stacking two and three small
- * things onto the days that do have one (at 8: 22.6 small starts spread over 17.9 days of 30; at 12
- * it is 24.3 over 18.8, at 100 it is 31.9 over 20.8 — more crowding on the same days, not more
- * days; re-measured with `PACE_TARGETS.smallDaysInFive`'s own sweep, same harness, same seeds).
- * The big number *is* the plain reading: 3 in 30 farm days is 0.1 a day, and the big cards'
- * conditions are wide enough that it lands.
+ * **Why the rate and not the gap.** Both reach four days in five: the gap gets there at 28 farm
+ * hours (measured by PR #99's round-2 Verifier), but a gap longer than a farm day means every seed
+ * lands on exactly 24 days with exactly one thing on each — a metronome. The rate keeps the
+ * unevenness: most days one, some days two, about one day in five with nothing. So the gap
+ * constants above are left where they are and the rate is the lever.
  */
 export const SIZE_PACING = {
-  small: { perFarmDay: 8, gapSimMinutes: SMALL_GAP_SIM_MINUTES },
+  small: { perFarmDay: SMALL_RATE_FOR_DAYS_IN_FIVE[PACE_TARGETS.smallDaysInFive], gapSimMinutes: SMALL_GAP_SIM_MINUTES },
   big: { perFarmDay: PACE_TARGETS.bigPerThirtyFarmDays / 30, gapSimMinutes: BIG_GAP_SIM_MINUTES },
 } as const;
 

@@ -672,13 +672,19 @@ describe('the catch-up policy', () => {
     expect(catchUp(s, 500, { minMs: 100 }).mode).toBe('actors');
   });
 
-  it('a gap under a day ticks the actors through it, as step() would', () => {
+  it('a gap under a day ticks the actors through it, as an unwatched step() would', () => {
+    // Re-pinned for #101: this is `step(..., { watched: false })`, not a bare `step`. A catch-up is
+    // by definition time nobody watched, and the actor branch is one of the two unwatched paths
+    // (the owner's decision, plan 16: "the big ones should not happen when I am not watching"), so
+    // it runs the same live code with every big card and big authored event held back. Against a
+    // bare `step` the two hashes differ, which is exactly the point of the change; the assertion
+    // below is the same equality it always was, against the call `catchUp` actually makes.
     const s = advance(createInitialState(7), 50);
     const c = catchUp(s, DAY - 100);
     expect(c.mode).toBe('actors');
     expect(c.actorMs).toBe(DAY - 100);
     expect(c.ledgerDays).toBe(0);
-    expect(hashState(c.state)).toBe(hashState(step(s, [], DAY - 100)));
+    expect(hashState(c.state)).toBe(hashState(step(s, [], DAY - 100, { watched: false })));
     expect(c.after).toEqual(summarise(c.state));
     expect(c.diff.days).toBe(1);
     // The snapshot on the state is untouched: the Ledger did not run.
@@ -811,10 +817,14 @@ describe('determinism and speed', () => {
     expect(ms).toBeLessThan(50);
   });
 
-  // Measured at about 60 ms on the build machine: 28 ms of ledger, the rest the 450 actor ticks
-  // of the remainder. The bound is loose so a slow CI runner does not fail it; the ticket's bound
+  // Measured at about 60 ms on the build machine before #101: 28 ms of ledger, the rest the 450
+  // actor ticks of the remainder. #101 (decision 16) draws small cards across the unwatched span,
+  // about 80,640 looks for a real week, and the same run measures about 150 ms locally and about
+  // 250 ms on GitHub's runner. The bound rose from 200 to 400 ms on 2026-09-09 by the owner's
+  // decision, the same way the bundle budget rose for the engine; making the unwatched draw cheaper
+  // is its own ticket. The bound is loose so a slow CI runner does not fail it; the ticket's bound
   // is the 7-day one above.
-  it('a real week away (3,360 sim-days of 180 s, plus a remainder) resolves under 200 ms', () => {
+  it('a real week away (3,360 sim-days of 180 s, plus a remainder) resolves under 400 ms', () => {
     const s = advance(createInitialState(7), 50);
     const week = 7 * 24 * 3600 * 1000 + 45_000;
     catchUp(s, week);
@@ -825,6 +835,6 @@ describe('determinism and speed', () => {
     expect(c.actorMs).toBe(45_000);
     expect(c.state.clock.dayCount).toBe(3360);
     expect(currentSeason(c.state.season)).toBe('spring'); // seven of the season's nine days
-    expect(ms).toBeLessThan(200);
+    expect(ms).toBeLessThan(400);
   });
 });

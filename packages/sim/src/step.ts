@@ -14,6 +14,13 @@ export interface StepOptions {
    * host that wants to spread a long catch-up over several frames can. Default: no bound.
    */
   maxTicks?: number;
+  /**
+   * Whether anyone could be seeing these ticks. True (the default) is the live path — the client's
+   * frame loop runs only while the tab is visible — and is what lets a **big** event start. False is
+   * `catchUp`'s actor branch, the one place `step` runs time nobody watched; every big card and big
+   * authored event is held back for it (the owner's decision, plan 16). See `engine/engine.ts`.
+   */
+  watched?: boolean;
 }
 
 /**
@@ -24,6 +31,7 @@ export function step(state: SimState, intents: readonly Intent[] = [], dtMs = 0,
   if (!Number.isFinite(dtMs) || dtMs < 0) throw new Error(`step: dtMs must be a finite non-negative number, got ${dtMs}`);
   let acc = state.accumulatorMs + dtMs;
   const limit = options.maxTicks ?? Infinity;
+  const watched = options.watched ?? true;
   if (acc < TICK_MS || limit <= 0) {
     if (!intents.length && acc === state.accumulatorMs) return state;
     return { ...state, pendingIntents: [...state.pendingIntents, ...intents], accumulatorMs: acc };
@@ -34,7 +42,7 @@ export function step(state: SimState, intents: readonly Intent[] = [], dtMs = 0,
   let ran = 0;
   while (acc >= TICK_MS && ran < limit) {
     acc -= TICK_MS;
-    tickInPlace(s);
+    tickInPlace(s, watched);
     ran++;
   }
   s.accumulatorMs = acc;

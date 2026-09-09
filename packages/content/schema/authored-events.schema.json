@@ -96,6 +96,7 @@
       "properties": {
         "id": { "$ref": "_defs.schema.json#/$defs/id" },
         "title": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "size": { "$ref": "events.schema.json#/$defs/size" },
         "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
         "trigger": { "$ref": "#/$defs/trigger" },
         "variables": { "$ref": "#/$defs/variables" },
@@ -107,7 +108,7 @@
         "moment": { "$ref": "events.schema.json#/$defs/moment" },
         "beat": { "$ref": "events.schema.json#/$defs/beat" }
       },
-      "required": ["id", "title", "comment", "trigger", "variables", "variablesComment", "priorityOver", "durationSimMinutes", "hooks", "storybook", "moment", "beat"],
+      "required": ["id", "title", "size", "comment", "trigger", "variables", "variablesComment", "priorityOver", "durationSimMinutes", "hooks", "storybook", "moment", "beat"],
       "additionalProperties": false
     }
   }

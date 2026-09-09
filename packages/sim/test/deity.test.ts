@@ -530,20 +530,23 @@ describe('parity: no deity intent moves the pin', () => {
   // The pins below are the current (v7, events-included — #40) full-state hashes, the same ones
   // luna-day.test.ts and sheep-day.test.ts carry for this exact seed and script: they moved three
   // times since, for the chronicle schema bump, then for the event engine, then again in Round 2
-  // (#82) when the `warmupSimMinutes` fix changed which cards these two days draw, and a fourth
-  // time in Round 3, when deferring `dlBirthday`'s `realDate` trigger to #84 took the birthday out
-  // of the start of every world and shifted both days' draws again (see each file's own comment) —
-  // not for anything deity-shaped. The engine runs on both days here, as it does in those two
-  // files.
+  // (#82) when the `warmupSimMinutes` fix changed which cards these two days draw; a fourth time in
+  // Round 3, when deferring `dlBirthday`'s `realDate` trigger to #84 took the birthday out of the
+  // start of every world; and a fifth in **#101**, where the card draw became two decisions a look
+  // (a small one and a big one, each with its own gap and chance) and the engine's generator is
+  // consumed differently from the first look onwards — see each file's own comment. That #101 move
+  // is `b3da5ab0c4e981ed` → `7c413f504c6d5a57` (seed 11) and `24517bbf7e9a89d5` → `550c55dafd2ae243`
+  // (seed 71). Not one of the five was anything deity-shaped, which is what this block exists to
+  // keep saying. The engine runs on both days here, as it does in those two files.
   it('luna-day.test.ts, seed 11: the end-of-day hash is unchanged', () => {
     let s = createInitialState(11);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('b3da5ab0c4e981ed');
+    expect(hashState(s)).toBe('7c413f504c6d5a57');
   });
 
   it('sheep-day.test.ts, seed 71: the end-of-day hash is unchanged', () => {
     let s = createInitialState(71);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('24517bbf7e9a89d5');
+    expect(hashState(s)).toBe('550c55dafd2ae243');
   });
 });

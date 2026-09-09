@@ -6,3 +6,4 @@ export { advanceLedger, GRAZE_SHARE, WALK_IN_MS, WALK_OUT_MS } from './advance';
 export { respawn } from './respawn';
 export { diffLedger, type LedgerDiff, type LedgerChange } from './diff';
 export { catchUp, type CatchUp, type CatchUpMode, type CatchUpOptions } from './catch-up';
+export { advanceUnwatched, type UnwatchedDraw, type UnwatchedRun } from './unwatched';

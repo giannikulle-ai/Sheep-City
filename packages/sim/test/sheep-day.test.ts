@@ -17,7 +17,7 @@
 import { describe, expect, it } from 'vitest';
 import { hashState } from '../src/hash';
 import { createInitialState, type SimState } from '../src/state';
-import { tick } from '../src/tick';
+import { advance, tick } from '../src/tick';
 import { describeSheep } from './sheep-helpers';
 
 const TICKS_PER_DAY = 1800;
@@ -125,21 +125,24 @@ const EVENTS = [
   // in Round 2, where the corrected 480-sim-minute warm-up ate past most of his `timeOfDay in
   // [day, dusk]` window and `windfall` drew instead at tick 1558.
   //
-  // Round 3 moves it once more, and this time not because a pacing number changed. Trunk's #83 put
-  // Digital Luna's birthday on a real calendar date (December 15), and this engine defers that
-  // trigger to #84 (`engine/deck.ts`, `engine/engine.ts`), so `dlBirthday` no longer starts in the
-  // first tenth of a second of every world. That start used to take a concurrency slot and set
-  // `lastStartMs`, which held the first card draw back; without it every seed's draw stream shifts,
-  // and on this day the merchant is back — one visit, tick 600 to 1001, a `merchantCaravan` draw
-  // rather than the prototype's fixed 45-second timer. Every other line, and every sheep transition
-  // above, is exactly what this day was before the engine existed.
+  // Round 3 moved it once more, and not because a pacing number changed: trunk's #83 put Digital
+  // Luna's birthday on a real calendar date (December 15) and this engine defers that trigger to
+  // #84, so `dlBirthday` no longer starts in the first tenth of a second of every world, every
+  // seed's draw stream shifted, and the merchant came back for one visit at tick 600 to 1001.
+  //
+  // **#101 takes him out again, and this time it is the owner's own decision rather than a pacing
+  // number.** `merchantCaravan` is a **big** card now (plan decision 16: the caravan is one of the
+  // set pieces), so it is drawn at about three a farm *month* and held to a four-farm-day gap — a
+  // single farm day is not where a big thing usually lands. Measured over the same thirty seeds and
+  // thirty farm days, the merchant still comes: **27 of 30 seeds see at least one visit a farm
+  // month, median 1, range 0 to 3** (the block at the bottom of this file pins that). What is gone
+  // is his showing up on day one, and nothing else on this day moved: every sheep transition above,
+  // and every other line here, is exactly what this day was before the engine existed.
   '165 bird lands',
   '225 bird leaves',
   '361 farmer true',
   '596 bird lands',
-  '600 merchant true',
   '666 bird leaves',
-  '1001 merchant false',
   '1103 bird lands',
   '1170 bird leaves',
   '1226 farmer false',
@@ -203,13 +206,15 @@ describe('scripted sheep day', () => {
     expect(transitions).toEqual(EXPECTED);
     expect(state.sheep.map((q) => q.name)).toEqual(['Clover', 'Daisy', 'Biscuit', 'Pepper', 'Maple', 'Willow']);
     expect(state.banks.wool).toBe(5); // the farmer's afternoon shearing; nothing sells it this day
-    // Nothing pays the farm on this day. The merchant's card only spawns him (his own trade pays,
-    // `npcs.ts`), and he arrives at tick 600 — hours before the farmer's afternoon shearing puts
-    // the five fleeces in the bank — so he finds nothing to buy and leaves empty-handed. That is
-    // plan line 11's "the merchant comes when there is wool to sell" not being implemented yet,
-    // visible in a number: his card's only conditions are still "he isn't here already" and "it's
-    // day or dusk" (`packages/content/events/farm.json`, the world lane's).
-    expect(state.banks.coins).toBe(0);
+    // Twelve coins, and no merchant involved: with `merchantCaravan` a **big** card as of #101, the
+    // draw this day lands on is `windfall` (a small one), whose start hook puts twelve coins
+    // straight in the bank. It used to be 0 here — the merchant came at tick 600, hours before the
+    // farmer's afternoon shearing put five fleeces in the bank, so he found nothing to buy and left
+    // empty-handed. Both numbers say the same thing about the same unfinished feature (plan line
+    // 11's "the merchant comes when there is wool to sell" is not implemented, and his card's only
+    // conditions are still "he isn't here already" and "it's day or dusk"); this one just says it
+    // through the card that drew instead of him.
+    expect(state.banks.coins).toBe(12);
     // The shower is still on at midnight: the walk to the barn left mud, and there is no snow to print.
     expect(state.ground.prints).toEqual([]);
     expect(state.ground.mud.length).toBe(MUD_AT_DAY_END);
@@ -224,15 +229,18 @@ describe('scripted sheep day', () => {
   // slice is on the state. It moved a fourth time in Round 2 (#82), for the warm-up fix, and a
   // fifth in Round 3, because deferring `dlBirthday`'s new `realDate` trigger to #84 takes the
   // birthday out of the first tenth of a second of every world and shifts every seed's draw stream
-  // with it (see `EVENTS`'s own comment above). The *sheep* list above did not move by a single
-  // line on any of the five; test/engine-parity.test.ts pins this day with the engine off, on its
-  // v6 view, to the hash from before #40.
+  // with it (see `EVENTS`'s own comment above). It moved a sixth time in **#101**, where the draw
+  // became two decisions a look instead of one (a small one and a big one, each with its own gap
+  // and its own chance), so the engine's generator is consumed differently from the first look
+  // onwards and every seed's card draws shift with it: `24517bbf7e9a89d5` → `550c55dafd2ae243`. The
+  // *sheep* list above did not move by a single line on any of the six; test/engine-parity.test.ts
+  // pins this day with the engine off, on its v6 view, to the hash from before #40.
   it('seed 71 twice gives the same day and the same hash', () => {
     const a = scriptedDay(71);
     const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('24517bbf7e9a89d5');
+    expect(hashState(a.state)).toBe('550c55dafd2ae243');
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "the sheep's 91 transitions at seed 71 are
@@ -269,36 +277,45 @@ describe('scripted sheep day', () => {
     }
   });
 
-  // How often the merchant comes at all on a single sim-day, measured rather than assumed. Round 1's
-  // density retune cut his rate; Round 2's warm-up fix cut it further, to 5 of 30 seeds, because
-  // `merchantCaravan` only draws while `timeOfDay in [day, dusk]` (`t < .52`, tick 936 of 1,800) and
-  // the corrected 480-sim-minute warm-up eats until tick 600, leaving him 336 ticks of unrelaxed
-  // window. Round 3 gives a little of that back — deferring `dlBirthday` to #84 frees the
-  // concurrency slot and the `lastStartMs` the birthday used to take at tick 0, so the first card of
-  // a world can land earlier. Re-measured on this head, `tick()`-driven, one sim-day each, no
-  // scripting: **6 of 30** (seeds 3, 14, 16, 17, 22, 28).
+  // How often the merchant comes at all, measured rather than assumed. This used to be a
+  // single-sim-day count (6 of 30 seeds at the last head) and **#101 restates it over a farm
+  // month**, because a day is no longer the right window to ask the question in: the owner made
+  // `merchantCaravan` a **big** card (plan decision 16), and big things are drawn at about three a
+  // thirty-farm-day month behind a four-farm-day gap. Asking "did he come today" of a card paced a
+  // few times a month measures luck, not the pace. Measured on this head, `advance()`-driven,
+  // thirty farm days each, no scripting: **27 of 30 seeds see at least one visit, median 1 visit,
+  // range 0 to 3** (the three that see none are seeds 4, 8 and 14).
   //
-  // The floor is 4, not 3: half of the measured 6 is 3, and a bar of 3 would still pass after a
-  // halving. At 4 any halving fails, and the failure message names the seeds that survived so the
-  // next reader can see which one went rather than just that a count moved. This is a real, thin
-  // number and it is not padded: nothing yet implements plan line 11's "the merchant comes when
-  // there is wool to sell" — his card's only conditions are "he isn't here already" and "it's day
-  // or dusk" (`packages/content/events/farm.json`, the world lane's) — so which day he comes is a
-  // coin flip, and six days in thirty have any chance to sell.
-  it('the merchant still shows up on a single day, just rarely, seeds 1-30', () => {
+  // The floor is 18 of 30, well under the measured 27, so several seeds may drift without failing
+  // and a collapse cannot pass; the failure message names the seeds that survived so the next
+  // reader can see which ones went rather than just that a count moved. Nothing yet implements plan
+  // line 11's "the merchant comes when there is wool to sell" — his card's only conditions are "he
+  // isn't here already" and "it's day or dusk" (`packages/content/events/farm.json`, the world
+  // lane's) — so which day he comes is still a coin flip, only a rarer one.
+  it('the merchant still shows up over a farm month, just rarely, seeds 1-30', () => {
     const seen: number[] = [];
     const misses: number[] = [];
+    const visits: number[] = [];
     for (let seed = 1; seed <= 30; seed++) {
-      const { events } = scriptedDay(seed);
-      if (events.some((e) => /merchant true/.test(e))) seen.push(seed);
+      let s = createInitialState(seed);
+      let n = 0;
+      let had = s.npcs.merchant !== null;
+      for (let i = 0; i < TICKS_PER_DAY * 30; i++) {
+        s = advance(s, 1);
+        const now = s.npcs.merchant !== null;
+        if (now && !had) n++;
+        had = now;
+      }
+      visits.push(n);
+      if (n > 0) seen.push(seed);
       else misses.push(seed);
     }
-    const seedsWithMerchant = seen.length;
     expect(
-      seedsWithMerchant,
-      `the merchant came on ${seedsWithMerchant} of seeds 1-30 (measured 6 at this head: seeds 3, 14, 16, 17, 22, 28). Seen on: ${seen.join(', ')}. Missed: ${misses.join(', ')}`,
-    ).toBeGreaterThanOrEqual(4);
-  });
+      seen.length,
+      `the merchant came on ${seen.length} of seeds 1-30 over a farm month (measured 27 at this head; missed 4, 8, 14). Seen on: ${seen.join(', ')}. Missed: ${misses.join(', ')}. Visits: ${visits.join(',')}`,
+    ).toBeGreaterThanOrEqual(18);
+    expect(Math.max(...visits), `visits per farm month: ${visits.join(',')} (measured max 3)`).toBeLessThanOrEqual(8);
+  }, 900_000);
 });
 
 /** Mud patches on the ground at the end of seed 71's day: the shower's walk to the barn, none faded yet. */

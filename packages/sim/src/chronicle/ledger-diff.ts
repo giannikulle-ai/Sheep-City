@@ -15,9 +15,10 @@ function plural(n: number, word: string): string {
 }
 
 /**
- * `tell` one entry per number `diff` moved: births, deaths, grown-up lambs, wool banked, coins
- * (earned or spent), the weather turning, the season turning, and each upgrade bought — the eight
- * kinds of change `diffLedger` computes. A number that did not move gets no entry: a quiet week is
+ * `tell` one entry per number `diff` moved: births, deaths, grown-up lambs, wool banked, the farm's
+ * coins (earned or spent), the settlement's coins (#86: what the market paid for the wool the
+ * farmer walked out at dawn), the weather turning, the season turning, and each upgrade bought —
+ * the kinds of change `diffLedger` computes. A number that did not move gets no entry: a quiet week is
  * a quiet week, not a chronicle full of zeros. `atMs` is `diff.after`'s clock, the moment the gap
  * ends. Returns the entries `tell` created, in the order above.
  */
@@ -34,6 +35,12 @@ export function tellLedgerDiff(state: Pick<SimState, 'chronicle'>, diff: LedgerD
   if (diff.wool > 0) say(`${plural(diff.wool, 'wool')} banked`, 'wool', { wool: diff.wool });
   if (diff.coins > 0) say(`${diff.coins} coins earned`, 'coins', { coins: diff.coins });
   else if (diff.coins < 0) say(`${-diff.coins} coins spent`, 'coins', { coins: diff.coins });
+  // The settlement's own money (#86). One line for the gap, not one per dawn: the Ledger sells the
+  // bank at every market walk it schedules, which over a real week away is thousands of sales, and
+  // a chronicle of thousands of identical lines is not a storybook. The watched path tells each
+  // sale as it happens, because there a sale is a thing the player could have stood and watched.
+  if (diff.settlementCoins > 0) say(`${diff.settlementCoins} coins earned at the market`, 'coins', { settlementCoins: diff.settlementCoins });
+  else if (diff.settlementCoins < 0) say(`${-diff.settlementCoins} coins spent at the market`, 'coins', { settlementCoins: diff.settlementCoins });
   if (diff.weather.changed) say(`the weather turned ${diff.weather.to}`, `weather-${diff.weather.to}`, { weather: diff.weather.to });
   if (diff.season.changed) say(`the season turned ${diff.season.to}`, `season-${diff.season.to}`, { season: diff.season.to });
   for (const upgrade of diff.upgrades) say(`the farm bought the ${upgrade}`, 'upgrade', { upgrade });

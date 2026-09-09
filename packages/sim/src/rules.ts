@@ -160,6 +160,12 @@ export const RULES = {
     shearTagMs: 1500,
     troughHeartMs: 800,
     patHeartMs: 1600,
+    /**
+     * PARITY ONLY since #86: the merchant's coin bubble. He buys nothing now (plan decision 12), so
+     * nothing in the sim raises it. Kept here and in packages/content/farm/npcs.json because
+     * test/rules-parity.test.ts asserts this block against the prototype's own literals leaf for
+     * leaf, and because the number is the right one if a sale ever gets a bubble again.
+     */
     coinBubbleMs: 2500,
   },
 } as const;

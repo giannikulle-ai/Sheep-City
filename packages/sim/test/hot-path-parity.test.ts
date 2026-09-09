@@ -70,12 +70,19 @@ const TICKS = 6000;
 
 const BEFORE: readonly { seed: number; sheep: number; hash: string }[] = [
   // All six moved in #84 (the eighth move above), for the schema only: `season` gained two fields.
-  { seed: 6, sheep: 5, hash: '8b4c7ff08f37275e' },
-  { seed: 6, sheep: 40, hash: 'd637ce8f1cf1d3ff' },
-  { seed: 7, sheep: 5, hash: 'de7c876e352c18ce' },
-  { seed: 7, sheep: 40, hash: '8d66f001c3c251a0' },
-  { seed: 11, sheep: 5, hash: 'f35b857536c259a8' },
-  { seed: 11, sheep: 40, hash: 'e6ff3ff1b1edd3b1' },
+  // **Moved a ninth time in #86** (the sim half of "no transaction on the farm", plan decision 12),
+  // for all six: the merchant stopped buying the wool bank when he stops at the gate. These worlds
+  // run with the engine off, where the only thing that ever sold the bank was his 45-second timer
+  // and there is no dawn market walk to replace it, so the wool simply banks up and no coin is ever
+  // earned. Each line carries its own pre-#86 value. The one-sim-day worlds elsewhere (1,800 ticks,
+  // test/engine-category.test.ts and the v4/v5/v6 views) did **not** move: at 45 s the bank is
+  // still empty, so his visit moved nothing there before this ticket either.
+  { seed: 6, sheep: 5, hash: '68404d03511174b4' }, // moved in #86: the caravan stopped buying the wool bank; was 8b4c7ff08f37275e
+  { seed: 6, sheep: 40, hash: '9bc0115dfb5e251b' }, // moved in #86: the caravan stopped buying the wool bank; was d637ce8f1cf1d3ff
+  { seed: 7, sheep: 5, hash: '67604959187a3213' }, // moved in #86: the caravan stopped buying the wool bank; was de7c876e352c18ce
+  { seed: 7, sheep: 40, hash: '17e5d609b817fb49' }, // moved in #86: the caravan stopped buying the wool bank; was 8d66f001c3c251a0
+  { seed: 11, sheep: 5, hash: 'c4e83cd70257a118' }, // moved in #86: the caravan stopped buying the wool bank; was f35b857536c259a8
+  { seed: 11, sheep: 40, hash: '97950c3f9edbc3dd' }, // moved in #86: the caravan stopped buying the wool bank; was e6ff3ff1b1edd3b1
 ];
 
 describe('hot path parity (#27)', () => {

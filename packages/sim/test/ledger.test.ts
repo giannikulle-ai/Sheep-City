@@ -27,7 +27,7 @@ const DAY = RULES.clock.periodSec * 1000;
 
 /** The state as a v4 build would hash it: no ledger snapshot, no chronicle, no events, version 4. */
 function v4View(s: SimState): Record<string, unknown> {
-  return { ...s, version: 4, ledger: undefined, lastLedgerAt: undefined, chronicle: undefined, events: undefined, season: preCalendarSeason(s.season) };
+  return { ...s, version: 4, ledger: undefined, lastLedgerAt: undefined, chronicle: undefined, events: undefined, season: preCalendarSeason(s.season), settlement: undefined };
 }
 
 /**
@@ -68,16 +68,22 @@ describe('the actor tick is untouched (#39 is a new path)', () => {
   // Moved a fourth time in #63's fix round 2 (2026-09-08, same day): hay2's bonus lowered
   // 2.5 -> 1.9 to keep grazing visible (same worlds — see test/hot-path-parity.test.ts's
   // seventh-move note).
+  // **Moved a fifth time in #86** (the sim half of "no transaction on the farm", plan decision 12),
+  // for all six: the merchant stopped buying the wool bank when he stops at the gate. These worlds
+  // run with the engine off, where the only thing that ever sold the bank was his 45-second timer
+  // and there is no dawn market walk to replace it, so the wool simply banks up and no coin is ever
+  // earned. Each line carries its own pre-#86 value. The 1,800-tick worlds below are unaffected —
+  // at 45 s the bank is still empty — which is why they still carry their old hashes.
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
-    { seed: 6, sheep: 5, hash: 'e85cbb53bef79387' },
-    { seed: 6, sheep: 40, hash: 'ef34884b93437085' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
-    { seed: 7, sheep: 5, hash: 'bf1769cf3184be53' },
-    { seed: 7, sheep: 40, hash: 'b0f402689eb4e7f4' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
-    { seed: 11, sheep: 5, hash: 'a5735abd6b19878b' },
-    { seed: 11, sheep: 40, hash: '1916634dd4c7176a' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
+    { seed: 6, sheep: 5, hash: 'f9a5c73b7623387a' }, // moved in #86: the caravan stopped buying the wool bank; was e85cbb53bef79387
+    { seed: 6, sheep: 40, hash: 'eb113e2c2907f15f' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was ef34884b93437085
+    { seed: 7, sheep: 5, hash: '9a43e007998a1116' }, // moved in #86: the caravan stopped buying the wool bank; was bf1769cf3184be53
+    { seed: 7, sheep: 40, hash: '64d5ce43913cc937' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was b0f402689eb4e7f4
+    { seed: 11, sheep: 5, hash: '1ed6fe0a0d8cd7cc' }, // moved in #86: the caravan stopped buying the wool bank; was a5735abd6b19878b
+    { seed: 11, sheep: 40, hash: 'a0a602ea942aff6d' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was 1916634dd4c7176a
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
-    it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #39 on the v4 view`, () => {
+    it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as pinned on the v4 view`, () => {
       expect(hashState(v4View(advance(preEngine(seed, sheep), 6000)))).toBe(hash);
     });
   }
@@ -278,19 +284,33 @@ describe('advanceLedger: the rules', () => {
     expect(still.clock.nowMs).toBe(3 * DAY);
   });
 
-  it('the merchant buys the wool at woolPrice, spends coins on upgrades in order, and is due again everyMs after leaving', () => {
-    const L = pinned(7, 'rain'); // rain: the farmer shears nobody, so the bank is the merchant's alone
+  it('PIN MOVED (#86): the merchant buys nothing, and is still due again everyMs after leaving', () => {
+    // Before #86 this case read: "the merchant buys the wool at woolPrice, spends coins on upgrades
+    // in order, and is due again everyMs after leaving" — the four wool came out as
+    // `{ wool: 0, coins: 0, owned: ['flowerbed'] }` (4 x 3 = 12 coins, the flower bed costs 12) and
+    // a second visit on 20 wool bought hay2 and left 30 coins over. The owner's decision 12 retired
+    // the transaction, so the same span is now asserted to move no stock at all. His timer still
+    // runs, because the watched world reads it back off the Ledger.
+    const L = pinned(7, 'rain'); // rain: the farmer shears nobody, so nothing else moves the bank
     L.banks = { wool: 4, coins: 0, owned: [] };
     L.merchantAtMs = 0;
     const before = advanceLedger(L, Math.floor(WALK_IN_MS) - 500, createRng(1));
     expect(before.banks).toEqual({ wool: 4, coins: 0, owned: [] });
     const after = advanceLedger(L, Math.ceil(WALK_IN_MS) + 500, createRng(1));
-    expect(after.banks).toEqual({ wool: 0, coins: 0, owned: ['flowerbed'] }); // 4 * 3 = 12 coins, the flower bed costs 12
+    expect(after.banks).toEqual({ wool: 4, coins: 0, owned: [] });
+    expect(after.settlement).toEqual({ coins: 0 });
     expect(after.merchantAtMs).toBeCloseTo(WALK_IN_MS + RULES.merchant.stayMs + WALK_OUT_MS + RULES.merchant.everyMs, 6);
-    // The next visit sells the next lot of wool.
-    const rich = { ...after, banks: { ...after.banks, wool: 20 } };
+    // And the next visit is the same nothing, however much is in the bank. His interval is 240 s,
+    // more than a farm day, so the clock is paused for this leg: otherwise the span crosses a dawn
+    // and the *farmer's* market walk empties the bank, which is a different test's business
+    // (test/market-sale.test.ts). A paused clock stops `nextVisit` dead and leaves the merchant,
+    // whose timer is not read off `clock.t` at all, as the only event in the span.
+    const rich = { ...after, clock: { ...after.clock, paused: true }, banks: { ...after.banks, wool: 20 } };
     const next = advanceLedger(rich, rich.merchantAtMs + WALK_IN_MS + 1000 - rich.clock.nowMs, createRng(1));
-    expect(next.banks).toEqual({ wool: 0, coins: 30, owned: ['flowerbed', 'hay2'] }); // 60 coins: hay2 (30), the scarecrow (60) not yet
+    expect(next.banks.wool).toBe(20);
+    expect(next.banks.coins).toBe(0);
+    expect(next.banks.owned).toEqual([]);
+    expect(next.settlement).toEqual({ coins: 0 });
   });
 
   it('the walks are the actor merchant\'s: about five seconds each at the NPC walk speed', () => {

@@ -20,7 +20,17 @@ const DAY = 180_000; // RULES.clock.periodSec (180s) in ms, the default day leng
 
 /** The state as a v5 build would hash it: the ledger snapshot present, no chronicle, no events, version 5. */
 function v5View(s: SimState): Record<string, unknown> {
-  return { ...s, version: 5, chronicle: undefined, events: undefined, season: preCalendarSeason(s.season), ledger: preCalendarLedger(s.ledger) };
+  return { ...s, version: 5, chronicle: undefined, events: undefined, season: preCalendarSeason(s.season), ledger: preSettlement(preCalendarLedger(s.ledger)), settlement: undefined };
+}
+
+/**
+ * The settlement's purse (#86, save v9): a build before it never stored one, on the world or on the
+ * Ledger snapshot, so every earlier view strips it. Stripping it is not enough to bring the old
+ * hashes back on its own — #86 also moved the tick (the caravan stopped buying, the dawn market
+ * walk started selling) — so the pinned values below moved with it and each says so.
+ */
+function preSettlement<T>(value: T): Record<string, unknown> {
+  return { ...(value as Record<string, unknown>), settlement: undefined };
 }
 
 /**
@@ -56,16 +66,22 @@ describe('the actor tick is untouched (#60 is a new path)', () => {
   // Moved a fourth time in #63's fix round 2 (2026-09-08, same day): hay2's bonus lowered
   // 2.5 -> 1.9 to keep grazing visible (same worlds — see test/hot-path-parity.test.ts's
   // seventh-move note).
+  // **Moved a fifth time in #86** (the sim half of "no transaction on the farm", plan decision 12),
+  // for all six: the merchant stopped buying the wool bank when he stops at the gate. These worlds
+  // run with the engine off, where the only thing that ever sold the bank was his 45-second timer
+  // and there is no dawn market walk to replace it, so the wool simply banks up and no coin is ever
+  // earned. Each line carries its own pre-#86 value. The 1,800-tick worlds below are unaffected —
+  // at 45 s the bank is still empty — which is why they still carry their old hashes.
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
-    { seed: 6, sheep: 5, hash: 'c983956cb0872c74' },
-    { seed: 6, sheep: 40, hash: 'e9993651bb41645b' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
-    { seed: 7, sheep: 5, hash: '69db4e4556aa8ea2' },
-    { seed: 7, sheep: 40, hash: 'fd2edbe2d33a4ebf' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
-    { seed: 11, sheep: 5, hash: '9c86b689cdc67c8b' },
-    { seed: 11, sheep: 40, hash: '250fbccdd321ec55' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9
+    { seed: 6, sheep: 5, hash: '53f488d46d56a459' }, // moved in #86: the caravan stopped buying the wool bank; was c983956cb0872c74
+    { seed: 6, sheep: 40, hash: '5010fc16d65e38a5' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was e9993651bb41645b
+    { seed: 7, sheep: 5, hash: '25ad0c6d2b8b6363' }, // moved in #86: the caravan stopped buying the wool bank; was 69db4e4556aa8ea2
+    { seed: 7, sheep: 40, hash: 'ff85591f8e1db183' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was fd2edbe2d33a4ebf
+    { seed: 11, sheep: 5, hash: '673e5250571ca4de' }, // moved in #86: the caravan stopped buying the wool bank; was 9c86b689cdc67c8b
+    { seed: 11, sheep: 40, hash: 'd1f811b0deb398a7' }, // moved again in fix round 2: hay2's bonus lowered 2.5 -> 1.9; moved in #86: the caravan stopped buying the wool bank; was 250fbccdd321ec55
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
-    it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #60 on the v5 view`, () => {
+    it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as pinned on the v5 view`, () => {
       expect(hashState(v5View(advance(preEngine(seed, sheep), 6000)))).toBe(hash);
     });
   }

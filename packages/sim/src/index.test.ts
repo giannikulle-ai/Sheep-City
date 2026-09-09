@@ -3,7 +3,7 @@ import { MIGRATIONS, SAVE_FORMAT, SAVE_VERSION, SIM_PACKAGE, TICK_MS, createInit
 
 describe('@sheepcliff/sim public surface', () => {
   it('exports a save version, package name, and the fixed tick', () => {
-    expect(SAVE_VERSION).toBe(8); // PIN MOVED (#84): was 7; the real-year calendar bumps the save schema
+    expect(SAVE_VERSION).toBe(9); // PIN MOVED (#86): was 8; `settlement`, the settlement's coin stand-in, bumps the save schema
     expect(SIM_PACKAGE).toBe('@sheepcliff/sim');
     expect(TICK_MS).toBe(100);
   });

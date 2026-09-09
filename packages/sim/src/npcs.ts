@@ -5,10 +5,12 @@
 // and calls back at the start and end of each job.
 
 import { bubble, findSheep } from './actors';
+import { tell } from './chronicle/store';
+import { FARM_DISTRICT } from './chronicle/types';
 import { NPC_SIZE, SFOOT, SPOT, type Point } from './geometry';
 import { stepToward } from './movement';
 import { RULES, TICK_SEC } from './rules';
-import type { Banks, Npc, NpcJob, SimState } from './state';
+import type { Npc, NpcJob, Settlement, SimState } from './state';
 
 /** NPC foot offset: `[NPC_W / 2, NPC_H - 1]`. One pixel lower than the sheep's and DL's. */
 export const NPC_FOOT: readonly [number, number] = [NPC_SIZE.w / 2, NPC_SIZE.h - 1];
@@ -77,7 +79,12 @@ export function summonFarmerToMarket(s: SimState): void {
   ]);
 }
 
-/** The merchant: to just outside the gate, trade, gone. */
+/**
+ * The merchant: to just outside the gate, a pause with the cart, gone. **He buys nothing** (#86,
+ * plan decision 12: "the economy is not the farm's"). The plan step is still called `trade`, and
+ * the stay is still `RULES.merchant.stayMs`, so the beat on screen is the one the prototype had —
+ * a cart on the lane, standing there a while — with no coins and no wool changing hands.
+ */
 export function summonMerchant(s: SimState): void {
   if (s.npcs.merchant) return;
   s.npcs.merchant = makeNpc('merchant', [
@@ -141,14 +148,61 @@ export function npcStep(n: Npc, dt: number, now: number, onJob: JobHook): 'done'
   }
 }
 
-/** The prototype's `buyUpgrades`: walk the list in order and buy whatever the coins cover. Takes anything with banks: the state, or the Ledger. */
-export function buyUpgrades(s: { banks: Banks }): void {
+/**
+ * The prototype's `buyUpgrades`: walk the list in order and buy whatever the coins cover.
+ *
+ * The purse is a parameter since #86, because there are two of them now and the farm's is no longer
+ * the one that pays. The farm's builds are bought out of the **settlement's** coins
+ * (`state.settlement` / `Ledger.settlement`, the Foreman's proposal on the issue): after this
+ * ticket nothing on the farm earns a coin, so a purse read off `banks` would never buy another
+ * build. `owned` stays the farm's own list — the builds are on the farm whoever paid for them.
+ *
+ * `state.banks` is still a legal purse and the owner's tray still passes it (`intents.ts`, the
+ * "+50 coins" test action): that is the owner's hand reaching in, not the farm trading, and the
+ * farm's coins are kept in the save for the owner's own build table (plan section 3).
+ */
+export function buyUpgrades(purse: { coins: number }, owned: string[]): void {
   for (const [name, cost] of RULES.upgrades) {
-    if (!s.banks.owned.includes(name) && s.banks.coins >= cost) {
-      s.banks.coins -= cost;
-      s.banks.owned.push(name);
+    if (!owned.includes(name) && purse.coins >= cost) {
+      purse.coins -= cost;
+      owned.push(name);
     }
   }
+}
+
+/**
+ * The market sale (#86): the wool the farmer walked out at dawn, paid for in the settlement's
+ * ledger. Zeroes the farm's wool bank, adds `wool * RULES.merchant.woolPrice` to the settlement's
+ * coins, buys whatever the farm's build list can now afford, and tells the chronicle one line.
+ *
+ * Nothing is told and nothing moves when the bank is empty: a walk with no wool on it is just the
+ * farmer walking past, which the market walk's own category-action line already tells.
+ *
+ * One function so the watched path (`tickNpcs`'s `market` job, below) and the offline catch-up
+ * (`ledger/advance.ts`'s `MARKET` case) sell at the same price and in the same order. The Ledger
+ * has no chronicle to tell into, so it passes none and the gap's diff tells the total instead
+ * (`chronicle/ledger-diff.ts`); see that file for why one line a gap and not one a dawn.
+ */
+export function sellWoolAtMarket(world: { banks: { wool: number; owned: string[] }; settlement: Settlement }, log?: { state: SimState; atMs: number }): number {
+  const wool = world.banks.wool;
+  if (wool <= 0) return 0;
+  const earned = wool * RULES.merchant.woolPrice;
+  world.banks.wool = 0;
+  world.settlement.coins += earned;
+  buyUpgrades(world.settlement, world.banks.owned);
+  if (log) {
+    tell(log.state, {
+      atMs: log.atMs,
+      district: FARM_DISTRICT,
+      line: `The farmer sold ${wool} wool at the market.`,
+      picture: 'coins',
+      source: 'category',
+      // The mover's own number, so the trailing normal can judge it the way it judges wool banked
+      // (chronicle/notability.ts): a big load reads as a story, an ordinary one as the routine.
+      facts: { marketWool: wool },
+    });
+  }
+  return earned;
 }
 
 /** A sheep the farmer would shear: on the field, woolly enough, not already being shorn. */
@@ -192,6 +246,12 @@ export function tickNpcs(s: SimState): void {
   const farmer = s.npcs.farmer;
   if (farmer) {
     const r = npcStep(farmer, dt, now, (job, when) => {
+      // The dawn market walk's sale (#86). It hangs off `end`, not `start`: `npcStep` never calls
+      // `start` for a plan step that carries an `at` - it sets the job timer the moment he arrives
+      // - so `market`'s only hook is the one that fires when he has stood at the gate his
+      // `N.jobMs` and moves on. That reads right too: he stops, looks the flock over, and the wool
+      // goes with him.
+      if (job === 'market' && when === 'end') sellWoolAtMarket(s, { state: s, atMs: now });
       if (job === 'trough' && when === 'end') bubble(farmer, 'heart', N.troughHeartMs, now);
       if (job === 'hay' && when === 'end') for (const q of s.sheep) if (q.hayTrip) q.eating = true;
       if (job === 'shear') {
@@ -235,17 +295,13 @@ export function tickNpcs(s: SimState): void {
   const merchant = s.npcs.merchant;
   if (merchant) {
     const r = npcStep(merchant, dt, now, (job, when) => {
+      // The caravan sells nothing (#86, plan decision 12). He stops where he always stopped, for
+      // as long as he always stopped, in the `work` pose - which reads as a man looking the place
+      // over - and then he goes. No coin bubble, no wool out of the bank, no upgrade bought;
+      // `sold` stays 0 for every merchant this sim will ever make.
       if (job === 'trade' && when === 'start') {
         merchant.jobUntilMs = now + RULES.merchant.stayMs;
         merchant.anim = 'work';
-        if (s.banks.wool > 0) {
-          const earned = s.banks.wool * RULES.merchant.woolPrice;
-          s.banks.coins += earned;
-          s.banks.wool = 0;
-          bubble(merchant, 'coin', N.coinBubbleMs, now);
-          merchant.sold = earned;
-        }
-        buyUpgrades(s);
         return null;
       }
       return undefined;

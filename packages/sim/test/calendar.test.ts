@@ -475,31 +475,44 @@ describe('a real date that does not exist in every year', () => {
  */
 function v7View(s: SimState): Record<string, unknown> {
   const season = { ...s.season, realEpochMs: undefined, seed: undefined };
-  const ledger = { ...s.ledger, season: { ...s.ledger.season, realEpochMs: undefined, seed: undefined } };
-  return { ...s, version: 7, season, ledger };
+  // `settlement` (#86, save v9) goes too, on the world and on the Ledger snapshot: a v7 build never
+  // stored one. That strip alone does not bring the pre-#86 hashes back — #86 moved the tick as
+  // well as the schema — so the values below moved with it; each says what it was and why.
+  const ledger = { ...s.ledger, season: { ...s.ledger.season, realEpochMs: undefined, seed: undefined }, settlement: undefined };
+  return { ...s, version: 7, season, ledger, settlement: undefined };
 }
 
 describe('the pre-calendar view (#84 moves the schema, not the tick)', () => {
   // The six hot-path worlds, engine off, as test/hot-path-parity.test.ts pinned them before #84.
+  // **Moved a second time in #86** (the sim half of "no transaction on the farm", plan decision 12),
+  // for all six: the merchant stopped buying the wool bank when he stops at the gate. These worlds
+  // run with the engine off, where the only thing that ever sold the bank was his 45-second timer
+  // and there is no dawn market walk to replace it, so the wool simply banks up and no coin is ever
+  // earned. Each line carries its own pre-#86 value. The two scripted days below moved too, for a
+  // different reason: they run with the engine **on**, so they hold a dawn market walk, and the
+  // walk sells.
   const HOT_PATH: readonly { seed: number; sheep: number; hash: string }[] = [
-    { seed: 6, sheep: 5, hash: '0791cd39c7e2aab8' },
-    { seed: 6, sheep: 40, hash: 'ab75ceacb516b7ae' },
-    { seed: 7, sheep: 5, hash: '0ed2243395f4d7e2' },
-    { seed: 7, sheep: 40, hash: 'a33d55048b809e3d' },
-    { seed: 11, sheep: 5, hash: '0e4a4606aab31838' },
-    { seed: 11, sheep: 40, hash: 'ce2977de7b3d70d2' },
+    { seed: 6, sheep: 5, hash: '3edc3971f6216013' }, // moved in #86: the caravan stopped buying the wool bank; was 0791cd39c7e2aab8
+    { seed: 6, sheep: 40, hash: 'a190c22f091395e9' }, // moved in #86: the caravan stopped buying the wool bank; was ab75ceacb516b7ae
+    { seed: 7, sheep: 5, hash: 'c7b2da6b50368791' }, // moved in #86: the caravan stopped buying the wool bank; was 0ed2243395f4d7e2
+    { seed: 7, sheep: 40, hash: '111b2f494e1c9263' }, // moved in #86: the caravan stopped buying the wool bank; was a33d55048b809e3d
+    { seed: 11, sheep: 5, hash: 'b90a2901c0c39673' }, // moved in #86: the caravan stopped buying the wool bank; was 0e4a4606aab31838
+    { seed: 11, sheep: 40, hash: '240c15df101430ac' }, // moved in #86: the caravan stopped buying the wool bank; was ce2977de7b3d70d2
   ];
   for (const { seed, sheep, hash } of HOT_PATH) {
-    it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as before #84 on the v7 view`, () => {
+    it(`hot path: seed ${seed}, ${sheep} sheep, 6,000 ticks hash as pinned on the v7 view`, () => {
       expect(hashState(v7View(advance(createInitialState(seed, { sheep, events: false }), 6000)))).toBe(hash);
     });
   }
 
-  it("Digital Luna's scripted day (seed 11, 1,800 ticks) hashes as before #84 on the v7 view", () => {
-    expect(hashState(v7View(advance(createInitialState(11), 1800)))).toBe('575fc853e800bd3d');
+  // PINS MOVED (#86). Both scripted days run with the engine on, so both hold a dawn market walk,
+  // and the walk now carries the wool bank out and pays the settlement for it. That is a change to
+  // the world, not to its shape, so the v7 strip cannot bring these back and they are re-pinned.
+  it("Digital Luna's scripted day (seed 11, 1,800 ticks) hashes as pinned on the v7 view", () => {
+    expect(hashState(v7View(advance(createInitialState(11), 1800)))).toBe('b1b26b76c94b3f0d'); // moved in #86: the dawn market walk sells the bank; was 575fc853e800bd3d
   });
 
-  it("the sheep's scripted day (seed 71, 1,800 ticks) hashes as before #84 on the v7 view", () => {
-    expect(hashState(v7View(advance(createInitialState(71), 1800)))).toBe('db82b911ed86c1f8');
+  it("the sheep's scripted day (seed 71, 1,800 ticks) hashes as pinned on the v7 view", () => {
+    expect(hashState(v7View(advance(createInitialState(71), 1800)))).toBe('278dd8ac81253279'); // moved in #86: the dawn market walk sells the bank; was db82b911ed86c1f8
   });
 });

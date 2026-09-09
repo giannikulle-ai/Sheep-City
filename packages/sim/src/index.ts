@@ -90,6 +90,7 @@ export {
   type NpcJob,
   type Npcs,
   type Banks,
+  type Settlement,
   type Life,
   type Rabbit,
   type Bird,
@@ -147,7 +148,7 @@ export {
   type SheepContext,
   type SheepBehaviour,
 } from './behaviours/sheep';
-export { NPC_FOOT, makeNpc, summonFarmer, summonMerchant, npcStep, tickNpcs, buyUpgrades, type JobHook, type JobResult } from './npcs';
+export { NPC_FOOT, makeNpc, summonFarmer, summonMerchant, npcStep, tickNpcs, buyUpgrades, sellWoolAtMarket, type JobHook, type JobResult } from './npcs';
 export { stepToward, clampField, clampTarget, clampMoverTarget, segHitsBarn, waypointAround, type Mover } from './movement';
 export { LUNA_ID, findSheep, bubble, nearestTuft } from './actors';
 export { tickRabbit, tickButterflies, tickBird, landBird } from './life';

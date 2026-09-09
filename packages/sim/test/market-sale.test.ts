@@ -26,7 +26,8 @@
 import { describe, expect, it } from 'vitest';
 import { FARM_DECK } from '../src/engine/deck';
 import { startEvent } from '../src/engine/engine';
-import { farmerMarketWalk, marketVisitKey, runScheduledCategoryActions } from '../src/engine/category';
+import { farmerMarketWalk, marketVisitKey, MARKET_VISIT_K, runScheduledCategoryActions } from '../src/engine/category';
+import { tellLedgerDiff } from '../src/chronicle/index';
 import { hashState } from '../src/hash';
 import { catchUp } from '../src/ledger/catch-up';
 import { advanceLedger } from '../src/ledger/advance';
@@ -78,6 +79,67 @@ describe('the settlement’s purse (#86)', () => {
     expect(diffLedger(before, after).settlementCoins).toBe(18);
     expect(diffLedger(after, before).settlementCoins).toBe(-18);
     expect(diffLedger(before, before).settlementCoins).toBe(0);
+  });
+
+  it('tellLedgerDiff tells the gap’s settlement move as exactly one line, earned or spent, and none for a flat gap', () => {
+    // The whole storytelling of the feature on the unwatched path (chronicle/ledger-diff.ts:42-43):
+    // one line for the gap, not one per dawn it sold. This pins the branch directly, independent of
+    // how many market walks the gap actually ran.
+    const before = summarise(createInitialState(5));
+    const earned = { ...before, settlement: { coins: 18 } };
+    const spent = { ...before, settlement: { coins: -18 } };
+
+    const s1 = createInitialState(5);
+    const earnedEntries = tellLedgerDiff(s1, diffLedger(before, earned));
+    const earnedLines = earnedEntries.filter((e) => e.picture === 'coins' && 'settlementCoins' in e.facts);
+    expect(earnedLines).toHaveLength(1);
+    expect(earnedLines[0]!.line).toBe('18 coins earned at the market');
+    expect(earnedLines[0]!.facts).toEqual({ settlementCoins: 18 });
+    expect(earnedLines[0]!.source).toBe('ledger');
+    expect(s1.chronicle.entries).toEqual(earnedEntries); // told, not just returned
+
+    const s2 = createInitialState(5);
+    const spentEntries = tellLedgerDiff(s2, diffLedger(before, spent));
+    const spentLines = spentEntries.filter((e) => e.picture === 'coins' && 'settlementCoins' in e.facts);
+    expect(spentLines).toHaveLength(1);
+    expect(spentLines[0]!.line).toBe('18 coins spent at the market');
+    expect(spentLines[0]!.facts).toEqual({ settlementCoins: -18 });
+
+    // A gap that moved nothing at the market tells nothing about the market — not a zero, not a
+    // repeat of the last line, nothing at all.
+    const s3 = createInitialState(5);
+    const flatEntries = tellLedgerDiff(s3, diffLedger(before, before));
+    expect(flatEntries.filter((e) => 'settlementCoins' in e.facts)).toHaveLength(0);
+  });
+
+  it('a Ledger catch-up gap that sold wool tells exactly one settlement line for the whole gap, and a gap that sold none tells none', () => {
+    // "One line a gap, not one a dawn" (advance.ts / ledger-diff.ts's own words): drive the actual
+    // gap through advanceLedger, the function the catch-up policy calls, rather than hand-building a
+    // diff, so this also proves the *number* of lines does not grow with the number of dawns sold.
+    const before = summarise(createInitialState(30));
+    before.banks = { wool: 6, coins: 0, owned: [] };
+    const day = before.clock.periodSec * 1000;
+    // Four days: several market walks, each finding a freshly-shorn bank to sell (four dawns and
+    // eight shearing visits fall inside it), so the gap's diff is the sum of more than one sale.
+    const soldAfter = advanceLedger(before, 4 * day, createRng(9));
+    const soldDiff = diffLedger(before, soldAfter);
+    expect(soldDiff.settlementCoins).toBeGreaterThan(0); // several dawns' worth, not zero
+    const soldState = createInitialState(30);
+    const soldEntries = tellLedgerDiff(soldState, soldDiff).filter((e) => 'settlementCoins' in e.facts);
+    expect(soldEntries).toHaveLength(1);
+    expect(soldEntries[0]!.facts).toEqual({ settlementCoins: soldDiff.settlementCoins });
+    expect(soldEntries[0]!.line).toBe(`${soldDiff.settlementCoins} coins earned at the market`);
+
+    // A gap with nothing in the bank at any market crossing: a fresh Ledger's bank starts empty and
+    // stays empty across this short span (too little time for a fleece to reach the shearing line),
+    // so every walk inside it finds nothing to sell.
+    const emptyBefore = summarise(createInitialState(31));
+    const emptyAfter = advanceLedger(emptyBefore, 0.75 * emptyBefore.clock.periodSec * 1000, createRng(9));
+    const emptyDiff = diffLedger(emptyBefore, emptyAfter);
+    expect(emptyDiff.settlementCoins).toBe(0);
+    const emptyState = createInitialState(31);
+    const emptyEntries = tellLedgerDiff(emptyState, emptyDiff).filter((e) => 'settlementCoins' in e.facts);
+    expect(emptyEntries).toHaveLength(0);
   });
 });
 
@@ -131,6 +193,31 @@ describe('the market walk sells the bank (#86)', () => {
     expect(after.settlement.coins).toBe(4 * PRICE - 12);
     expect(after.banks.owned).toEqual(['flowerbed']);
     expect(after.lastVisitKey).toBe(Math.floor(RULES.clock.phases.dawn * 100) * 1000 + L.clock.dayCount);
+  });
+
+  it('the dawn window catches a cursor already a few hundredths into dawn, the same as a watched world would', () => {
+    // advance.ts's own header: the market entry's `window` is `1 - phases.dawn` (the whole of
+    // dawn), wider than the two shearing visits' `0.01`, "[w]ithout it a catch-up that began after
+    // the first hundredth of dawn would skip that day's sale where a watched world would have made
+    // it." t = .95 is a few hundredths past dawn's start (.92) — past the first-hundredth bucket a
+    // narrower window would miss, but still within dawn, where a watched world sells too.
+    const L = summarise(createInitialState(30));
+    L.banks = { wool: 6, coins: 0, owned: [] };
+    L.lastVisitKey = -1;
+    L.clock = { ...L.clock, t: 0.95 };
+    const sliver = 0.02 * L.clock.periodSec * 1000;
+    const after = advanceLedger(L, sliver, createRng(9));
+    expect(after.banks.wool).toBe(0);
+    // 6 x woolPrice = 18 in, and the flower bed (12) straight back out of the same purse.
+    expect(after.settlement.coins).toBe(6 * PRICE - 12);
+    expect(after.banks.owned).toEqual(['flowerbed']);
+    expect(after.lastVisitKey).toBe(MARKET_VISIT_K * 1000 + L.clock.dayCount);
+
+    // The watched world, at the same instant, is due to sell too.
+    const watched = world({ seed: 30, t: 0.95, events: true, pauseClock: false });
+    watched.npcs.lastVisitKey = -1;
+    watched.banks.wool = 6;
+    expect(farmerMarketWalk.due(watched)).toBe(true);
   });
 
   it('the market walk does not eat either of the farmer’s two shearing visits, on the Ledger either', () => {

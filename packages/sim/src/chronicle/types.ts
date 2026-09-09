@@ -62,4 +62,16 @@ export interface TellInput {
    * source's notability comes from its facts alone, and this is ignored for it.
    */
   hint?: number;
+  /**
+   * A fact key run through the same `noteFact` EMA `facts` uses (#113, `chronicle/notability.ts`),
+   * folded into notability the opposite way: `facts` can only ever push notability up (a first
+   * beating a low hint), `repeats` can only ever pull it down. A key passed here whose first-ever
+   * telling this is leaves the entry's notability untouched; a later telling of the same key —
+   * unsurprising against its own trailing normal, since its value never varies telling to telling —
+   * floors the entry at notability 0. Meant for a card or authored event's own id, so a repeated
+   * small-card line reads below its own first without putting an id in `facts` (see
+   * `engine/engine.ts`'s header comment on why `facts` itself still never carries one). Ignored for
+   * every source but 'card' and 'authored', same as `hint`.
+   */
+  repeats?: string;
 }

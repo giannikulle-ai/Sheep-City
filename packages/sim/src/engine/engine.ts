@@ -31,7 +31,21 @@
 //
 // Every start and every end writes to the chronicle through `tell`. Only `card` and `authored`
 // lines carry a `hint`; no line carries an event id in its `facts` (a fact key is a thing the
-// world measures, not a name of a card).
+// world measures, not a name of a card) — that invariant still holds, unchanged, #113 included.
+//
+// A **start** also passes its own id as `tell`'s `repeats` (#113): the same notability EMA
+// `chronicle/notability.ts` already runs for every other fact (`noteFact`, on `chronicle.stats`,
+// same as `facts` — `repeats` is not a second mechanism, only a second way to fold that one
+// function's reading into an entry's notability), judged separately from `facts` so a first
+// telling is never punished and never boosted either: the first-ever telling of an id keeps
+// reading its plain authored `hint`, same as before this ticket, and only a later telling of the
+// same id — not a deviation from that world's own normal, the id's own value never varying — is
+// floored at notability 0, below its own first (which is the point: a long absence's storybook
+// page repeating the same small-card line fifty times, #113). `facts`'s own first-beats-a-low-hint
+// contract (chronicle.test.ts) is untouched: `repeats` only ever pulls an entry's notability down,
+// never up, so the two never fight over the same entry. An **end** carries no `repeats` either: it
+// is a quarter of the start's own hint either way (`endEvent` below), not a telling worth judging
+// as a first or a repeat on its own.
 
 import { coinsMoved, fillStorybookLine } from '../chronicle/storybook-line';
 import { tell } from '../chronicle/store';
@@ -267,6 +281,9 @@ export function startEvent(state: SimState, deck: Deck, id: string, kind: 'card'
     source: kind,
     actors: actorsOf(state, id),
     hint: event.storybook.notability,
+    // #113: see the header comment above — a repeat of this id reads no deviation from that
+    // world's own normal and floors below its own first.
+    repeats: id,
   });
   return running;
 }

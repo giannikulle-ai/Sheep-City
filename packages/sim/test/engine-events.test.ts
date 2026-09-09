@@ -511,22 +511,51 @@ describe('what the engine tells the chronicle', () => {
     expect(lines[0]!.line).toBe(`Shearing day. The farmer clipped ${s.sheep.length} fleeces and the sheep felt the breeze.`);
     expect(lines[0]!.line).not.toMatch(/[{}]/);
     expect(lines[0]!.picture).toBe('shearing');
+    // Unmoved by #113: this fresh state's first-ever `shearingDay` reads its plain authored hint —
+    // `repeats` (engine.ts's header comment, `tell`'s own doc comment) leaves a first exactly as it
+    // was, only a *later* telling of the same id is pulled down. The `.first` flag is new (it never
+    // used to be tracked for a card at all), everything else about this line is not.
     expect(lines[0]!.notability).toBeCloseTo(0.7, 9);
+    expect(lines[0]!.first).toBe(true);
     expect(lines[1]!.picture).toBe('shearing-end');
+    // The end carries no `repeats` (only a start is a first-or-repeat telling worth judging), so it
+    // is still a quarter of the plain hint, unaffected by #113.
     expect(lines[1]!.notability).toBeCloseTo(0.7 * 0.25, 9);
+    expect(lines[1]!.first).toBe(false);
   });
 
-  it('no engine line carries an event id in its facts, and only card and authored lines carry a hint', () => {
+  it("a card's own id is what its repeats decay against (#113): a first telling keeps its plain hint, a second telling of the same id is not a first and floors at notability 0", () => {
+    const s = createInitialState(23, { events: false });
+    startEvent(s, FARM_DECK, 'crowsOnTheField', 'card');
+    endEvent(s, FARM_DECK, 'crowsOnTheField');
+    startEvent(s, FARM_DECK, 'crowsOnTheField', 'card');
+    // Both starts share picture 'crows'; the end is 'crows-end' (endEvent below), so this is exactly
+    // the two starts, in order.
+    const starts = told(s).filter((e) => e.picture === 'crows');
+    expect(starts).toHaveLength(2);
+    expect(starts[0]!.first).toBe(true);
+    expect(starts[0]!.notability).toBeCloseTo(card('crowsOnTheField').storybook.notability, 9);
+    expect(starts[1]!.first).toBe(false);
+    expect(starts[1]!.notability).toBe(0);
+    expect(starts[1]!.notability).toBeLessThan(starts[0]!.notability);
+  });
+
+  it('no engine line carries an event id in its facts, and only card and authored lines carry a hint (#113: still true — a start\'s own id goes through `tell`\'s separate `repeats`, not `facts`)', () => {
     let s = createInitialState(21);
     s = advance(s, 3000);
     const ids = new Set([...FARM_DECK.cards.map((c) => c.id), ...FARM_DECK.authored.map((e) => e.id)]);
+    let sawRepeat = false;
     for (const entry of s.chronicle.entries) {
       for (const key of Object.keys(entry.facts)) expect(ids.has(key), `${entry.line}: ${key}`).toBe(false);
       // A `category` line's notability comes from its facts alone: `tell` ignores a hint from it,
       // so a routine market walk can only read as notable by being a first.
       if (entry.source === 'category') expect(entry.notability === 0 || entry.first).toBe(true);
+      if ((entry.source === 'card' || entry.source === 'authored') && entry.first) sawRepeat = true;
     }
     expect(s.chronicle.entries.some((e) => e.source === 'card')).toBe(true);
+    // #113: at least one card/authored start over this span was a genuine first (`repeats`), so the
+    // new machinery this test guards actually ran, not just an unreachable branch.
+    expect(sawRepeat).toBe(true);
   });
 
   it('a lost lamb’s line names the ewe it belongs to', () => {

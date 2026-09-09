@@ -286,6 +286,11 @@ function startUnwatched(
     picture: entry.storybook.picture,
     source: kind,
     hint: entry.storybook.notability,
+    // #113: the same `repeats` the watched path tells (`engine/engine.ts`'s `startEvent`, see its
+    // header comment), from the same id, so a card drawn during an unwatched gap decays against its
+    // own repeats exactly as one drawn while watched would — a week away reads as a watched night
+    // does, notability included.
+    repeats: entry.id,
   });
   return { id: entry.id, kind, atMs: at, applied, recorded };
 }

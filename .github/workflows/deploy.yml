@@ -63,16 +63,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Polls the check runs on this commit and proceeds only when every
-          # check that is not part of this deploy run has finished successfully.
-          # This does not depend on the CI workflow's name, so it keeps working
-          # when .github/workflows/ci.yml lands or is renamed.
+          # check that is not part of the deploy workflow itself has finished
+          # successfully. This does not depend on the CI workflow's name, so
+          # it keeps working when .github/workflows/ci.yml lands or is renamed.
+          #
+          # Excludes check runs from *any* run of deploy.yml on this commit,
+          # not just this run's own jobs (issue #106): an earlier deploy
+          # attempt on the same commit (e.g. a Garage 530/1033 outage) leaves
+          # its "Deploy ... to The Garage: failure" check runs behind, and
+          # those must never count as a failed "other" check on a re-dispatch
+          # — only a real CI failure (typecheck, unit, palette, ownership,
+          # build-and-smoke) does, since those check runs' html_url never
+          # points at a deploy.yml run.
           set -euo pipefail
           deadline=$(( $(date +%s) + 30*60 ))   # give CI up to 30 minutes
           grace=$(( $(date +%s) + 90 ))         # and 90 s to show up at all
           while :; do
+            # Every run of the deploy workflow for this head sha, this run
+            # included (GitHub records a workflow run as soon as it starts).
+            deploy_run_ids=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?head_sha=${GITHUB_SHA}&per_page=100" \
+              --jq '.workflow_runs[].id' | jq -s '.')
             runs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
-              --jq '[.check_runs[] | select(.html_url | contains("/actions/runs/'"${GITHUB_RUN_ID}"'/") | not)]' \
-              | jq -s 'add // []')
+              --jq '.check_runs' | jq -s 'add // []' \
+              | jq -c --argjson ids "$deploy_run_ids" \
+                  '[.[] | select(.html_url as $u | ($ids | any(. as $id | $u | contains("/actions/runs/\($id)/"))) | not)]')
             total=$(jq 'length' <<<"$runs")
             pending=$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")
             failed=$(jq -r '[.[] | select(.status == "completed" and (.conclusion | IN("success","skipped","neutral") | not))] | .[] | "\(.name): \(.conclusion)"' <<<"$runs")

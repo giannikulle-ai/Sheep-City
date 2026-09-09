@@ -127,8 +127,10 @@ for (const c of CASES) {
 // The "earlier pages" reopen (issue #49): dismiss the page a real gap opened, reopen it from the
 // farm bar's list, and check every invariant above holds again — a page read back off the store
 // must trace to the chronicle exactly as freshly-shown one does. Uses a *running* world (no
-// `freeze`), the same seed 17 / gap 120 pair `sim.spec.ts`'s "and N more" test already measured at
-// 5 shown + 3 more = 8 lines, so the reopened card is exercised with something behind "and N more".
+// `freeze`), the same seed 17 / gap 120 pair `storybook.spec.ts`'s "and N more" test measures at
+// 5 shown + 29 more = 34 lines (decision 16, PR #111: small cards now draw and tell during this
+// gap's catch-up, up from 3 more / 8 total before that landed), so the reopened card is exercised
+// with something behind "and N more".
 test('reopening a page from "earlier pages" traces to the chronicle exactly as the first showing did', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -163,12 +165,13 @@ test('reopening a page from "earlier pages" traces to the chronicle exactly as t
   expect(reopened.title).toBe(firstShowing.title);
   expect(reopened.subtitle).toBe(firstShowing.subtitle);
   expect(reopened.shownCount).toBe(5);
-  expect(reopened.apiLines.length).toBe(8);
+  // decision 16, PR #111: was 8 before small cards drew and told during this gap's catch-up.
+  expect(reopened.apiLines.length).toBe(34);
 
   // and the same holds once "and N more" is opened on the reopened card too
   await expect(page.locator('#storyMore')).toHaveCount(1);
   await page.locator('#storyMore').click();
   const reopenedExpanded = await readCardCoverage(page);
   expectCardTracesToChronicle(reopenedExpanded);
-  expect(reopenedExpanded.domRows.length).toBe(8);
+  expect(reopenedExpanded.domRows.length).toBe(34); // decision 16, PR #111: was 8
 });

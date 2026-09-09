@@ -16,9 +16,12 @@ import { e2eDir, expectGolden } from './lib/golden';
 // are made of today.
 //
 // The golden cases carry `freeze=1`, which boots the world with its clock paused so the capture is
-// still. A paused clock stops the Ledger's day crossings too, so those worlds tell three lines each
-// — fewer than a running farm tells over the same gap. The line-count and "and N more" cases below
-// therefore run without `freeze`, where the same seeds tell eight.
+// still. A paused clock stops the Ledger's day crossings, but the catch-up that runs once on load
+// (before the freeze takes hold) still draws small cards at farm-day resolution and tells them
+// (decision 16, PR #111: a small thing keeps happening while the farm is unwatched, drawn during
+// catch-up and told to the chronicle) — so these worlds tell far more than the handful of Ledger
+// lines they used to. The line-count and "and N more" cases below run without `freeze` on a longer,
+// running catch-up, and now tell dozens.
 type WithApp = { sheepcliff: SheepcliffApi };
 
 interface Case {
@@ -108,8 +111,10 @@ test('one tap dismisses the page', async ({ page }) => {
 
 // The owner's change round on #42: "I want more than 5 … it should be based on how long away, with
 // a minimum", and nothing a gap told is dropped. Both run on a *running* world (no `freeze`), where
-// seed 17 tells eight lines over either gap — enough for the floor to leave a remainder and for the
-// longer absence to show more of it.
+// seed 17 tells 34 lines over the night gap and 60 over the week gap (decision 16, PR #111: small
+// cards now draw and tell during an unwatched catch-up, so both totals are far larger than before
+// that landed) — plenty for the floor to leave a remainder and for the longer absence to show more
+// of it.
 test('a longer absence shows more of its gap, and a short one keeps the rest behind "and N more"', async ({ page }) => {
   const read = async (gapMinutes: number): Promise<{ shown: number; more: number; rows: number; moreLabel: string | null }> => {
     await page.goto(`/?seed=17&gap=${gapMinutes}`);
@@ -127,19 +132,24 @@ test('a longer absence shows more of its gap, and a short one keeps the rest beh
     };
   };
 
-  // two hours away: the floor, five lines, with the other three kept
+  // two hours away: the floor, five lines shown, with the rest kept behind "and N more". Decision
+  // 16 (PR #111): small cards now draw and tell during an unwatched catch-up, so this gap's whole
+  // chronicle grew from 8 entries to 34 (measured, stable across runs) — the floor of 5 shown is
+  // unchanged, only how much is left over.
   const night = await read(120);
   expect(night.shown).toBe(5);
   expect(night.rows).toBe(5);
-  expect(night.more).toBe(3);
-  expect(night.moreLabel).toBe('and 3 more');
+  expect(night.more).toBe(29);
+  expect(night.moreLabel).toBe('and 29 more');
 
-  // a week away, same seed and the same eight lines: the page grows to hold all of them
+  // a week away, same seed: a longer absence draws even more small cards during its catch-up
+  // (measured 60 entries total, also stable) — the page shows more of it too, ten lines rather
+  // than the night's five, which is the point of this test's name.
   const week = await read(10_080);
-  expect(week.shown).toBe(8);
-  expect(week.rows).toBe(8);
-  expect(week.more).toBe(0);
-  expect(week.moreLabel).toBeNull(); // nothing left over, so no row offering it
+  expect(week.shown).toBe(10);
+  expect(week.rows).toBe(10);
+  expect(week.more).toBe(50);
+  expect(week.moreLabel).toBe('and 50 more');
 });
 
 test('"and N more" opens the rest of the gap in place, and never dismisses the page', async ({ page }) => {
@@ -158,7 +168,10 @@ test('"and N more" opens the rest of the gap in place, and never dismisses the p
     };
   });
   expect(kept.allTold).toBe(true);
-  expect(kept.lines.length).toBe(3);
+  // decision 16, PR #111: small cards now draw and tell during this gap's catch-up, so the 29
+  // lines kept behind "and N more" here are mostly card lines, not just Ledger diffs — measured
+  // stable across runs (was 3 before that landed).
+  expect(kept.lines.length).toBe(29);
 
   await expect(page.locator('#storyLines .storyline')).toHaveCount(5);
   await page.locator('#storyMore').click();
@@ -166,7 +179,7 @@ test('"and N more" opens the rest of the gap in place, and never dismisses the p
   // the page is still open — the row that opens the rest must not be the tap that closes the card
   await expect(page.locator('#storybook')).toBeVisible();
   await expect(page.locator('#storyMore')).toHaveCount(0);
-  await expect(page.locator('#storyLines .storyline')).toHaveCount(8);
+  await expect(page.locator('#storyLines .storyline')).toHaveCount(34);
 
   // and the revealed rows are the kept lines themselves, verbatim, in order
   const revealed = await page.locator('#storyLines .storyline span').allInnerTexts();

@@ -7,8 +7,10 @@
 //      number written beside it);
 //   2. how many **big** things a thirty-farm-day month holds (a band, likewise measured);
 //   3. **zero big things across an unwatched span** — an absolute, not a floor, on every seed;
-//   4. small things across an unwatched week are in the chronicle, told, with the same line and
-//      picture key a watched one would carry, so the storybook can tell them.
+//   4. small things across an unwatched week are in the chronicle, told, with the same picture key
+//      and the same filled line a watched one would carry, so the storybook can tell them;
+//   5. **no chronicle entry anywhere carries a brace** — every storybook placeholder is filled
+//      before the line is told (#114), on both paths.
 //
 // Two independent rulers, as PRs #82 and #99 used: new entries in `events.running` (what the engine
 // says it started) and non-"ended" card/authored lines in the chronicle (what the world says was
@@ -17,8 +19,20 @@
 //
 // Every floor here sits well under its measured value so a few seeds of drift are tolerated and a
 // collapse fails. Every measured value was measured on this head, by this file's own harness.
+//
+// **Re-measured twice on this branch.** #86 (widened `conditions` on several small cards —
+// `crowsOnTheField` and `nightOfTheFireflies` gained spring, `stargazingNight` widened to every
+// season, `strayCatVisits` widened to sun or rain, `lambZoomiesHour` and `windfall` gained dawn —
+// plus `merchantCaravan` narrowing from day-or-dusk to day-only) took the small pace to 30 farm
+// days of 30 and 57 small starts a month at the engine's then-rate of 8. That is past the owner's
+// own target, so the rate is now derived from it (`PACE_TARGETS.smallDaysInFive`, four days in
+// five, through `SMALL_RATE_FOR_DAYS_IN_FIVE`: 1.25 on this deck) and every number below is
+// measured at that rate. No floor was loosened; the measured values moved and are restated at each
+// assertion, and the small-days test gained a **ceiling** so that "too busy" can fail as well as
+// "too quiet" — before this round nothing in the repo could.
 import { describe, expect, it } from 'vitest';
 import { FARM_DECK, momentKindOf, sizeOf } from '../src/engine/deck';
+import { coinsMoved, fillStorybookLine } from '../src/chronicle/storybook-line';
 import { PACE_TARGETS, SIZE_PACING } from '../src/engine/pacing';
 import { catchUp } from '../src/ledger/catch-up';
 import { dayMs } from '../src/ledger/ledger';
@@ -41,13 +55,15 @@ interface Month {
   toldSmall: number;
   toldBig: number;
   kindOrder: string[];
+  /** Chronicle lines that still carry a brace. Always empty (#114). */
+  braced: string[];
 }
 
 /** Run one seed for `DAYS` farm days, watched throughout, and count by both rulers. */
 function watchedMonth(seed: number): Month {
   let s: SimState = createInitialState(seed);
   const seen = new Set<string>();
-  const month: Month = { smallDays: new Set(), smallStarts: 0, bigStarts: 0, toldSmall: 0, toldBig: 0, kindOrder: [] };
+  const month: Month = { smallDays: new Set(), smallStarts: 0, bigStarts: 0, toldSmall: 0, toldBig: 0, kindOrder: [], braced: [] };
   for (let day = 0; day < DAYS; day++) {
     for (let i = 0; i < TICKS_PER_FARM_DAY; i++) {
       s = advance(s, 1);
@@ -64,13 +80,21 @@ function watchedMonth(seed: number): Month {
       }
     }
   }
-  // The second ruler: the chronicle's own record of what was told.
+  // The second ruler: the chronicle's own record of what was told. Matched on the picture key, not
+  // on the line: since #114 the line in the chronicle is the *filled* one ("... and Digital Luna
+  // sent them packing"), so it no longer equals the card's authored text. An end line carries the
+  // same key with `-end` on it and is not a start.
+  const byPicture = new Map<string, 'small' | 'big'>();
+  for (const x of FARM_DECK.byId.values()) {
+    const event = x.kind === 'card' ? x.card : x.event;
+    byPicture.set(event.storybook.picture, event.size);
+  }
   for (const e of s.chronicle.entries) {
+    if (e.line.includes('{') || e.line.includes('}')) month.braced.push(e.line);
     if (e.source !== 'card' && e.source !== 'authored') continue;
-    if (/ ended| was called off/.test(e.line)) continue;
-    const entry = [...FARM_DECK.byId.values()].find((x) => (x.kind === 'card' ? x.card : x.event).storybook.line === e.line);
-    if (!entry) continue;
-    if ((entry.kind === 'card' ? entry.card : entry.event).size === 'big') month.toldBig++;
+    const size = byPicture.get(e.picture);
+    if (size === undefined) continue; // an end line, or a card the deck no longer carries
+    if (size === 'big') month.toldBig++;
     else month.toldSmall++;
   }
   return month;
@@ -96,29 +120,59 @@ describe('thirty seeds, thirty farm days, watched', () => {
     });
   });
 
-  it('a small thing on most farm days — measured 18 of 30 (mean 17.93, range 15 to 21)', () => {
+  it('a small thing on four farm days in five — measured 24 of 30 (median 24, mean 23.90, range 21 to 28)', () => {
     // The owner's target is four farm days in five (`PACE_TARGETS.smallDaysInFive`), which is 24 of
-    // 30. **This deck delivers three in five, not four**, and that is stated rather than hidden: the
-    // ceiling is the deck's coverage, not the pacing — see `PACE_TARGETS.smallDaysInFive`'s own
-    // comment for the in-process sweep that shows pushing the rate twelve-fold buys about two more
-    // days. The floor below is 12 of 30 (measured 15 at the thinnest seed), so several seeds may
-    // drift without failing and a collapse cannot pass.
-    const report = `days with a small start, per 30: median ${median(smallDays)}, mean ${mean(smallDays).toFixed(2)}, range ${range(smallDays)} (measured median 18, mean 17.93, 15 to 21); target is ${PACE_TARGETS.smallDaysInFive} in 5 = 24 of 30`;
+    // 30, and since this round it is the target the rate is derived from rather than a constant
+    // nothing read. The three measurements this branch has taken, in order:
+    //
+    //   * #111 alone, rate 8:            median 18 of 30 (mean 17.93, range 15 to 21), 23 starts.
+    //   * #86 merged in, rate still 8:   median 30 of 30 (mean 29.57, range 28 to 30), 57 starts —
+    //     the widened conditions made small cards eligible on 40 % of looks instead of 14 %, and
+    //     `drawChance` is linear in that, so the world drew something on every single farm day.
+    //   * shipped here, rate 1.25:       **median 24 of 30 (mean 23.90, range 21 to 28), 31 starts**
+    //     (mean 31.47, range 28 to 35), with 183 of the 900 seed-days holding nothing at all.
+    //
+    // The floors below are unchanged from #111's own (median >= 15; at least 28 of 30 seeds >= 12;
+    // no seed at zero) and all still clear. What is new is the **band around the owner's target**:
+    // the same measurement is now checked from above as well as below, so a deck or a rate that
+    // made the farm busier than the owner asked fails here instead of reading as extra margin.
+    const daysInFive = (median(smallDays) / DAYS) * 5;
+    const report = `days with a small start, per 30: median ${median(smallDays)}, mean ${mean(smallDays).toFixed(2)}, range ${range(smallDays)} = ${daysInFive.toFixed(2)} in 5 (measured median 24, mean 23.90, 21 to 28, at rate ${SIZE_PACING.small.perFarmDay}); target is ${PACE_TARGETS.smallDaysInFive} in 5 = 24 of 30`;
     expect(median(smallDays), report).toBeGreaterThanOrEqual(15);
     expect(smallDays.filter((n) => n >= 12).length, report).toBeGreaterThanOrEqual(28); // measured 30 of 30
     expect(Math.min(...smallDays), report).toBeGreaterThan(0); // no seed goes a whole month without one
-    // And the small things are the everyday texture, not a trickle: measured 22.6 starts a month.
-    expect(median(smallStarts), `small starts per 30 days: median ${median(smallStarts)}, mean ${mean(smallStarts).toFixed(2)}, range ${range(smallStarts)} (measured median 23, mean 22.57, 20 to 26)`).toBeGreaterThanOrEqual(15);
+    // The owner's own shape, both ways round: half a day in five of slack either side of four, which
+    // is a median between 21 and 27 of 30. Measured median 24.0 — dead on the target.
+    expect(daysInFive, report).toBeGreaterThanOrEqual(PACE_TARGETS.smallDaysInFive - 0.5);
+    expect(daysInFive, report).toBeLessThanOrEqual(PACE_TARGETS.smallDaysInFive + 0.5);
+    // And the small things are the everyday texture, not a trickle: re-measured 31 starts a month
+    // (median), mean 31.47, range 28 to 35 — most days hold one, some hold two.
+    expect(median(smallStarts), `small starts per 30 days: median ${median(smallStarts)}, mean ${mean(smallStarts).toFixed(2)}, range ${range(smallStarts)} (measured median 31, mean 31.47, 28 to 35, at rate ${SIZE_PACING.small.perFarmDay})`).toBeGreaterThanOrEqual(15);
   });
 
-  it('a big thing a few times a farm month — measured median 2, mean 2.30, range 0 to 5', () => {
-    // The owner's target is about three in thirty farm days, and this one lands: between one and
-    // five on **28 of 30** seeds, and zero on two of them (seeds 8 and 14). Zero is not a failure —
-    // nothing is forced, and a quiet month is allowed (plan decision 16) — so the band is asserted
-    // over the population, not per seed.
+  it('never tells a line with a placeholder still in it (#114)', () => {
+    // Every card line is filled before it is told, on this path and on the unwatched one, so the
+    // chronicle holds finished sentences and the storybook has nothing to render but prose. Across
+    // the same thirty seeds and thirty farm days as the pace measurements above: zero.
+    const braced = months.flatMap((m) => m.braced);
+    expect(braced, `chronicle lines with a brace: ${braced.slice(0, 3).join(' | ')}`).toEqual([]);
+  });
+
+  it('a big thing a few times a farm month — measured median 2, mean 1.77, range 0 to 3', () => {
+    // The owner's target is about three in thirty farm days. On #111 alone this landed between one
+    // and five on 28 of 30 seeds (median 2, mean 2.30, range 0 to 5), zero on two (seeds 8 and 14);
+    // with #86 merged in at the old rate of 8 it read median 1, mean 1.60, range 0 to 4, in band on
+    // 27 of 30. **Re-measured at the shipped small rate: median 2, mean 1.77, range 0 to 3, in band
+    // on 27 of 30**, zero on three (seeds 6, 8 and 14). Nothing here touches the big rate — it is
+    // still `bigPerThirtyFarmDays / 30` — but the small draw shares the concurrency cap and the
+    // no-repeat window with it, so a quieter small stream moves the big one a little too;
+    // `merchantCaravan` narrowing from day-or-dusk to day-only (#86, at weight 10 rather than
+    // trunk's 14 — see its own `farm.json` comment) is the other half of it. Zero is still not a
+    // failure — nothing is forced, and a quiet month is allowed (plan decision 16) — so the band is
+    // asserted over the population, not per seed.
     const inBand = bigStarts.filter((n) => n >= 1 && n <= 5).length;
-    const report = `big starts per 30 farm days: median ${median(bigStarts)}, mean ${mean(bigStarts).toFixed(2)}, range ${range(bigStarts)}, in 1..5 on ${inBand}/30 (measured median 2, mean 2.30, 0 to 5, in band on 28/30); target ${PACE_TARGETS.bigPerThirtyFarmDays}`;
-    expect(inBand, report).toBeGreaterThanOrEqual(24); // measured 28 of 30
+    const report = `big starts per 30 farm days: median ${median(bigStarts)}, mean ${mean(bigStarts).toFixed(2)}, range ${range(bigStarts)}, in 1..5 on ${inBand}/30 (measured median 2, mean 1.77, 0 to 3, in band on 27/30, at small rate ${SIZE_PACING.small.perFarmDay}); target ${PACE_TARGETS.bigPerThirtyFarmDays}`;
+    expect(inBand, report).toBeGreaterThanOrEqual(24); // measured 27 of 30
     expect(median(bigStarts), report).toBeGreaterThanOrEqual(1);
     expect(Math.max(...bigStarts), report).toBeLessThanOrEqual(8); // the four-farm-day gap caps it near 7
   });
@@ -145,9 +199,11 @@ describe('an unwatched span: small things happen, big things do not', () => {
       expect(big.map((d) => d.id), `seed ${seed}: the Ledger branch drew a big thing`).toEqual([]);
       // And nothing big started in the actor remainder either, or on the respawned world's own
       // first looks: the whole gap is checked against the chronicle, not only the Ledger's report.
-      const bigLines = new Set(FARM_DECK.cards.concat().filter((x) => x.size === 'big').map((x) => x.storybook.line));
-      for (const e of FARM_DECK.authored) if (e.size === 'big') bigLines.add(e.storybook.line);
-      const toldDuringGap = c.state.chronicle.entries.filter((e) => e.atMs > s.clock.nowMs && bigLines.has(e.line));
+      // Matched on the picture key, not the authored line: since #114 the told line is the filled
+      // sentence, so a raw-line match could never fire (the round-3 Verifier proved it vacuous).
+      const bigPictures = new Set(FARM_DECK.cards.concat().filter((x) => x.size === 'big').map((x) => x.storybook.picture));
+      for (const e of FARM_DECK.authored) if (e.size === 'big') bigPictures.add(e.storybook.picture);
+      const toldDuringGap = c.state.chronicle.entries.filter((e) => e.atMs > s.clock.nowMs && bigPictures.has(e.picture));
       expect(toldDuringGap.map((e) => e.line), `seed ${seed}: a big line was told during the gap`).toEqual([]);
     }
   });
@@ -159,19 +215,24 @@ describe('an unwatched span: small things happen, big things do not', () => {
       const s = started(seed);
       const c = catchUp(s, Math.floor(0.9 * dayMs(s)));
       expect(c.mode).toBe('actors');
-      const bigLines = new Set(FARM_DECK.cards.filter((x) => x.size === 'big').map((x) => x.storybook.line));
-      for (const e of FARM_DECK.authored) if (e.size === 'big') bigLines.add(e.storybook.line);
-      const told = c.state.chronicle.entries.filter((e) => e.atMs > s.clock.nowMs && bigLines.has(e.line));
+      // Picture keys, not authored lines, for the same reason as above.
+      const bigPictures = new Set(FARM_DECK.cards.filter((x) => x.size === 'big').map((x) => x.storybook.picture));
+      for (const e of FARM_DECK.authored) if (e.size === 'big') bigPictures.add(e.storybook.picture);
+      const told = c.state.chronicle.entries.filter((e) => e.atMs > s.clock.nowMs && bigPictures.has(e.picture));
       expect(told.map((e) => e.line), `seed ${seed}`).toEqual([]);
     }
   });
 
   it('small things do happen across an unwatched week, and they are in the chronicle', () => {
-    // Measured over the same thirty seeds, a seven-farm-day gap: **median 7 small things, mean 6.40,
-    // range 4 to 9**, on **median 5 of the 7 days, mean 4.93, range 3 to 7**. That is a better day
-    // rate than watched play manages (17.93 of 30, three days in five, against five in seven here),
-    // because the unwatched look walks every time band of every day at one look a farm hour while a
-    // watched world's actors are elsewhere and its own eligibility windows are narrower.
+    // Measured over the same thirty seeds, a seven-farm-day gap. On #111 alone: median 7 small
+    // things, mean 6.40, range 4 to 9, on median 5 of the 7 days (mean 4.93). With #86 merged in at
+    // the old rate of 8: median 12, mean 12.60, range 11 to 16, on median 7 of 7 (mean 6.87).
+    // **Re-measured at the shipped small rate: median 9 small things, mean 8.73, range 6 to 11, on
+    // median 6 of the 7 days, mean 6.07, range 5 to 7.** The unwatched path reads the same rate the
+    // watched one does, so it came down with it — and it is still a better day rate than watched
+    // play manages (6.07 of 7 here against 23.90 of 30 there), because the unwatched look walks
+    // every time band of every day at one look a farm hour while a watched world's actors are
+    // elsewhere and its own eligibility windows are narrower.
     const counts: number[] = [];
     const days: number[] = [];
     for (let seed = 1; seed <= SEEDS; seed++) {
@@ -180,20 +241,27 @@ describe('an unwatched span: small things happen, big things do not', () => {
       const c = catchUp(s, 7 * dayMs(s));
       counts.push(c.unwatched.length);
       days.push(new Set(c.unwatched.map((d) => Math.floor((d.atMs - s.clock.nowMs) / dayMs(s)))).size);
-      // Told, with the same line and picture key the watched world would have used — that is what
-      // lets the storybook tell an unwatched week without writing a word of new prose.
+      // Told, with the same picture key and the same filled line the watched world would have used
+      // — that is what lets the storybook tell an unwatched week without writing a word of new
+      // prose. Matched on the picture key rather than the raw line because since #114 both paths
+      // fill the line's placeholders before telling it, from the one table.
       const fresh = c.state.chronicle.entries.slice(before);
       for (const d of c.unwatched) {
         const entry = FARM_DECK.byId.get(d.id);
         expect(entry, `seed ${seed}: ${d.id} is not in the deck`).toBeDefined();
         const card = entry!.kind === 'card' ? entry!.card : entry!.event;
-        const line = fresh.find((e) => e.atMs === d.atMs && e.line === card.storybook.line);
+        const line = fresh.find((e) => e.atMs === d.atMs && e.picture === card.storybook.picture);
         expect(line, `seed ${seed}: ${d.id} at ${d.atMs} was drawn but not told`).toBeDefined();
-        expect(line!.picture).toBe(card.storybook.picture);
         expect(line!.source).toBe(d.kind);
+        // The finished sentence, not the authored one: no card in this deck has a `coins` hook
+        // (decision 12) and none of the small cards' lines counts the flock, so the fill is the
+        // same one a watched draw of this card would have written.
+        expect(line!.line).toBe(fillStorybookLine(card.storybook.line, { flock: c.after.wool.length, coins: coinsMoved(card.hooks.start) }));
       }
+      // And nothing anywhere in the gap was told with a brace still in it (#114).
+      for (const e of fresh) expect(e.line, `seed ${seed}: ${e.line}`).not.toMatch(/[{}]/);
     }
-    const report = `unwatched week: draws median ${median(counts)}, mean ${mean(counts).toFixed(2)}, range ${range(counts)} (measured median 7, mean 6.40, 4 to 9); days with one, of 7: median ${median(days)}, mean ${mean(days).toFixed(2)}, range ${range(days)} (measured median 5, mean 4.93, 3 to 7)`;
+    const report = `unwatched week: draws median ${median(counts)}, mean ${mean(counts).toFixed(2)}, range ${range(counts)} (measured median 9, mean 8.73, 6 to 11, at small rate ${SIZE_PACING.small.perFarmDay}); days with one, of 7: median ${median(days)}, mean ${mean(days).toFixed(2)}, range ${range(days)} (measured median 6, mean 6.07, 5 to 7)`;
     expect(median(counts), report).toBeGreaterThanOrEqual(4);
     expect(Math.min(...counts), report).toBeGreaterThan(0); // no seed comes back to an empty week
     expect(median(days), report).toBeGreaterThanOrEqual(3);

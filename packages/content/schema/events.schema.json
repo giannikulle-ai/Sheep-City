@@ -184,7 +184,7 @@
     },
     "storybook": {
       "type": "object",
-      "description": "How 'while you were gone' tells the card. One past-tense line under 90 characters; placeholders in braces are filled by the client from the event log. v2 adds `notability`.",
+      "description": "How 'while you were gone' tells the card. One past-tense line under 90 characters; placeholders in braces are filled by the sim before the line reaches the chronicle (#114: packages/sim/src/chronicle/storybook-line.ts, on both the watched and the unwatched path), so the chronicle stores a finished sentence and the client never sees a brace. The names in the pattern below are exactly the ones that substitution can fill. v2 adds `notability`.",
       "properties": {
         "line": { "type": "string", "minLength": 1, "maxLength": 89, "pattern": "^[^{}]*(\\{(dl|lamb|sheep|farmer|merchant|coins|flock)\\}[^{}]*)*$" },
         "picture": { "$ref": "_defs.schema.json#/$defs/id" },

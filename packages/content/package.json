@@ -13,5 +13,8 @@
     "test": "vitest run && node --test \"test/*.test.mjs\"",
     "typecheck": "tsc -p tsconfig.json"
   },
+  "devDependencies": {
+    "@sheepcliff/sim": "*"
+  },
   "engines": { "node": ">=20" }
 }

@@ -3,6 +3,7 @@
 // cards it names while it runs, and the owner can start and reset it by intent.
 import { describe, expect, it } from 'vitest';
 import { SEASON_MS } from '../src/clock';
+import { fillStorybookLine } from '../src/chronicle/storybook-line';
 import { FARM_DECK } from '../src/engine/deck';
 import { applyAuthoredIntent, dayOfSeason, eligibleCards, endEvent, evaluate, preemptedByAuthored, readyAuthored, seasonDayOfFraction, seasonFraction, startEvent, triggerMet } from '../src/engine/engine';
 import { MOOD_RANGE } from '../src/engine/events';
@@ -439,7 +440,12 @@ describe('what the engine tells the chronicle', () => {
     endEvent(s, FARM_DECK, 'shearingDay');
     const lines = told(s);
     expect(lines).toHaveLength(2);
-    expect(lines[0]!.line).toBe(card('shearingDay').storybook.line);
+    // The **filled** line, not the authored one (#114): the chronicle stores a finished sentence,
+    // so `{flock}` here has become the flock's own count. The authored text is
+    // "Shearing day. The farmer clipped {flock} fleeces and the sheep felt the breeze."
+    expect(lines[0]!.line).toBe(fillStorybookLine(card('shearingDay').storybook.line, { flock: s.sheep.length, coins: 0 }));
+    expect(lines[0]!.line).toBe(`Shearing day. The farmer clipped ${s.sheep.length} fleeces and the sheep felt the breeze.`);
+    expect(lines[0]!.line).not.toMatch(/[{}]/);
     expect(lines[0]!.picture).toBe('shearing');
     expect(lines[0]!.notability).toBeCloseTo(0.7, 9);
     expect(lines[1]!.picture).toBe('shearing-end');

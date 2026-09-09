@@ -14,7 +14,7 @@
       "id": "fogMorning",
       "title": "Fog morning",
       "size": "small",
-      "comment": "The reference visibility event for #40. The flock huddles; DL counts them by ear. v2: conditions ported 1:1 from v1's preconditions; no multiplier, a fog roll is weather, not an actor state.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Fog morning\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["autumn", "winter", "spring"] },
         { "on": "weather", "op": "eq", "value": "sun" },
@@ -41,9 +41,9 @@
       "id": "crowsOnTheField",
       "title": "Crows on the field",
       "size": "small",
-      "comment": "Crows are data here and art in #47; DL's chase is sim work in #48. v2: flockSize.min becomes a ledger.flock condition; new causality, the issue's own example, crows are likelier when the hay is high — the Ledger has no separate hay stock, so this reads ledger.grass (the mean tuft level) as the stand-in, flagged to sim on #40. Base weight also drops from v1's flat 12 to 8: the new ×2 grass multiplier now carries the busy-hay-day likelihood the old flat number tried to bake in on its own, so the base has to sit lower to keep the same overall frequency once the multiplier can double it.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Crows on the field\".",
       "conditions": [
-        { "on": "season", "op": "in", "value": ["summer", "autumn"] },
+        { "on": "season", "op": "in", "value": ["spring", "summer", "autumn"] },
         { "on": "weather", "op": "eq", "value": "sun" },
         { "on": "timeOfDay", "op": "in", "value": ["day"] },
         { "on": "ledger.flock", "op": "gte", "value": 1 }
@@ -73,7 +73,7 @@
       "id": "lostLamb",
       "title": "Lost lamb",
       "size": "big",
-      "comment": "Reference event for #40: a lamb wanders off the field at dusk and DL fetches it home. v2: this is the issue's own worked example. The hard gate stays dusk-only, sun or rain, so the storybook line stays true (it always happens near dusk); the three named actor predicates now do the causal work v1 could only fake with a flat weight of 8. `lambFarFromMother` is PROPOSED to sim on #40: today's sim springs every lamb to a fixed point behind its mother every tick with no detachment behaviour, so this predicate cannot yet be true and the card cannot yet fire on it — the multiplier is written for the sim #40 will build, not the one that exists today.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Lost lamb\". `lambFarFromMother` is PROPOSED to sim on #40.",
       "conditions": [
         { "on": "lambPresent", "op": "eq", "value": true },
         { "on": "timeOfDay", "op": "in", "value": ["dusk"] },
@@ -108,29 +108,29 @@
       "id": "merchantCaravan",
       "title": "Merchant caravan",
       "size": "big",
-      "comment": "Replaces the fixed merchant timer (#40). Cooldown 32 sim hours is balance merchant.everyMs (240 s real) in in-world time; duration 240 sim minutes is merchant.stayMs (30 s real). v2: conditions ported 1:1; no multiplier, his cadence is mechanical, not actor-driven.",
+      "comment": "Write-up and the KNOWN GAP (three code paths still sell wool on this card): docs/content/EVENT_DECK.md, \"Merchant caravan\". Owner's decision 12: no transaction on the farm; data has no coins/wool hook. Weight stays at 10, not trunk's 14: the day-only window (dropping dusk) is roughly half of trunk's day-or-dusk window, so trunk's weight would land this card almost as often inside a narrower slice of the clock — 10 keeps its per-eligible-tick odds close to trunk's own feel instead of concentrating trunk's frequency into half the hours.",
       "conditions": [
         { "on": "merchantPresent", "op": "eq", "value": false },
-        { "on": "timeOfDay", "op": "in", "value": ["day", "dusk"] }
+        { "on": "timeOfDay", "op": "in", "value": ["day"], "comment": "Daytime only now (was day or dusk): a road event has no reason to keep the old trade window, and 'daytime' is the issue's own word for it." }
       ],
-      "weight": { "base": 14, "multipliers": [] },
+      "weight": { "base": 10, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 2160, "cooldownSimHours": 32 },
       "durationSimMinutes": 240,
       "hooks": {
         "start": [
-          { "op": "spawn", "what": "merchant", "at": "offstage", "comment": "The merchant walks the plan in farm/npcs.json: in at the gate, trade, gone. The trade pays the coins; no coins hook here." }
+          { "op": "spawn", "what": "merchant", "at": "offstage", "comment": "Puts the cart on the lane so the moment has a beat to see. No coins hook, no wool hook: the farm's stock does not move from this card's own data. See the card comment for the known code-path gap this alone cannot close." }
         ],
         "end": []
       },
-      "storybook": { "line": "The merchant's cart rolled in and {coins} coins changed hands.", "picture": "merchant", "notability": 0.4 },
+      "storybook": { "line": "A caravan rolled along the lane and {dl} trotted the fence to watch it pass.", "picture": "merchant", "notability": 0.25 },
       "moment": { "kind": "npc-arrival", "detail": "merchant" },
-      "beat": { "start": "The cart rolls in from the right edge; DL looks up.", "end": "A coin bubble, the cart rolls out, and a new thing stands on the farm if the coins stretched to it." }
+      "beat": { "start": "The cart rolls along the lane past the outer gate; the sheep look up and DL trots to the fence.", "end": "The cart carries on down the lane and out of sight; the flock goes back to grazing." }
     },
     {
       "id": "shearingDay",
       "title": "Shearing day",
       "size": "big",
-      "comment": "Reference event for #40: the sim tops every fleece up to ready and summons the farmer, who shears the lot. v2: flockSize.min becomes ledger.flock; new ledger.wool condition and multiplier so shearing day is triggered by a flock that is genuinely close to ready, not only by season and a coin flip.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Shearing day\".",
       "conditions": [
         { "on": "season", "op": "in", "value": ["spring", "summer"] },
         { "on": "weather", "op": "eq", "value": "sun" },
@@ -164,7 +164,7 @@
       "id": "rainbowAfterRain",
       "title": "Rainbow after rain",
       "size": "small",
-      "comment": "v1 proposed a bespoke `recentWeather` precondition beyond the issue's list; v2 carries the same idea forward as an ordinary predicate, `simMinutesSinceRain`, so it fits the ordinary {on, op, value} shape instead of a one-off object. Still PROPOSED to sim on #40, same as v1 flagged it.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Rainbow after rain\". `simMinutesSinceRain` is PROPOSED to sim on #40.",
       "conditions": [
         { "on": "weather", "op": "eq", "value": "sun" },
         { "on": "simMinutesSinceRain", "op": "lte", "value": 20 },
@@ -190,9 +190,9 @@
       "id": "strayCatVisits",
       "title": "A stray cat visits",
       "size": "small",
-      "comment": "The cat is a new creature: data here, art and behaviour in their own tickets (High gate). v2: new flockScattered multiplier, a calm settled flock reads as safer for a cat to approach.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"A stray cat visits\". Cat is a new creature (High gate for art/behaviour).",
       "conditions": [
-        { "on": "weather", "op": "eq", "value": "sun" },
+        { "on": "weather", "op": "in", "value": ["sun", "rain"] },
         { "on": "timeOfDay", "op": "in", "value": ["dusk", "night"] }
       ],
       "weight": {
@@ -217,7 +217,7 @@
       "id": "farmersDayOff",
       "title": "The farmer's day off",
       "size": "small",
-      "comment": "Fires at dawn so both of the farmer's visits (farmer.visitsAt) are skipped. DL walks the farmer's rounds instead. v2: adds a farmerPresent condition — he cannot take the day off if he is already on the field.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"The farmer's day off\".",
       "conditions": [
         { "on": "timeOfDay", "op": "in", "value": ["dawn"] },
         { "on": "farmerPresent", "op": "eq", "value": false }
@@ -243,9 +243,9 @@
       "id": "nightOfTheFireflies",
       "title": "Night of the fireflies",
       "size": "small",
-      "comment": "Fireflies exist as small life from #33; this card brings a swarm. DL snaps at them and catches none. v2: new flockScattered multiplier, the swarm is easier to notice, and DL freer to chase it, on a settled night.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Night of the fireflies\".",
       "conditions": [
-        { "on": "season", "op": "in", "value": ["summer"] },
+        { "on": "season", "op": "in", "value": ["spring", "summer", "autumn"] },
         { "on": "weather", "op": "eq", "value": "sun" },
         { "on": "timeOfDay", "op": "in", "value": ["night"] }
       ],
@@ -274,11 +274,11 @@
       "id": "lambZoomiesHour",
       "title": "Lamb zoomies hour",
       "size": "small",
-      "comment": "Short and daft. Every lamb runs rings round the trough; the ewes do not move. v2: new flockScattered multiplier, a lamb only feels safe enough to bolt for fun when the flock is not on edge.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Lamb zoomies hour\".",
       "conditions": [
         { "on": "lambPresent", "op": "eq", "value": true },
         { "on": "weather", "op": "eq", "value": "sun" },
-        { "on": "timeOfDay", "op": "in", "value": ["day", "dusk"] }
+        { "on": "timeOfDay", "op": "in", "value": ["dawn", "day", "dusk"] }
       ],
       "weight": {
         "base": 12,
@@ -305,7 +305,7 @@
       "id": "wellRunsLow",
       "title": "The well runs low",
       "size": "small",
-      "comment": "A hot dry spell. The trough is drawn low and the sheep queue at it until the farmer comes with buckets. Drop bubble is an art ask. v2: flockSize.min becomes ledger.flock; new ledger.grass condition so this is a genuine dry spell, not any sunny summer day, plus a farmerPresent multiplier — it worsens fastest with nobody around to catch it early.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"The well runs low\". Drop bubble is an art ask.",
       "conditions": [
         { "on": "season", "op": "in", "value": ["summer"] },
         { "on": "weather", "op": "eq", "value": "sun" },
@@ -340,33 +340,31 @@
       "id": "windfall",
       "title": "A windfall",
       "size": "small",
-      "comment": "DL digs by the tree and finds a purse. Twelve coins is four wool at the merchant's price: a nice surprise, not a jackpot. v2: new ledger.coins condition, the surprise means more, and is truer to \"nobody asked whose\", when the bank was already lean.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"A windfall\". Owner's decision 12: no transaction on the farm, so no coins hook.",
       "conditions": [
         { "on": "weather", "op": "in", "value": ["sun", "rain"] },
-        { "on": "timeOfDay", "op": "in", "value": ["day"] },
-        { "on": "ledger.coins", "op": "lte", "value": 40, "comment": "A find lands better on a lean bank." }
+        { "on": "timeOfDay", "op": "in", "value": ["dawn", "day"] }
       ],
       "weight": { "base": 5, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 4350, "cooldownSimHours": 72 },
       "durationSimMinutes": 30,
       "hooks": {
         "start": [
-          { "op": "coins", "delta": 12, "comment": "Into the bank straight away; the merchant can spend it on his next visit." },
-          { "op": "mood", "target": "dl", "delta": 1 }
+          { "op": "mood", "target": "dl", "delta": 1, "comment": "The find itself is the moment; no coins hook, no ledger stock moves." }
         ],
         "end": []
       },
-      "storybook": { "line": "{dl} dug up a purse by the tree. {coins} coins, and nobody asked whose.", "picture": "windfall", "notability": 0.45 },
-      "moment": { "kind": "bubble", "detail": "coin" },
-      "beat": { "start": "DL digs at the foot of the tree; a coin bubble pops over her.", "end": "She trots back to the field with her nose muddy; the coin count is up." }
+      "storybook": { "line": "{dl} dug up something bright by the tree, and nobody asked whose it was.", "picture": "windfall", "notability": 0.35 },
+      "moment": { "kind": "bubble", "detail": "dig" },
+      "beat": { "start": "DL digs at the foot of the tree and comes up with something in her teeth.", "end": "She trots back to the field with her nose muddy, pleased with herself." }
     },
     {
       "id": "stargazingNight",
       "title": "Stargazing night",
       "size": "small",
-      "comment": "A clear night. Everybody lies down and looks up; the sky layer brightens its stars. v2: new flockScattered multiplier, a settled flock is what lies down together.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Stargazing night\".",
       "conditions": [
-        { "on": "season", "op": "in", "value": ["summer", "autumn"] },
+        { "on": "season", "op": "in", "value": ["spring", "summer", "autumn", "winter"] },
         { "on": "weather", "op": "eq", "value": "sun" },
         { "on": "timeOfDay", "op": "in", "value": ["night"] }
       ],
@@ -388,14 +386,14 @@
         ]
       },
       "storybook": { "line": "A clear night. {dl} sat by the gate and watched the stars with the flock.", "picture": "stars", "notability": 0.3 },
-      "moment": { "kind": "dl-trick", "detail": "stargaze" },
+      "moment": { "kind": "weather", "detail": "stargaze" },
       "beat": { "start": "The stars come up bright; DL sits down by the gate with her head tipped back.", "end": "The sky dims to its usual night and DL walks to the barn door to sleep." }
     },
     {
       "id": "flockHuddle",
       "title": "Rain, and a flock to gather",
       "size": "small",
-      "comment": "New for #59, filling the seat DL's birthday and first snow left behind. Dramatises DL's own rain-shepherd priority (plan section 2, her fixed priority order: fetch, manual, riding, rain shepherd, dusk and dawn routine, idle play) as a watchable card instead of an unremarked background rule: the flock startling apart at the first drops, and DL running the flockScattered predicate down to zero.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"Rain, and a flock to gather\".",
       "conditions": [
         { "on": "weather", "op": "eq", "value": "rain" },
         { "on": "flockScattered", "op": "eq", "value": true }
@@ -427,7 +425,7 @@
       "id": "farmerMeetsMerchant",
       "title": "The farmer meets the merchant",
       "size": "small",
-      "comment": "New for #59, filling the seat DL's birthday and first snow left behind. Shows off an AND of two actor predicates rather than a single one: merchantPresent and farmerPresent both true is already rare on its own, so the base weight is low and needs no multiplier.",
+      "comment": "Write-up: docs/content/EVENT_DECK.md, \"The farmer meets the merchant\".",
       "conditions": [
         { "on": "merchantPresent", "op": "eq", "value": true },
         { "on": "farmerPresent", "op": "eq", "value": true }

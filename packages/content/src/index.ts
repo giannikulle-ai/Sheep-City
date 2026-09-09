@@ -68,7 +68,16 @@ export type EventLimits = {
 /** Watch-test moment kinds (tools/qa/README.md). `bird`/`rabbit` are reserved for small life, not cards. */
 export type MomentKind = 'bubble' | 'npc-arrival' | 'weather' | 'dl-trick' | 'lamb' | 'phase' | 'bird' | 'rabbit';
 
-/** Placeholders a storybook line may carry; the client fills them from the event log. */
+/**
+ * Placeholders a storybook line may carry. **The set is the sim's substitution table's own keys**
+ * (`packages/sim/src/chronicle/storybook-line.ts`): a placeholder is allowed exactly when the sim
+ * can fill it before the line reaches the chronicle (#114). It is written out a second time here
+ * because the sim reads this package's JSON and never imports its TypeScript (see that package's
+ * `engine/deck.ts` header), so there is no import to share the array through; `index.test.ts` pins
+ * the two equal, and `assertPlaceholdersAreKnown` below fails the deck's load if a shipped line
+ * uses anything else. The deck schema's own `line` pattern carries the same list for
+ * `validate.mjs`.
+ */
 export const STORYBOOK_PLACEHOLDERS = ['dl', 'lamb', 'sheep', 'farmer', 'merchant', 'coins', 'flock'] as const;
 export type StorybookPlaceholder = (typeof STORYBOOK_PLACEHOLDERS)[number];
 
@@ -182,3 +191,26 @@ export function simHoursToMs(hours: number, deck: EventDeck = FARM_EVENT_DECK): 
 export function storybookPlaceholders(line: string): StorybookPlaceholder[] {
   return [...line.matchAll(/\{([a-z]+)\}/g)].map((m) => m[1] as StorybookPlaceholder);
 }
+
+/**
+ * Every shipped line's placeholders are ones the sim can fill — checked **at deck load**, when this
+ * module is first imported, not at the draw. A card whose line carries `{purse}` would otherwise
+ * reach the chronicle with the brace still in it, which is the bug #114 was filed for; the sim's
+ * `fillStorybookLine` throws on the same key from the other side.
+ */
+function assertPlaceholdersAreKnown(): void {
+  const known = new Set<string>(STORYBOOK_PLACEHOLDERS);
+  for (const event of [...FARM_EVENT_DECK.events, ...FARM_AUTHORED_EVENTS.events]) {
+    for (const placeholder of storybookPlaceholders(event.storybook.line)) {
+      if (!known.has(placeholder)) {
+        throw new Error(`${event.id}: storybook line uses unknown placeholder {${placeholder}} (known: ${STORYBOOK_PLACEHOLDERS.join(', ')})`);
+      }
+    }
+    // A brace the placeholder pattern cannot even read (`{DL}`, `{ dl }`) never reaches the sim's
+    // substitution as a key, so it is caught here by shape rather than by name.
+    const filled = event.storybook.line.replace(/\{[a-z]+\}/g, '');
+    if (filled.includes('{') || filled.includes('}')) throw new Error(`${event.id}: storybook line has a brace that is not a placeholder`);
+  }
+}
+
+assertPlaceholdersAreKnown();

@@ -28,6 +28,7 @@
 // told about them did.
 
 import { tell, type Chronicle } from '../chronicle/store';
+import { coinsMoved, fillStorybookLine } from '../chronicle/storybook-line';
 import { FARM_DISTRICT } from '../chronicle/types';
 import { phaseOf, seasonAt, SEASON_MS, type Phase, type SeasonName } from '../clock';
 import { FARM_DECK, type AuthoredEvent, type Card, type Deck, type EventHook, type EventHooks, type Predicate, type PredicateOn } from '../engine/deck';
@@ -259,7 +260,10 @@ function startUnwatched(
   tell(chronicle, {
     atMs: at,
     district: FARM_DISTRICT,
-    line: entry.storybook.line,
+    // The same fill the watched path does (#114), from the same table: the flock count comes off
+    // the Ledger (`wool` has one entry per grown sheep) instead of off the actors, because there
+    // are no actors here.
+    line: fillStorybookLine(entry.storybook.line, { flock: view.ledger.wool.length, coins: coinsMoved(entry.hooks.start) }),
     picture: entry.storybook.picture,
     source: kind,
     hint: entry.storybook.notability,

@@ -108,12 +108,23 @@ describe('scripted day', () => {
   // `b3da5ab0c4e981ed` → `7c413f504c6d5a57`.
   // Her transitions above did not move by a line on any of the three — the test below pins that as
   // an equality, not by eye, and it is the point of re-pinning the hash rather than loosening it.
+  //
+  // It moved twice more on this branch. Merging **#86 into #101**: `7c413f504c6d5a57` →
+  // `b0c813bd71455c38`, the world lane's widened `conditions` shifting which card the generator
+  // draws on this seed's own day. And now, in the same branch's round 3, twice over in one move:
+  // `b0c813bd71455c38` → `575fc853e800bd3d`. Two causes, both deliberate and both outside Digital
+  // Luna: the small draw rate is now derived from the owner's own target (four farm days in five,
+  // `PACE_TARGETS.smallDaysInFive` through `SMALL_RATE_FOR_DAYS_IN_FIVE`: 1.25 rather than the bare
+  // 8), so this day's card draws shift again; and every storybook line is now filled before it is
+  // told (#114), so the chronicle entries the hash covers hold "Digital Luna" where they held
+  // "{dl}". `EXPECTED` — her transitions — is byte-for-byte unchanged by both, which is the point
+  // of re-pinning the hash rather than loosening it.
   it('seed 11 twice gives the same day and the same hash', () => {
     const a = scriptedDay(11);
     const b = scriptedDay(11);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('7c413f504c6d5a57');
+    expect(hashState(a.state)).toBe('575fc853e800bd3d');
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "her 28 transitions at seed 11 are unchanged

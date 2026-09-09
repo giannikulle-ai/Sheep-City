@@ -127,14 +127,17 @@ describe('the pacing numbers are data, and every one of them is in world time', 
     const perDayUnwatched = drawChance(thin, 'small', unwatchedLook) * (SIM_MINUTES_PER_DAY / unwatchedLook);
     expect(perDayLive).toBeCloseTo(SIZE_PACING.small.perFarmDay / 10, 12);
     expect(perDayUnwatched).toBeCloseTo(perDayLive, 12);
-    // **And the honest caveat, asserted rather than only written down.** A farm hour is a big
-    // enough slice that `maxDrawChance` binds for an ordinary card, so the unwatched path runs at
-    // about three fifths of nominal where a card is eligible for a long stretch. It is stated in
-    // `PACING.unwatchedLookFarmHours`'s own comment and measured in `engine-pace.test.ts`; this
-    // pins the arithmetic so the caveat cannot go stale without a test noticing.
-    expect(drawChance(REFERENCE_WEIGHT, 'small', unwatchedLook)).toBe(PACING.maxDrawChance);
-    const capped = drawChance(REFERENCE_WEIGHT, 'small', unwatchedLook) * (SIM_MINUTES_PER_DAY / unwatchedLook);
-    expect(capped / SIZE_PACING.small.perFarmDay).toBeCloseTo(0.6, 6);
+    // **The caveat that used to sit here has gone away, and that is worth pinning too.** At the
+    // rate the engine shipped with (8 a farm day) an ordinary card wanted 0.33 of an unwatched look
+    // and was held to `maxDrawChance`, so the unwatched world ran at about three fifths of nominal
+    // wherever a card was eligible for a long stretch — the caveat written into
+    // `PACING.unwatchedLookFarmHours`. At the rate the owner's four-in-five target now sets it
+    // wants 0.052, a quarter of the cap, so the unwatched path runs at exactly its nominal rate for
+    // an ordinary card. The cap still exists and still binds a fat eligible set, which is the line
+    // under this one.
+    expect(drawChance(REFERENCE_WEIGHT, 'small', unwatchedLook)).toBeLessThan(PACING.maxDrawChance);
+    const perDayCapFree = drawChance(REFERENCE_WEIGHT, 'small', unwatchedLook) * (SIM_MINUTES_PER_DAY / unwatchedLook);
+    expect(perDayCapFree).toBeCloseTo(SIZE_PACING.small.perFarmDay, 12);
     expect(drawChance(1e9, 'small', perEval)).toBe(PACING.maxDrawChance);
   });
 });
@@ -435,16 +438,28 @@ describe('seed 9, the plan’s own seed: the readable demonstration of a watched
   // farm days over thirty seeds and thirty farm days: `test/engine-pace.test.ts`.
   //
   // What survives is this: the plan's own seed, run for a fixed stretch, as a readable
-  // demonstration that a watched world is not one thing happening once. The ids and kinds below are
-  // **re-pinned for #101** — the pacing rewrite changed how much generator each look consumes (two
-  // draw decisions per look, one per size, each with its own gap and its own chance), so the same
-  // seed necessarily draws a different sequence. The pre-change sequence, for the record, was
-  // `strayCatVisits` (dl-trick) then `merchantCaravan` (npc-arrival).
-  it('a fixed stretch draws a sequence, never the same kind twice running, all of it told', () => {
+  // demonstration that a watched world is not one thing happening once. The ids and kinds below
+  // have been re-pinned twice on this branch and this is the third: #86's widened `conditions` put
+  // three `dl-trick` cards in this stretch's eligible set and the seed drew all three; at the small
+  // rate the owner's four-in-five target now sets (1.25, `SMALL_RATE_FOR_DAYS_IN_FIVE`) the same
+  // stretch draws **two** things instead — a firefly night, then a stargazing night — and they are
+  // two different kinds again. The pins in order: pre-#101 `strayCatVisits` (dl-trick) then
+  // `merchantCaravan` (npc-arrival); #101 alone `strayCatVisits` then `windfall` (bubble); #86 at
+  // rate 8 `nightOfTheFireflies`, `crowsOnTheField`, `strayCatVisits` (all dl-trick); here
+  // `nightOfTheFireflies` (dl-trick) then `stargazingNight` (weather).
+  //
+  // **Read this as a demonstration, not as the guard on the no-repeat rule** (round-2 verifier's
+  // note N2 on PR #99). At this pin the stretch holds no two starts of the same kind at all, so the
+  // gap check below has nothing to check on this seed. The rule itself is defended by two other
+  // tests in this file — "two events of the same moment kind never start back to back" over the
+  // population, and "the no-repeat rule holds for its own window and then expires" — and both fail
+  // if the rule is switched off. Neither is touched by this PR.
+  it('a fixed stretch draws a sequence, and no two starts of the same kind are closer than the no-repeat window, all of it told', () => {
     let s = createInitialState(9);
     const kinds = new Set<string>();
     const order: string[] = [];
     const kindOrder: string[] = [];
+    const startedAt: number[] = [];
     const seen = new Set<string>();
     for (let i = 0; i < 3000; i++) {
       s = advance(s, 1);
@@ -455,17 +470,28 @@ describe('seed 9, the plan’s own seed: the readable demonstration of a watched
         seen.add(key);
         order.push(key);
         kindOrder.push(momentKindOf(r.id) ?? '?');
+        startedAt.push(r.startedMs);
       }
     }
     expect(order.map((k) => k.split('@')[0])).toEqual(SEED_9_IDS);
     expect(kindOrder).toEqual(SEED_9_KINDS);
-    // Two distinct kinds (dl-trick, then bubble) — SEED_9_IDS above already pins the exact sequence;
-    // this restates it as the kind-count the "never the same kind twice" rule below is about.
+    // Two distinct kinds this stretch (`dl-trick`, then `weather`) — SEED_9_IDS above already pins
+    // the exact sequence; this restates it as the kind-count. It was 2 pre-#86 (`dl-trick` then
+    // `bubble`), 1 at rate 8 with #86's conditions, and is 2 again here; the coverage-vs-variety
+    // measurement that matters is over the population in `engine-pace.test.ts`, not on one seed.
     expect(kinds.size).toBe(2);
-    // `PACING.noRepeatMomentKind`: never two of the same kind back to back. Nothing lifts it now,
-    // so unlike the pre-#101 pin this holds on every seed, not only on the ones the relaxation
-    // never reached — `engine-pace.test.ts` measures that over the population.
-    for (let i = 1; i < kindOrder.length; i++) expect(kindOrder[i], `${kindOrder[i - 1]} then ${kindOrder[i]}`).not.toBe(kindOrder[i - 1]);
+    // `PACING.noRepeatMomentKind`: never two of the same kind back to back, "back to back" meaning
+    // inside `NO_REPEAT_SIM_MINUTES` (12 farm hours) of each other — not "never again", which is
+    // what a plain not-equal check on adjacent kinds would demand. At this pin the two starts are
+    // different kinds and 206,500 ms apart (1,652 sim-minutes), so this loop has no pair to check
+    // and passes vacuously on this seed: it is here so that a future re-pin that does draw the same
+    // kind twice is held to the real rule rather than to a not-equal check that would have to be
+    // loosened. The tests that actually defend the rule are named in the block comment above.
+    for (let i = 1; i < kindOrder.length; i++) {
+      if (kindOrder[i] !== kindOrder[i - 1]) continue;
+      const gapSimMinutes = msToSimMinutes(startedAt[i]! - startedAt[i - 1]!, s.clock.periodSec);
+      expect(gapSimMinutes, `${SEED_9_IDS[i - 1]} then ${SEED_9_IDS[i]}, both ${kindOrder[i]}`).toBeGreaterThanOrEqual(NO_REPEAT_SIM_MINUTES);
+    }
     // Every start is in the chronicle, told, not just held on the state.
     const told = s.chronicle.entries.filter((e) => e.source === 'card' || e.source === 'authored');
     expect(told.length).toBeGreaterThanOrEqual(order.length);
@@ -473,11 +499,12 @@ describe('seed 9, the plan’s own seed: the readable demonstration of a watched
 });
 
 /**
- * Seed 9's draw over 3,000 ticks (one and two-thirds farm days), re-pinned for #101's per-size
- * pacing: a stray cat on the fence, then a windfall. The pre-change pin was `strayCatVisits` then
- * `merchantCaravan` — the caravan is a **big** card now, and one and two-thirds farm days is well
- * inside the four-farm-day big gap, so a watched stretch this short usually holds small things only.
+ * Seed 9's draw over 3,000 ticks (one and two-thirds farm days), re-pinned at the small rate the
+ * owner's four-in-five target sets: a firefly night at 63,300 ms, then a stargazing night at
+ * 269,800 ms. The pin it replaces (#86's conditions at the engine's old rate of 8) was
+ * `nightOfTheFireflies`, `crowsOnTheField`, `strayCatVisits`; the one before that (#101 alone) was
+ * `strayCatVisits` then `windfall`.
  */
-const SEED_9_IDS = ['strayCatVisits', 'windfall'];
+const SEED_9_IDS = ['nightOfTheFireflies', 'stargazingNight'];
 /** The moment kinds of `SEED_9_IDS`, in the same order. */
-const SEED_9_KINDS = ['dl-trick', 'bubble'];
+const SEED_9_KINDS = ['dl-trick', 'weather'];

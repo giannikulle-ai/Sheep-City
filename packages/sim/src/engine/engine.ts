@@ -33,6 +33,7 @@
 // lines carry a `hint`; no line carries an event id in its `facts` (a fact key is a thing the
 // world measures, not a name of a card).
 
+import { coinsMoved, fillStorybookLine } from '../chronicle/storybook-line';
 import { tell } from '../chronicle/store';
 import { FARM_DISTRICT } from '../chronicle/types';
 import { currentSeason, SEASON_MS } from '../clock';
@@ -202,7 +203,10 @@ export function startEvent(state: SimState, deck: Deck, id: string, kind: 'card'
   tell(state, {
     atMs: now,
     district: FARM_DISTRICT,
-    line: event.storybook.line,
+    // The authored line with its placeholders filled (#114): the chronicle stores the finished
+    // sentence, never a brace. The same call on the unwatched path (`ledger/unwatched.ts`), from
+    // the same table, so a week away reads as a watched night does.
+    line: fillStorybookLine(event.storybook.line, { flock: state.sheep.length, coins: coinsMoved(event.hooks.start) }),
     picture: event.storybook.picture,
     source: kind,
     actors: actorsOf(state, id),

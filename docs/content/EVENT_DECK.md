@@ -76,6 +76,111 @@ grass parched — could not move the odds, only gate them on or off. v2 replaces
 `op` is `eq`/`ne` for one value, `in`/`not-in` for a list (v1's old allow-list, in
 predicate shape), and `gte`/`lte`/`gt`/`lt` for a number.
 
+## Deck coverage (#86)
+
+At the engine's merge only 7 of these 15 cards ever drew across thirty five-minute runs;
+`strayCatVisits` and `merchantCaravan` alone were 39 of 57 draws, and spring nights (every fresh
+world starts in spring, at the clock's `startT` mid-morning — see the note below the table) had
+next to nothing else eligible. This pass widens several cards' `conditions` (season and
+`timeOfDay`) so every season × time band has a real way in, whatever else the world is doing.
+Nothing here moves a `PACING` constant in `packages/sim/src/engine/pacing.ts` — every lever below
+is a card's own data.
+
+**Pace, in world time (decision 16).** The owner's decision (plan section 11, 2026-09-09):
+"small thing most days, big thing a few a month; the big ones should not happen when I am not
+watching; the weight is for what is big or small." That replaces the earlier real-minute framing
+outright — "about three moments per five real minutes" (decision 11) and "three distinct kinds in
+a majority of seeds" (decision 14, restated for the deck on this issue) are both **withdrawn**,
+not just superseded. Pace is described in farm days from here on, split by a card's `size`
+(`small` or `big`), which every card now carries.
+
+**What this deck does to the pace, and the number that sets it.** The widened conditions below do
+more than fill the empty cells in the table: they make small cards eligible far more of the time —
+on about 40 % of the engine's looks, against 14 % before — and the engine's per-look draw chance is
+linear in the eligible weight. Measured over thirty seeds and thirty farm days, watched throughout
+(`packages/sim/test/engine-pace.test.ts`'s own harness, two independent rulers agreeing seed for
+seed):
+
+| | farm days of 30 with a small thing | small starts a farm month |
+|---|---|---|
+| trunk before this deck (#111's pacing, small rate 8) | 18 (mean 17.93, range 15–21) | 23 |
+| this deck at that same rate 8 | **30** (mean 29.57, range 28–30) | 57 |
+| **this deck as it ships, small rate 1.25** | **24** (mean 23.90, range 21–28) | 31 |
+
+The owner's own shape is *four farm days in five*, which is 24 of 30. The middle row is a small
+thing on **every** farm day, about two a day — a quarter past the target — and nothing in the repo
+could have failed for it: `PACE_TARGETS.smallDaysInFive` was read by nothing in the draw, and the
+engine's only assertions on the outcome were floors. This PR makes the target real. The small draw
+rate is now looked up from it (`SMALL_RATE_FOR_DAYS_IN_FIVE`, `packages/sim/src/engine/pacing.ts`),
+the shipped rate is the measured point that delivers four in five **on this deck**, and
+`engine-pace.test.ts` checks the measurement against the target from both sides, so too busy fails
+as loudly as too quiet. **The rate is the owner's number, not this lane's**: if four days in five
+is the wrong feel, `PACE_TARGETS.smallDaysInFive` is the single line to move — 3 and 5 sit beside
+it with their own measured rates (0.6 gives 18 days of 30; 8 gives 30 of 30).
+
+The gap was the other way to get there and was deliberately not taken: at
+`PACING.smallGapFarmHours: 28` the same 24 days arrive with exactly 24 starts on every seed, one
+thing a day and never two — a metronome. The rate keeps the unevenness: most days one, some days
+two, about one farm day in five with nothing on it at all, which is decision 16's own "a quiet farm
+day is allowed".
+
+Sizing every card and teaching the engine what `size` means landed separately, on trunk, as
+**#101** (the engine) and **#102** (this deck's own `small`/`big` values and their write-ups — see
+"Small or big" below, merged in here from trunk). This PR's own job stays what it always was: the
+coverage work — the widened `conditions`
+below, and the moved `stargazingNight` moment kind (see its own card, below) — with the round-1
+pace retune dropped entirely: every card's `weight.base` this PR ships is back at trunk's own
+value, except `merchantCaravan` (kept at 10, not trunk's 14 — its own card entry below says why)
+and `windfall` (back at trunk's 5, unchanged from before this PR's earlier rounds other than the
+data already being coins-free per decision 12). Nothing here touches the `size` values #102 added.
+
+The table below is which cards can structurally draw in each season × time band, reading only
+`season` and `timeOfDay` (the two clock predicates the table is about — a card gated by a Ledger
+stock or an actor predicate, such as `lostLamb` needing `lambPresent`, still needs that to hold
+too; this table is "the clock and the season allow it," not "it will draw"). This table itself is
+what `packages/content/src/deck-coverage.test.ts` reads back out of this Markdown file and compares
+cell for cell against the data, so an edit to one side without the other fails the test — not a
+second hard-coded copy of the same sixteen numbers.
+
+| Season | dawn | day | dusk | night |
+|---|---|---|---|---|
+| spring | fogMorning, farmersDayOff, lambZoomiesHour, windfall, flockHuddle, farmerMeetsMerchant (6) | crowsOnTheField, merchantCaravan, shearingDay, rainbowAfterRain, lambZoomiesHour, windfall, flockHuddle, farmerMeetsMerchant (8) | lostLamb, rainbowAfterRain, strayCatVisits, lambZoomiesHour, flockHuddle, farmerMeetsMerchant (6) | strayCatVisits, nightOfTheFireflies, stargazingNight, flockHuddle, farmerMeetsMerchant (5) |
+| summer | farmersDayOff, lambZoomiesHour, windfall, flockHuddle, farmerMeetsMerchant (5) | crowsOnTheField, merchantCaravan, shearingDay, rainbowAfterRain, lambZoomiesHour, wellRunsLow, windfall, flockHuddle, farmerMeetsMerchant (9) | lostLamb, rainbowAfterRain, strayCatVisits, lambZoomiesHour, flockHuddle, farmerMeetsMerchant (6) | strayCatVisits, nightOfTheFireflies, stargazingNight, flockHuddle, farmerMeetsMerchant (5) |
+| autumn | fogMorning, farmersDayOff, lambZoomiesHour, windfall, flockHuddle, farmerMeetsMerchant (6) | crowsOnTheField, merchantCaravan, rainbowAfterRain, lambZoomiesHour, windfall, flockHuddle, farmerMeetsMerchant (7) | lostLamb, rainbowAfterRain, strayCatVisits, lambZoomiesHour, flockHuddle, farmerMeetsMerchant (6) | strayCatVisits, nightOfTheFireflies, stargazingNight, flockHuddle, farmerMeetsMerchant (5) |
+| winter | fogMorning, farmersDayOff, lambZoomiesHour, windfall, flockHuddle, farmerMeetsMerchant (6) | merchantCaravan, rainbowAfterRain, lambZoomiesHour, windfall, flockHuddle, farmerMeetsMerchant (6) | lostLamb, rainbowAfterRain, strayCatVisits, lambZoomiesHour, flockHuddle, farmerMeetsMerchant (6) | strayCatVisits, stargazingNight, flockHuddle, farmerMeetsMerchant (4) |
+
+Every one of the sixteen cells holds at least four cards (the floor the issue asked for was two);
+the tightest is winter night, which lost `nightOfTheFireflies` (fireflies don't fly in the snow)
+but kept `stargazingNight` after it was widened to every season for exactly this reason.
+
+**The thirty-farm-day measurement.** `packages/content/src/deck-coverage.test.ts` steps the real
+engine (`tickInPlace`, the same per-tick function `advance()` wraps) for 54,000 ticks per seed —
+thirty farm days at 1,800 ticks/day, which is also 43,200 sim-minutes at `timeScale`'s own
+1,440 sim-minutes/day — across seeds 1-30, with two independent rulers on every card start (new
+`events.running` entries, and non-`-end` `card`/`authored` chronicle lines) agreeing seed for
+seed. It counts the deck as a whole, both sizes together; the per-size measurement against the
+owner's targets is `packages/sim/test/engine-pace.test.ts`, which is where the engine can tell a
+small thing from a big one. What this test asserts is the one clause decision 16 states regardless
+of size — nothing is forced, so a month should not go by with nothing at all — and it records the
+rest as a measurement, not a floor. **Measured on this head, at the shipped rate** (every figure
+below is printed by the test's own output, so it can be checked against a run):
+
+- **No seed goes fully silent across the thirty days: 0 of 30** (asserted).
+- **Card starts per farm day, median across seeds: 1.1** (per-seed list, seeds 1-30: 1.10, 1.10,
+  1.17, 1.27, 1.20, 1.00, 1.10, 1.00, 1.03, 1.10, 1.10, 1.10, 1.10, 1.03, 1.17, 1.17, 1.07, 1.17,
+  1.10, 1.13, 1.07, 1.13, 1.23, 1.00, 1.00, 1.10, 1.03, 1.23, 1.03, 1.20).
+- **Days with no card at all: 170 of 900 seed-days** (silent days per seed, seeds 1-30: 8, 5, 5, 1,
+  5, 8, 4, 7, 6, 2, 7, 7, 8, 3, 8, 6, 9, 4, 6, 9, 4, 4, 5, 8, 9, 3, 7, 3, 6, 3) — about one farm day
+  in five with nothing on it, which is the shape four-in-five asks for and what decision 16's
+  "nothing is forced" allows.
+- **Distinct moment kinds over the thirty days, per seed: median 4, range 3–5** (seeds 1-30: 5, 4,
+  5, 4, 5, 3, 4, 4, 5, 4, 5, 5, 5, 3, 4, 4, 5, 5, 5, 3, 4, 5, 5, 3, 4, 5, 5, 4, 3, 4).
+
+The figures this section carried before — 1.43 starts a day, 7 silent days of 900, median 4.5 kinds
+— were measured before #101's world-time pacing rewrite landed and were stale by the time #111
+merged into this branch; at the engine's old small rate of 8 the same harness read 1.9667 starts a
+day, 13 silent days of 900 and a median of 5 kinds. They are replaced above rather than re-labelled.
+
 ## Small or big
 
 Every card and every authored event carries a **`size`**, `small` or `big`. It is a
@@ -99,11 +204,15 @@ watching; the weight is for what is big or small."* So:
 `weight` still decides *which* card of a size is drawn; `size` decides how often, and
 whether unwatched. The two are different questions and they are now different fields.
 
-A note on what the sizes cost. Making the caravan big makes the merchant rarer: measured
-over thirty seeds, he comes on 27 of 30 in a farm month (median one visit) where he used
-to turn up on a given *day* on 6 of 30. That is the intended shape — decision 12 already
-made him a passer-by rather than the farm's economy — but it is a real change and it is
-written down rather than discovered.
+A note on what the sizes cost. Making the caravan big makes the merchant rarer, and this
+deck makes him rarer again: measured over thirty seeds and a farm month, he comes on **19
+of 30** (median one visit, never more than two), where the same measurement read 27 of 30
+on trunk before this deck and 20 of 30 with this deck at the engine's old small rate. The
+day-only window this PR gives him (decision 12: a road event has no reason to keep the old
+trade window) is most of that. That is the intended shape — he is a passer-by, not the
+farm's economy — but it is a real change, it is written down rather than discovered, and
+`packages/sim/test/sheep-day.test.ts`'s floor of 18 of 30 now has only one seed of margin,
+which is called out in that test and in the PR's weak spots.
 
 | Card | Size | Why |
 |---|---|---|
@@ -118,7 +227,7 @@ written down rather than discovered.
 | Night of the fireflies | small | The owner named it. A summer night with lights in it. |
 | Lamb zoomies hour | small | The owner named it. A lamb runs in circles for an hour. Nothing else. |
 | The well runs low | small | Judgement: a background worry the field shows rather than a set piece. It changes no stock, it has no beat beyond the look of the place, and the real drought is the cliff storm's own trigger below. |
-| A windfall | small | The owner named it. Twelve coins found; the only small card that moves a Ledger number, which is why it is also the one whose hook still applies on an unwatched day. |
+| A windfall | small | The owner named it. Something bright dug up by the tree — since decision 12 it moves no coins and no Ledger number at all (its `coins` hook is gone; see its own entry below), so what it costs the world is a moment's attention and nothing else. |
 | Stargazing night | small | The owner named it. A clear night and a dog on her back. |
 | Rain, and a flock to gather | small | The owner named it as "the flock huddle". A minute of shepherding in a shower, which is Digital Luna's ordinary job rather than an exception to it. |
 | The farmer meets the merchant | small | Judgement: a vignette that can only happen when the world has already put two people in the field. It is a thing you catch, not a thing that is staged — and it needs both of them present, so it never draws unwatched. |
@@ -135,6 +244,38 @@ meets the merchant** (it needs both of them standing there), and it makes the
 finer than the Ledger's own resolution. The other nine draw unwatched exactly as they do
 watched.
 
+## Story lines and their placeholders (#114)
+
+Every card and authored event carries one past-tense line under 90 characters, and a line may name
+the world through a placeholder in braces. **The sim fills them before the line reaches the
+chronicle** — `fillStorybookLine` in `packages/sim/src/chronicle/storybook-line.ts`, called from
+both places a card becomes a chronicle entry: the watched draw (`engine/engine.ts`'s `startEvent`)
+and the unwatched one (`ledger/unwatched.ts`), from the same table, so a week away reads exactly as
+a watched night does. The chronicle stores the finished sentence and the client never sees a brace.
+Before this, it did: the storybook page showed *"Three crows landed on the hay and {dl} sent them
+packing"* to the player, on the site and in this repo's own goldens.
+
+| Placeholder | Becomes | Used by |
+|---|---|---|
+| `{dl}` | `Digital Luna` — her name as the client already shows it (the action tray, the pin, the intent line) | 14 lines |
+| `{lamb}` | `a lamb` — lambs carry no name in the sim, and the unwatched path has no actors to name one from | 2 lines |
+| `{flock}` | the flock's own sheep count, e.g. `5` | 1 line (shearing day) |
+| `{sheep}` | `a sheep` | none today |
+| `{farmer}` | `the farmer` | none today |
+| `{merchant}` | `the merchant` | none today |
+| `{coins}` | the coins the card's own hook moves, or the word `no` when none do | none today — decision 12 retired the farm's one transaction |
+
+A substitution that lands at the very start of a line is capitalised, so `{lamb} got the zoomies`
+tells as *"A lamb got the zoomies"*.
+
+**The allowed set is exactly what the substitution can fill**, and a line that uses anything else
+fails three times over rather than reaching a player: the schema's own `line` pattern rejects it in
+`npm run validate:content`, `@sheepcliff/content` throws on it when the deck is loaded, and
+`fillStorybookLine` throws the first time such a line is told. Adding a placeholder means adding it
+to the sim's table, to `STORYBOOK_PLACEHOLDERS` in `packages/content/src/index.ts`, and to the
+schema's pattern; `packages/content/src/index.test.ts` pins the first two equal and the schema's own
+list is what the `node:test` suite reads.
+
 ## The fifteen cards
 
 ---
@@ -143,7 +284,7 @@ watched.
 
 Some dawns the cliff breathes out and the field goes soft and grey. The barn is a red shape, the tree is a suggestion, and the sheep, who do not care for surprises, drift together until they are one woolly island. DL walks the edge of the field with her nose up, counting them the only way she can.
 
-**When.** Dawn, in autumn, winter or spring, with no rain or snow falling. Not more than once in two days. No multiplier: a fog roll is weather, not an actor state, so it stays a flat likelihood among cards whose conditions hold.
+**When.** Dawn, in autumn, winter or spring, with no rain or snow falling. Not more than once in two days. No multiplier: a fog roll is weather, not an actor state, so it stays a flat likelihood among cards whose conditions hold. Weight is trunk's own 10, unchanged by #86: this pass's weight retune was dropped (decision 16 — see "Deck coverage"), so only conditions and comments moved on this card.
 
 **You see.** Within a second the field greys out to shapes and the flock bunches. It lasts 240 sim minutes (half a real minute). It ends from the top down: the sky clears first, then the barn's red comes back, then the sheep are sheep again.
 
@@ -157,7 +298,7 @@ Some dawns the cliff breathes out and the field goes soft and grey. The barn is 
 
 Three crows have noticed the hay. They land on the bale and around it, black and pleased with themselves, and the nearest sheep backs off a step because crows are rude. DL has opinions about crows. (Crows are drawn in their own ticket, #47; the chase itself is sim work, #48. This card only puts them on the field.)
 
-**When.** A sunny daytime in summer or autumn, with at least one sheep out (`ledger.flock` at least 1). Not more than once in a day and a half. **Far likelier** (×2) when `ledger.grass` reads 0.6 or higher — the issue's own example: crows come for the hay, and this deck's stand-in for "the hay is high" is the field's mean grass level, since the Ledger has no separate hay stock.
+**When.** A sunny daytime in spring, summer or autumn, with at least one sheep out (`ledger.flock` at least 1). Not more than once in a day and a half. **Far likelier** (×2) when `ledger.grass` reads 0.6 or higher — the issue's own example: crows come for the hay, and this deck's stand-in for "the hay is high" is the field's mean grass level, since the Ledger has no separate hay stock. Season widened to include spring for #86, kept: the bale reads on `ledger.grass` year-round the field has anything standing, not only after a summer/autumn cut. Weight is trunk's own 8, unchanged: this pass's weight retune was dropped (decision 16 — see "Deck coverage").
 
 **You see.** Three crows drop onto the hay bale within a second. For 90 sim minutes (about eleven real seconds) they hop and peck. Then DL runs at them, they scatter over the fence, and she trots back with her tail up.
 
@@ -171,7 +312,7 @@ Three crows have noticed the hay. They land on the bale and around it, black and
 
 At dusk a lamb that should know better slips out through the gate. Its mother stands up and calls after it. This is the card DL was born for: she goes out, she finds it, and she walks it home slowly, right behind it, the way she was taught. (One of the four reference events the engine implements in code, #40. The issue's own worked example for v2's causality.)
 
-**When.** Dusk, when there is a lamb on the farm, in sun or rain but not snow. Not more than once in two days — the hard gate stays dusk-only so the storybook line stays true. **Far likelier** when `lambFarFromMother` is true (×3, the strongest driver once sim on #40 can produce it — see below, PROPOSED — this is what "lost" means), when `flockScattered` is true (×2, nobody was minding the edges), and when `dlFarFromFlock` is true (×1.5, she was not close enough to notice it slip out). The base weight alone (5) is deliberately low: without these, a dusk lamb almost never wanders.
+**When.** Dusk, when there is a lamb on the farm, in sun or rain but not snow. Not more than once in two days — the hard gate stays dusk-only so the storybook line stays true. **Far likelier** when `lambFarFromMother` is true (×3, the strongest driver once sim on #40 can produce it — see below, PROPOSED — this is what "lost" means), when `flockScattered` is true (×2, nobody was minding the edges), and when `dlFarFromFlock` is true (×1.5, she was not close enough to notice it slip out). The base weight alone (trunk's own 5, unchanged — this pass's weight retune was dropped, decision 16, see "Deck coverage") is deliberately low: without these, a dusk lamb almost never wanders.
 
 **You see.** A lamb goes out the gate and the ewe bleats after it. Up to 120 sim minutes (fifteen real seconds) later DL brings it back through the gate at walking pace, and the ewe comes to meet them.
 
@@ -181,17 +322,25 @@ At dusk a lamb that should know better slips out through the gate. Its mother st
 
 ---
 
-### Merchant caravan
+### Merchant caravan [rewritten for #86: a passer-by, not a sale]
 
-A cart on the lane. The merchant rolls in from the right, past the outer gate, and stops where he always stops. He buys the wool bank at three coins a fleece, and if the coins stretch to the next thing on his list, that thing is standing on the farm when he leaves. (This card takes over the merchant's fixed timer, #40. The cadence is the prototype's: the cooldown is `merchant.everyMs`, the duration is `merchant.stayMs`, both from `balance/farm.json`.)
+A cart on the lane. It rolls past the outer gate the way it always did, without stopping: the sheep look up, DL trots to the fence to watch it go, and it carries on down the lane and out of sight. Owner's decision 12 (2026-09-08, plan section 11): the economy is not the farm's, so no transaction happens on the farm — the caravan is a road event now, not the trade visit v1's card described.
 
-**When.** Day or dusk, when `merchantPresent` is false. Not more than once in 32 sim hours, which is the prototype's four real minutes. No multiplier: his cadence is mechanical, not actor-driven.
+**When.** Any season, daytime, when `merchantPresent` is false — narrowed for #86 from day-or-dusk to day-only, a road event has no reason to keep the old trade window. Not more than once in 32 sim hours, which is the prototype's four real minutes — the cadence is unchanged, it is just no longer measuring a trade cycle. Weight is 10, not trunk's 14: the day-only window is roughly half of trunk's day-or-dusk window, so trunk's weight would land this card almost as often inside a narrower slice of the clock; 10 keeps its per-eligible-tick odds close to trunk's own feel instead of concentrating trunk's frequency into half the hours — this is the one card fix round 2 keeps off trunk's value, and this paragraph is why. No multiplier: his cadence is mechanical, not actor-driven.
 
-**You see.** The cart rolls in from the edge within a second and DL looks up. He trades for 240 sim minutes (thirty real seconds): a coin bubble, then the cart rolls out, and sometimes a new thing has appeared.
+**You see.** The cart rolls along the lane past the outer gate within a second; the sheep look up and DL trots to the fence. It lasts 240 sim minutes (thirty real seconds), then the cart carries on down the lane and out of sight, and the flock goes back to grazing.
 
-**The ledger.** The trade itself pays the coins and buys the upgrades; this card only brings the cart. No coins hook.
+**The ledger.** Nothing. No coins hook, no wool hook: the farm's stock does not move.
 
-**The storybook.** *The merchant's cart rolled in and 27 coins changed hands.* (notability 0.4)
+**The storybook.** *A caravan rolled along the lane and Digital Luna trotted the fence to watch it pass.* (notability 0.25)
+
+**Known gap, not this lane's to close.** Three code paths in `packages/sim`, not one, still sell the whole wool bank for coins and buy upgrades — the data above is honest (no coins hook, no wool hook), but the running sim does not yet match it:
+
+1. `packages/sim/src/engine/hooks.ts`'s `REFERENCE_EFFECTS.merchantCaravan.start` calls `summonMerchant` unconditionally on every draw of this card, whatever the data says.
+2. `packages/sim/src/npcs.ts:238-249`, the merchant NPC's `trade` job that `summonMerchant` starts: `s.banks.coins += s.banks.wool * RULES.merchant.woolPrice; s.banks.wool = 0;` plus a coin bubble and `buyUpgrades(s)`.
+3. `packages/sim/src/ledger/advance.ts:259-266`, the **offline catch-up's** `MERCHANT` case — the same sale and `buyUpgrades(L)`, driven off `merchantAtMs`, with no card involved at all. A week away from the farm still empties the wool bank even once 1 and 2 are fixed.
+
+Retiring all three, and moving the sale to the farmer's dawn market walk per the issue, is the sim half of #86.
 
 ---
 
@@ -213,7 +362,7 @@ Every fleece on the farm is ready on the same morning, which never happens by ac
 
 The rain stops, the sheep come out of the barn doorway, and a rainbow stands over the barn for a while. That is the whole event. It is the one card in the deck that asks nothing of anybody.
 
-**When.** Day or dusk, in sun, with `simMinutesSinceRain` 20 or under (v1 proposed a bespoke `recentWeather` object for this; v2 carries the same idea in the ordinary predicate shape). Not more than once a day. No multiplier.
+**When.** Day or dusk, in sun, with `simMinutesSinceRain` 20 or under (v1 proposed a bespoke `recentWeather` object for this; v2 carries the same idea in the ordinary predicate shape). Not more than once a day. No multiplier. Weight is trunk's own 12, unchanged: this pass's weight retune was dropped (decision 16 — see "Deck coverage").
 
 **You see.** The arc fades in over the barn as the last drops fall. It stays 90 sim minutes (about eleven real seconds) and fades from the outside in.
 
@@ -227,7 +376,7 @@ The rain stops, the sheep come out of the barn doorway, and a rainbow stands ove
 
 At dusk a cat pads in along the fence, the way cats do, and settles on the post nearest the gate. DL freezes mid-step and stares. The cat looks at nothing in particular. This goes on for some time. Then the cat hops down and leaves the way it came, and DL does a stretch as if that is what she was doing all along. (The cat is a new creature: data here, art and behaviour in their own tickets, and the owner's pin before it ships.)
 
-**When.** A dry dusk or night. Not more than once in two and a half days. **A little likelier** (×1.3) when `flockScattered` is false: a settled field is quieter, and a cautious visitor comes closer to a quiet one.
+**When.** A dusk or night that isn't snowing. Not more than once in two and a half days. **A little likelier** (×1.3) when `flockScattered` is false: a settled field is quieter, and a cautious visitor comes closer to a quiet one. Weather widened for #86 from sun-only to sun or rain (still no snow — a cat has better sense): every other dusk/night card either needs a lamb, needs rain specifically, or is rare by design, so a rain stretch at dusk or night otherwise left nothing eligible at all. Weight is trunk's own 7, unchanged: this card was already one of the two that dominated every measured population, so it was left alone on purpose in every round's own retune — wider weather is its whole contribution to #86's coverage work.
 
 **You see.** The cat walking in along the fence and DL going still, within a second. It stays 150 sim minutes (about nineteen real seconds) and leaves on its own.
 
@@ -241,7 +390,7 @@ At dusk a cat pads in along the fence, the way cats do, and settles on the post 
 
 The gate stays shut at the usual hour. DL waits, then trots to the trough and looks into it, then does the rounds herself: the trough, the hay, and a visit to each sheep in turn, because that is what the farmer does and somebody has to. The sheep get a bit woolly and a bit grumbly. Next morning the farmer is back with a heart bubble for the dog who covered for him.
 
-**When.** Fires at dawn, in any season and any weather, when `farmerPresent` is false — v2 adds this: he cannot take the day off if he is already on the field. Not more than once in four days. No multiplier.
+**When.** Fires at dawn, in any season and any weather, when `farmerPresent` is false — v2 adds this: he cannot take the day off if he is already on the field. Not more than once in four days. No multiplier. Weight is trunk's own 6, unchanged: this pass's weight retune was dropped (decision 16 — see "Deck coverage"); `fogMorning`, dawn's other reliable card, needs sun and excludes summer, so this is still the one dawn moment that holds up whatever the weather and the season.
 
 **You see.** No farmer at the usual time, and DL peering into the trough. It runs 720 sim minutes, half a day (ninety real seconds), and ends with the farmer's next visit.
 
@@ -255,7 +404,7 @@ The gate stays shut at the usual hour. DL waits, then trots to the trough and lo
 
 On a warm summer night a dozen lights blink on around the tree and drift out over the field. DL bounces after the nearest one, then the next, then the next. She catches none of them. Nobody has told her. (Fireflies are small life from #33; this card brings a swarm and gives DL something to do with it.)
 
-**When.** A clear summer night. Not more than once in two days. **A little likelier** (×1.2) when `flockScattered` is false: a settled flock leaves DL free to bounce after lights instead of minding sheep.
+**When.** A clear night in spring, summer or autumn. Not more than once in two days. **A little likelier** (×1.2) when `flockScattered` is false: a settled flock leaves DL free to bounce after lights instead of minding sheep. Season widened for #86 from summer-only to spring, summer and autumn (warm-enough nights either side of summer — winter stays excluded, no fireflies in the snow): a clear night in spring previously had only `strayCatVisits` to draw. Weight is trunk's own 10, unchanged: this pass's weight retune was dropped (decision 16 — see "Deck coverage"); the widened season is this card's whole surviving contribution to #86's coverage work.
 
 **You see.** Lights blinking on by the tree and DL leaping, within a second. It lasts 200 sim minutes (twenty-five real seconds). The lights thin out one by one and DL sits down, panting.
 
@@ -269,7 +418,7 @@ On a warm summer night a dozen lights blink on around the tree and drift out ove
 
 A lamb bolts from its mother's side for no reason and tears round the trough at full speed, and any other lamb on the field joins in. The ewes do not move. They have seen this before. DL may or may not join; she is a dog. It ends the way it always ends: the lamb stops dead, wobbles, and lies down next to its mother.
 
-**When.** A sunny day or dusk, with a lamb on the farm. Not more than once a day. **Likelier** (×1.5) when `flockScattered` is false: a lamb only feels safe enough to bolt for fun when the flock around it is calm, not stressed.
+**When.** A sunny dawn, day or dusk, with a lamb on the farm. Not more than once a day. **Likelier** (×1.5) when `flockScattered` is false: a lamb only feels safe enough to bolt for fun when the flock around it is calm, not stressed. Widened to include dawn for #86: a lamb fresh off a night's sleep is at least as likely to bolt as one in the afternoon sun, and dawn needed a competitor to `lostLamb`'s dusk-only one. Weight is trunk's own 12, unchanged: this pass's weight retune was dropped (decision 16 — see "Deck coverage"); the widened condition is this card's whole contribution to #86's coverage work.
 
 **You see.** A lamb bolting within a second. It lasts 60 sim minutes (seven and a half real seconds), the shortest card that has an end.
 
@@ -293,25 +442,27 @@ A hot dry spell and a full field. The trough's water drops to a line and the she
 
 ---
 
-### A windfall
+### A windfall [rewritten for #86: no transaction, not a purse of coins]
 
-DL digs at the foot of the tree, the way she sometimes does, and this time there is a purse. A coin bubble pops over her. She trots back to the field with her nose muddy and the coin count is twelve higher, which is four fleeces at the merchant's price: a nice surprise, not a jackpot. Nobody asks whose it was.
+DL digs at the foot of the tree, the way she sometimes does, and comes up with something in her teeth. She trots back to the field with her nose muddy, pleased with herself. Nobody asks whose it was. Owner's decision 12 names this card by name ("the windfall, the dug-up purse"): no transaction happens on the farm, and no settlement stock exists yet to route a coin find to (checked — neither the schema nor the sim's state carries one beyond `ledger.coins`, the farm's own bank), so per the decision's own fallback this is a moment with no stock change now, not a purse of coins.
 
-**When.** Daytime, in sun or rain, with `ledger.coins` 40 or under — v2 adds this: a find lands better, and reads truer to "nobody asked whose", on a lean bank. Not more than once in three days, and rare. No multiplier.
+**When.** Dawn or day, in sun or rain. Not more than once in three days, and rare. No multiplier. The old `ledger.coins` ≤ 40 condition went with the coins hook it justified — nothing here reads the farm's coin bank any more. Widened to include dawn for #86: dawn keeps a bubble-kind option alongside `fogMorning`'s weather and the farmer's day off's dl-trick. Weight is trunk's own 5, unchanged: this pass's weight retune was dropped (decision 16 — see "Deck coverage"); the widened condition is this card's whole surviving contribution there.
 
-**You see.** DL digging and a coin bubble, within a second. It lasts 30 sim minutes (about four real seconds); the event is the moment.
+**You see.** DL digging and coming up with something in her teeth, within a second. It lasts 30 sim minutes (about four real seconds); the event is the moment.
 
-**The ledger.** Twelve coins into the bank, straight away, so the merchant can spend them next visit. DL's mood goes up one.
+**The ledger.** DL's mood goes up one. Nothing else: no coins hook, no ledger stock moves.
 
-**The storybook.** *Digital Luna dug up a purse by the tree. 12 coins, and nobody asked whose.* (notability 0.45)
+**The storybook.** *Digital Luna dug up something bright by the tree, and nobody asked whose it was.* (notability 0.35)
+
+Title and id are unchanged (`windfall`, "A windfall") even though the find no longer pays out: both are pinned in `packages/sim/test/engine-events.test.ts`'s eviction-line text, a sim-owned pin this lane does not move.
 
 ---
 
-### Stargazing night
+### Stargazing night [widened to every season for #86]
 
-A clear night in late summer or autumn, and the stars come up brighter than they should. The sheep lie down facing up. DL sits by the gate with her head tipped back. Nothing happens for a good while, on purpose. Then the sky dims to its ordinary night and DL walks to the barn door to sleep.
+A clear night, and the stars come up brighter than they should. The sheep lie down facing up. DL sits by the gate with her head tipped back. Nothing happens for a good while, on purpose. Then the sky dims to its ordinary night and DL walks to the barn door to sleep.
 
-**When.** A clear night in summer or autumn. Not more than once in two days. **Likelier** (×1.3) when `flockScattered` is false: a scattered flock does not settle down together to watch the sky.
+**When.** A clear night, any season now. Not more than once in two days. **Likelier** (×1.3) when `flockScattered` is false: a scattered flock does not settle down together to watch the sky. Season widened from summer/autumn to all four for #86 — a clear night happens any time of year, and this was the only card that could give spring and winter nights a second kind alongside `strayCatVisits`. Weight is trunk's own 8, unchanged: this pass's weight retune was dropped (decision 16 — see "Deck coverage"); the widened season is this card's whole surviving contribution to #86's coverage work.
 
 **You see.** The stars brightening and DL sitting down by the gate, within a second. It lasts 240 sim minutes (thirty real seconds) and ends when the sky dims.
 
@@ -319,13 +470,15 @@ A clear night in late summer or autumn, and the stars come up brighter than they
 
 **The storybook.** *A clear night. Digital Luna sat by the gate and watched the stars with the flock.* (notability 0.3)
 
+**Moment kind moved from `dl-trick` to `weather` for #86.** Nobody does anything here — DL only sits and watches, same as the sky itself brightening — which is the `fogMorning`/`rainbowAfterRain` shape, not the crow-chase/cat-standoff one; this is a correction to what the card already was, kept in fix round 2 regardless of the pace retune it shipped alongside, because it is honest about the card either way. It also turns a spring or winter night into a `weather`-kind moment instead of another `dl-trick`, which is one reason a clear night reads as two different kinds of moment now instead of one.
+
 ---
 
 ### Rain, and a flock to gather
 
 New for #59, filling the seat DL's birthday and first snow left behind. Rain starts, the flock startles apart, and DL runs her own rain-shepherd priority (plan section 2 names her fixed order: fetch, manual, riding, rain shepherd, dusk and dawn routine, idle play) hard enough to be worth watching for once, instead of being an unremarked background rule.
 
-**When.** Raining, with `flockScattered` true. **Likelier** (×1.5) when `dlFarFromFlock` is true: a bigger job, a bigger moment, when she has further to run.
+**When.** Raining, with `flockScattered` true. **Likelier** (×1.5) when `dlFarFromFlock` is true: a bigger job, a bigger moment, when she has further to run. Weight is trunk's own 9, unchanged: this pass's weight retune was dropped (decision 16 — see "Deck coverage"). It is still the deck's only card that wants rain rather than merely allowing it, with no time-of-day gate at all, so it remains the one dependable moment across every rainy stretch, whatever the season or the hour.
 
 **You see.** The rain starts and the flock startles apart; DL breaks into a run toward the furthest one. It lasts 60 sim minutes (seven and a half real seconds). The last sheep is walked in under the barn eave and DL circles the group once, checking.
 
@@ -337,7 +490,7 @@ New for #59, filling the seat DL's birthday and first snow left behind. Rain sta
 
 ### The farmer meets the merchant
 
-New for #59, filling the seat DL's birthday and first snow left behind. The farmer's morning round and the merchant's cart land on the farm at the same time, which is rare on its own — this card shows off an *and* of two actor predicates rather than one, so its base weight (3) needs no multiplier to stay rare.
+New for #59, filling the seat DL's birthday and first snow left behind. The farmer's morning round and the merchant's cart land on the farm at the same time, which is rare on its own — this card shows off an *and* of two actor predicates rather than one, so its base weight (trunk's own 3, unchanged — this pass's weight retune was dropped, decision 16, see "Deck coverage") needs no multiplier to stay rare.
 
 **When.** `merchantPresent` and `farmerPresent` both true.
 
@@ -496,5 +649,6 @@ in her mouth.* (notability 0.85)
 - **No cross-district cards.** The harbour and the wildwood arrive in Phase 3 with the deck at fifty.
 - **`simMinutesSinceRain`, the `simDate` trigger's day-of-season, the new `realDate` trigger, the calendar it reads (`outsideRules.seasons.calendar`), and `lambFarFromMother` are proposed, not confirmed.** All are flagged to sim, `simMinutesSinceRain` and `lambFarFromMother` on #40 and the calendar and both date triggers on #84, in the schema and in this page, the same way v1 flagged `recentWeather`. The sim has a running `dayCount` and a season cycle but no explicit real-calendar concept yet, and still reads the old fixed nine-real-day season (`rules.season.realDays`) rather than the new calendar; no authored event uses `simDate` today (`dlBirthday` moved to `realDate` on #83), so its fraction-of-a-season `dayOfSeason` is untested against real sim behaviour until #84 lands. `lambFarFromMother` is structurally always false in today's sim: every lamb is sprung to a fixed point behind its mother each tick, with no detachment behaviour yet — `lostLamb`'s strongest multiplier is written for the sim #40 will build, not the one that exists today.
 - **No chained cards.** The farmer's day off leaves the flock woolly, which makes the next shearing day bigger; that is the Ledger doing the chaining (via `ledger.wool`, now a real condition), not the deck. A `recentEvents` predicate would let a card follow another on purpose.
-- **Weights are a first guess, doubly so now.** Both `base` and every multiplier's `times` are the sim's pacing curve and the qa lane's event coverage (#49) to tune. Every number sits in the JSON with a comment for a reason.
+- **Weights are still a first guess, and still trunk's own numbers.** #86's two earlier fix rounds tried retuning nine `weight.base` values against a real-minute pace target and a three-kind floor; decision 16 (2026-09-09) withdrew both of those, so this round reverted every card's weight back to trunk's own value (`merchantCaravan` the one deliberate exception — see its own card entry above — and `windfall`, whose only change here is dropping the coins condition its removed coins hook no longer justifies). What ships is the coverage work alone (widened `conditions`, `stargazingNight`'s moment kind) with no weight retune riding along. Sizes landed on trunk with #101 and #102, and every card carries one. What this PR adds on top is the *rate* the small draw runs at, derived from the owner's four-in-five target rather than left at the engine's own guess of 8 — one number in `packages/sim/src/engine/pacing.ts`, measured on this deck, and the owner's to move. The weights themselves are still a first guess: a per-card rebalance by size, if the mix ever reads wrong, is still ahead of us. See "Deck coverage" above for what this deck shows over thirty farm days at the shipped rate.
+- **`merchantCaravan`'s code path still sells wool — in three places, not one.** The world half of #86 rewrote the card's data to be a passer-by with no coins or wool hook, but three code paths in `packages/sim` still run the sale regardless of what the data says: `packages/sim/src/engine/hooks.ts`'s `REFERENCE_EFFECTS.merchantCaravan.start`, which unconditionally summons the merchant NPC; `packages/sim/src/npcs.ts:238-249`, that NPC's `trade` job, which empties the wool bank for coins and buys upgrades; and `packages/sim/src/ledger/advance.ts:259-266`, the **offline catch-up's** own `MERCHANT` case, which does the same sale with no card involved at all — a week away from the farm still empties the wool bank even if the first two are fixed. Retiring all three, and moving the sale to the farmer's dawn market walk, is the sim half of #86.
 - **Authored `variables` are open by design**, unlike every other closed shape in these two schemas (`additionalProperties: false` holds everywhere else). Each of the three events needs a different bag of named values; nothing enforces what's inside one beyond "at least one". Worth an owner's eye if that looseness turns out to matter before more authored events are written.

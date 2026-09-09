@@ -26,7 +26,16 @@ export const REQUIRED_CARD_IDS = [
   "windfall", "stargazingNight", "flockHuddle", "farmerMeetsMerchant",
 ];
 export const REQUIRED_AUTHORED_IDS = ["dlBirthday", "cliffStorm", "firstSnowOfSeason"];
-const PLACEHOLDERS = ["dl", "lamb", "sheep", "farmer", "merchant", "coins", "flock"];
+// The placeholder vocabulary, read out of the deck schema's own `line` pattern rather than kept as
+// a fourth hand-written copy of it (#114). The schema is what `validate.mjs` enforces on the data;
+// the content package's `STORYBOOK_PLACEHOLDERS` and the sim's substitution table
+// (packages/sim/src/chronicle/storybook-line.ts) are pinned to each other by src/index.test.ts.
+const PLACEHOLDERS = (() => {
+  const pattern = json("schema/events.schema.json").$defs.storybook.properties.line.pattern;
+  const alternation = /\\\{\(([a-z|]+)\)\\\}/.exec(pattern);
+  assert.ok(alternation, "the schema's storybook line pattern no longer lists its placeholders");
+  return alternation[1].split("|");
+})();
 const WATCH_KINDS = ["bubble", "npc-arrival", "weather", "dl-trick", "lamb", "phase", "bird", "rabbit"];
 const COUNTED_KINDS = ["bubble", "npc-arrival", "weather", "dl-trick", "lamb"];
 const CONDITION_ON = [
@@ -71,8 +80,14 @@ test("ids are unique across both files", () => {
 
 test("every hook is from the allowed list, in both files", () => {
   for (const c of [...cards, ...authoredEvents]) for (const h of allHooks(c)) assert.ok(ALLOWED_HOOKS.includes(h.op), `${c.id}: hook ${h.op}`);
+  // `coins` is deliberately unexercised: decision 12 (2026-09-08, plan section 11) retired every
+  // farm-coin transaction from the deck (windfall's dug-up purse was the only card that used it).
+  // The op stays in the schema's vocabulary — the engine still implements it, and a future
+  // settlement-stock card may use it again — but no card in this deck writes to it today.
   const used = new Set(cards.flatMap((c) => allHooks(c).map((h) => h.op)));
-  assert.deepEqual([...used].sort(), [...ALLOWED_HOOKS].sort(), "every allowed hook is exercised by at least one card");
+  const exercised = ALLOWED_HOOKS.filter((op) => op !== "coins");
+  assert.deepEqual([...used].sort(), [...exercised].sort(), "every allowed hook but `coins` is exercised by at least one card");
+  assert.ok(!used.has("coins"), "no card hands the farm coins any more (decision 12): the `coins` hook is unused, not just unlisted");
 });
 
 test("every predicate name, in a card's conditions and every weight multiplier's `when`, is in the allowed list", () => {

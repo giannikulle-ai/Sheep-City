@@ -19,7 +19,7 @@ import {
 import { catchUp, chronicleBetween, realMsOf, SaveError, type SimState } from '@sheepcliff/sim';
 import type { SheepcliffApi } from './api';
 import { BACKGROUND_URLS, SHEET_META_URL, SHEET_URL } from './assets';
-import { birthdayReminder } from './birthday';
+import { birthdayReminder, traySequence } from './birthday';
 import { buildFixture } from './fixture';
 import { Game, MAX_FRAME_MS } from './game';
 import { hitTest, type SpriteSizes } from './hit';
@@ -45,6 +45,9 @@ const QA_FRAME_MS = 1000 / 60;
 
 /** The real-day key the birthday reminder was last shown on (#117), so it shows once per real day. */
 const BIRTHDAY_REMINDER_KEY = 'sheepcliff-birthday-reminder-shown';
+/** How long a load-time tray message (e.g. "restored: back after …") gets to be read before the
+ * birthday reminder is allowed to replace it — the reminder must never overwrite it outright. */
+const BIRTHDAY_REMINDER_DELAY_MS = 4_000;
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -277,8 +280,9 @@ async function main(): Promise<void> {
   }
 
   /** Take a restored world over, catch it up on the time away, and open its storybook page if the
-   * gap earned one. */
-  function adopt(text: string, why: string): void {
+   * gap earned one. Returns the tray message it said, so the initial load (below) can keep track
+   * of what is already on the tray without a second, competing source of truth. */
+  function adopt(text: string, why: string): string {
     // `realNowMs` reaches the sim's v8 migration, which anchors a pre-calendar save (v7 or older)
     // to the real present on its first load and leaves it deterministic afterwards (#84). A save
     // that already carries its own epoch ignores it, so this changes nothing for a v8 document.
@@ -289,23 +293,28 @@ async function main(): Promise<void> {
     const awayMs = r.savedAt ? Date.now() - r.savedAt : 0;
     const c = catchUp(r.sim, awayMs);
     game.load(c.state);
-    if (c.ranMs > 0) {
-      tellGap(c.state, c.before, c.after, awayMs);
-      tray.say(`${why}: back after ${awayLabel(awayMs)}`);
-    } else tray.say(`${why}: the farm continues where it was`);
+    if (c.ranMs > 0) tellGap(c.state, c.before, c.after, awayMs);
+    const message = c.ranMs > 0 ? `${why}: back after ${awayLabel(awayMs)}` : `${why}: the farm continues where it was`;
+    tray.say(message);
+    return message;
   }
 
+  // What the tray already says as of this open (#117): `adopt` and the catch branch below both say
+  // it synchronously, and this is captured so the birthday reminder further down never overwrites
+  // it at the same instant — see `traySequence` in birthday.ts.
+  let loadMessage: string | null = null;
   if (saving) {
     if (params.fresh) storage.remove(SAVE_KEY);
     const text = params.fresh ? null : storage.get(SAVE_KEY);
     if (text) {
       try {
-        adopt(text, 'restored');
+        loadMessage = adopt(text, 'restored');
       } catch (err) {
         // keep the unreadable save for the owner, start again, and say so in one line
         storage.set(`${SAVE_KEY}.unreadable`, text);
         const code = err instanceof SaveError ? err.code : 'error';
-        tray.say(`the saved farm could not be read (${code}); starting a new one`);
+        loadMessage = `the saved farm could not be read (${code}); starting a new one`;
+        tray.say(loadMessage);
         console.error(err);
       }
     }
@@ -503,8 +512,16 @@ async function main(): Promise<void> {
   {
     const r = birthdayReminder(realMsOf(game.sim.season), storage.get(BIRTHDAY_REMINDER_KEY));
     if (r.line !== null) {
-      tray.say(r.line);
       storage.set(BIRTHDAY_REMINDER_KEY, r.dayKey);
+      const seq = traySequence(loadMessage, r.line);
+      if (seq.length === 1) {
+        // nothing else said on this open — the tray is free, say it now
+        tray.say(r.line);
+      } else {
+        // a load message is already on the tray (said synchronously above): let it be read first,
+        // rather than overwrite it at the same instant the world was adopted
+        setTimeout(() => tray.say(r.line as string), BIRTHDAY_REMINDER_DELAY_MS);
+      }
     }
   }
 

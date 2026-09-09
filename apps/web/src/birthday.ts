@@ -26,9 +26,9 @@ export const REMINDER_DAYS_BEFORE = 3;
 /** The line shown on December 15 itself. The client's own words; the chronicle's line is separate. */
 export const BIRTHDAY_TODAY_LINE = "It's Digital Luna's birthday today!";
 
-/** The line shown in the days before. `n` is filled in literally, matching issue #117's own wording. */
+/** The line shown in the days before — issue #117's own wording, singular on the one-day case. */
 export function beforeBirthdayLine(daysUntil: number): string {
-  return `Digital Luna's birthday is in ${daysUntil} days`;
+  return `Digital Luna's birthday is in ${daysUntil} ${daysUntil === 1 ? 'day' : 'days'}`;
 }
 
 /**
@@ -74,4 +74,18 @@ export function birthdayReminder(realMs: number, lastShownDayKey: string | null)
   const dayKey = realDayKey(realMs);
   if (dayKey === lastShownDayKey) return { line: null, dayKey };
   return { line: birthdayReminderLine(daysUntilBirthday(realMs)), dayKey };
+}
+
+/**
+ * The tray lines this open should show, in the order they must appear. A load-time message (e.g.
+ * "restored: back after …", already on the tray the moment the world is adopted) always comes
+ * first — the birthday reminder is quiet by design and must never overwrite it, so main.ts shows
+ * this array in order rather than calling `tray.say` for the birthday line at the same instant.
+ * Either half may be absent; `[]` when there is nothing to say at all.
+ */
+export function traySequence(loadMessage: string | null, birthdayLine: string | null): string[] {
+  const seq: string[] = [];
+  if (loadMessage !== null) seq.push(loadMessage);
+  if (birthdayLine !== null) seq.push(birthdayLine);
+  return seq;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState, realMsOf, realMsOfCivil } from '@sheepcliff/sim';
-import { BIRTHDAY_TODAY_LINE, beforeBirthdayLine, birthdayReminder, daysUntilBirthday, realDayKey, REMINDER_DAYS_BEFORE } from './birthday';
+import { BIRTHDAY_TODAY_LINE, beforeBirthdayLine, birthdayReminder, daysUntilBirthday, realDayKey, REMINDER_DAYS_BEFORE, traySequence } from './birthday';
 
 describe('daysUntilBirthday', () => {
   it('counts down to December 15 and wraps to next year the day after', () => {
@@ -8,6 +8,14 @@ describe('daysUntilBirthday', () => {
     expect(daysUntilBirthday(realMsOfCivil(2026, 12, 14))).toBe(1);
     expect(daysUntilBirthday(realMsOfCivil(2026, 12, 15))).toBe(0);
     expect(daysUntilBirthday(realMsOfCivil(2026, 12, 16))).toBe(364); // next Dec 15 is 2027's, not a leap year in between
+  });
+});
+
+describe('beforeBirthdayLine', () => {
+  it('is singular on the one-day case and plural otherwise', () => {
+    expect(beforeBirthdayLine(1)).toBe("Digital Luna's birthday is in 1 day");
+    expect(beforeBirthdayLine(2)).toBe("Digital Luna's birthday is in 2 days");
+    expect(beforeBirthdayLine(3)).toBe("Digital Luna's birthday is in 3 days");
   });
 });
 
@@ -27,6 +35,11 @@ describe('birthdayReminder', () => {
     const dec13 = realMsOfCivil(2026, 12, 13) + 1_000;
     const third = birthdayReminder(dec13, first.dayKey);
     expect(third.line).toBe(beforeBirthdayLine(2));
+
+    // one day out: singular
+    const dec14 = realMsOfCivil(2026, 12, 14) + 1_000;
+    const fourth = birthdayReminder(dec14, third.dayKey);
+    expect(fourth.line).toBe("Digital Luna's birthday is in 1 day");
   });
 
   it('shows the birthday line on December 15 itself, while watched', () => {
@@ -62,5 +75,22 @@ describe('birthdayReminder', () => {
     // Pinned three days out instead.
     const pinnedBefore = createInitialState(9, { realEpochMs: realMsOfCivil(2026, 12, 12) });
     expect(birthdayReminder(realMsOf(pinnedBefore.season), null).line).toBe(beforeBirthdayLine(3));
+  });
+});
+
+describe('traySequence', () => {
+  it('a restored world three days out gets both lines, the restored message first', () => {
+    const dec12 = realMsOfCivil(2026, 12, 12) + 1_000;
+    const restoredMessage = 'restored: back after 3 days';
+    const r = birthdayReminder(dec12, null);
+    expect(r.line).toBe(beforeBirthdayLine(3));
+
+    expect(traySequence(restoredMessage, r.line)).toEqual([restoredMessage, beforeBirthdayLine(3)]);
+  });
+
+  it('either half may be absent, and both may be', () => {
+    expect(traySequence(null, "Digital Luna's birthday is in 1 day")).toEqual(["Digital Luna's birthday is in 1 day"]);
+    expect(traySequence('restored: the farm continues where it was', null)).toEqual(['restored: the farm continues where it was']);
+    expect(traySequence(null, null)).toEqual([]);
   });
 });

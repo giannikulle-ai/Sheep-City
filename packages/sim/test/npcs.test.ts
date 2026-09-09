@@ -340,10 +340,15 @@ describe('the merchant’s visit', () => {
     ]);
   });
 
-  it('the coins action adds 50 and buys at once; summoning twice does nothing', () => {
+  it('the coins action adds 50 to the settlement and buys at once; the farm\'s own purse never moves (#120)', () => {
+    // Before #120 this asserted `s.banks` came out `{ wool: 0, coins: 50 - 12 - 30, owned:
+    // ['flowerbed', 'hay2'] }` — the owner's tray paid the farm's own purse. The Foreman's grant on
+    // issue #120 moved it to match the market sale: the settlement pays, and buys, same as #86 left
+    // everything else doing.
     const s = calm();
     applyIntent(s, { type: 'farmAction', action: 'coins' });
-    expect(s.banks).toEqual({ wool: 0, coins: 50 - 12 - 30, owned: ['flowerbed', 'hay2'] });
+    expect(s.settlement).toEqual({ coins: 50 - 12 - 30 });
+    expect(s.banks).toEqual({ wool: 0, coins: 0, owned: ['flowerbed', 'hay2'] });
     summonMerchant(s);
     const m = s.npcs.merchant;
     summonMerchant(s);

@@ -24,9 +24,12 @@ describe('Game', () => {
     // the weather lands at the next tick boundary (100 ms of sim time)
     expect(g.frame(50).weather).toBe('sun');
     expect(g.frame(100).weather).toBe('rain');
-    // DL got her heart and the farm its coins in the sim, not from a cue
+    // DL got her heart, and the settlement its coins, in the sim, not from a cue
     expect(g.current().luna.icon).toBe('heart');
-    expect(g.sim.banks.coins).toBe(50 - 12 - 30); // the auto-buy took the flowerbed and hay2 at once, as the prototype's action does
+    // #120 (Foreman grant): the tray's coins action now pays the settlement, not the farm; before it
+    // was g.sim.banks.coins === 50 - 12 - 30.
+    expect(g.sim.settlement.coins).toBe(50 - 12 - 30); // the auto-buy took the flowerbed and hay2 at once, as the prototype's action does
+    expect(g.sim.banks.coins).toBe(0);
     expect(g.reactions.cues).toEqual([]);
   });
 

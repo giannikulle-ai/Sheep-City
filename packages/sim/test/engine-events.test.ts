@@ -2,7 +2,8 @@
 // (#40). The authored half is the plan's punctuation: it fires on its own trigger, it outranks the
 // cards it names while it runs, and the owner can start and reset it by intent.
 import { describe, expect, it } from 'vitest';
-import { SEASON_MS } from '../src/clock';
+import { MS_PER_REAL_DAY, realMsOfCivil } from '../src/calendar';
+import { seasonSpanOf } from '../src/clock';
 import { fillStorybookLine } from '../src/chronicle/storybook-line';
 import { FARM_DECK } from '../src/engine/deck';
 import { applyAuthoredIntent, dayOfSeason, eligibleCards, endEvent, evaluate, preemptedByAuthored, readyAuthored, seasonDayOfFraction, seasonFraction, startEvent, triggerMet } from '../src/engine/engine';
@@ -21,6 +22,15 @@ import { world } from './luna-helpers';
 const PERIOD = 180;
 const minutes = (n: number): number => simMinutesToMs(n, PERIOD);
 
+/**
+ * Put a world on a real instant without moving its sim clock. The calendar reads
+ * `realEpochMs + elapsedMs` (clock.ts), so moving the epoch moves the world's real date and
+ * nothing else: the engine's own gaps and cooldowns live on `clock.nowMs` and stay where they were.
+ */
+function at(s: SimState, realMs: number): void {
+  s.season = { ...s.season, realEpochMs: realMs - s.season.elapsedMs };
+}
+
 function card(id: string) {
   const entry = FARM_DECK.byId.get(id);
   if (!entry || entry.kind !== 'card') throw new Error(`no card ${id}`);
@@ -28,35 +38,72 @@ function card(id: string) {
 }
 
 describe('authored triggers', () => {
-  it('a real date (DL’s birthday, December 15) is loaded, marked deferred to #84, and never fires', () => {
+  it('a real date (DL’s birthday, December 15) comes round on that real day and on no other', () => {
+    // `at()` re-anchors the world's epoch at every probe, so each reading below is a farm **made at
+    // that instant** — which is what isolates "has the date come round" from "is it still owed".
+    // A birthday nobody watched is held and stays due (the owner's decision, 2026-09-09); that half
+    // is pinned in calendar.test.ts, which is where the holding cases live.
     // The owner's calendar decision (plan section 2 and decision 10): Digital Luna's birthday is
     // December 15, a real calendar date, not a point in the sim's own season wheel. The world lane
-    // put the event on a `realDate` trigger in #83. This engine has no real date to compare against
-    // — that needs `outsideRules.seasons.calendar` wired into the sim, which is ticket #84 — so the
-    // event loads *deferred*: it is in the deck, it carries the deferral note, and `triggerMet` is
-    // false for it every time. See `deck.ts`'s `trigger()` and `engine.ts`'s `triggerMet` for why
-    // this is a park rather than either a throw or a silent never-true.
+    // put the event on a `realDate` trigger in #83; #84 gave the sim the real calendar to read it
+    // against (src/calendar.ts) and a real epoch on every world (`Season.realEpochMs`).
+    //
+    // PIN MOVED (#84). Before, this case was called "... is loaded, marked deferred to #84, and
+    // never fires" and asserted `birthday.deferred` equalled `{ kind: 'realDate', ticket: '#84' }`
+    // and that `triggerMet(...)` was **false** at every point of the four-season wheel. The reason
+    // is the ticket: the trigger is evaluated now, so "never fires" is the thing that had to stop
+    // being true.
     const birthday = FARM_DECK.authored.find((e) => e.id === 'dlBirthday')!;
     expect(birthday.trigger.kind).toBe('realDate');
-    expect(birthday.deferred).toEqual({ kind: 'realDate', ticket: '#84' });
     const s = createInitialState(1, { events: false });
+    // Off the date: the default epoch is April 1, and a handful of other real days.
     expect(triggerMet(s, viewOf(s), birthday)).toBe(false);
-    // Not on any day of any season, and not at any point in the four-season cycle either.
-    for (const elapsed of [0, PERIOD * 1000, SEASON_MS, SEASON_MS * 2.5, SEASON_MS * 4]) {
-      s.season = { ...s.season, elapsedMs: elapsed };
-      expect(triggerMet(s, viewOf(s), birthday), `elapsedMs ${elapsed}`).toBe(false);
+    for (const [month, day] of [
+      [12, 14],
+      [12, 16],
+      [11, 15],
+      [1, 15],
+      [6, 21],
+    ] as const) {
+      at(s, realMsOfCivil(2026, month, day) + 3 * 3_600_000);
+      expect(triggerMet(s, viewOf(s), birthday), `${month}/${day}`).toBe(false);
     }
-    // The owner's own hand still starts it — `applyAuthoredIntent` ignores the trigger by design —
-    // which is the only way the birthday happens in the sim until #84 lands.
+    // On it: the whole real day counts, midnight to a millisecond before the next midnight.
+    for (const intoDay of [0, 1, 12 * 3_600_000, MS_PER_REAL_DAY - 1]) {
+      at(s, realMsOfCivil(2026, 12, 15) + intoDay);
+      expect(triggerMet(s, viewOf(s), birthday), `+${intoDay} ms`).toBe(true);
+    }
+    // And in a different real year, on the same date.
+    at(s, realMsOfCivil(2031, 12, 15));
+    expect(triggerMet(s, viewOf(s), birthday)).toBe(true);
+    // The owner's own hand still starts it whatever the date — `applyAuthoredIntent` ignores the
+    // trigger by design — which is how the birthday is exercised out of season.
     const owned = createInitialState(1, { events: false });
     applyAuthoredIntent(owned, 'dlBirthday', 'trigger', FARM_DECK);
     expect(owned.events.running.map((r) => r.id)).toContain('dlBirthday');
   });
 
-  it('a deferred authored event never starts by itself over a long unattended run', () => {
+  it('a realDate window narrows the door from the whole real day to windowSimMinutes', () => {
+    // Optional on the trigger and unused by the shipped deck, so this is where it is pinned. The
+    // window is measured in sim minutes from UTC midnight, which is the same count of real
+    // milliseconds under the host's one-to-one mapping.
+    const deck = stubDeck([{ id: 'c' }], [{ id: 'noonish', trigger: { kind: 'realDate', month: 12, day: 15, windowSimMinutes: 90 } }]);
+    const event = deck.authored[0]!;
+    const s = createInitialState(1, { events: false });
+    const windowMs = minutes(90);
+    at(s, realMsOfCivil(2026, 12, 15));
+    expect(triggerMet(s, viewOf(s), event)).toBe(true);
+    at(s, realMsOfCivil(2026, 12, 15) + windowMs - 1);
+    expect(triggerMet(s, viewOf(s), event)).toBe(true);
+    at(s, realMsOfCivil(2026, 12, 15) + windowMs);
+    expect(triggerMet(s, viewOf(s), event)).toBe(false);
+  });
+
+  it('the birthday never starts by itself on a world whose real date is not December 15', () => {
     // The other half of the same fact, from the outside: five real minutes of a world that is
     // otherwise free to do what it likes, and the birthday is not in it. `dlBirthday` used to be
-    // the first start on every seed, at 0.1 real seconds; deferring it is what removed that.
+    // the first start on every seed, at 0.1 real seconds; the real calendar is what removed that
+    // (before #84 it was the deferral). These worlds run at the default April 1 epoch.
     for (const seed of [1, 9, 25]) {
       const s = advance(createInitialState(seed), 3000);
       const told = s.chronicle.entries.filter((e) => e.line.includes('birthday'));
@@ -71,28 +118,45 @@ describe('authored triggers', () => {
     // 1-based day index 1-9 it used to be, because a season under the real-year calendar no longer
     // has a fixed day count to point at. No shipped authored event uses `simDate` today; this pins
     // the engine's reader against the schema's new meaning. See `seasonFraction` (engine.ts).
+    //
+    // PIN MOVED (#84). Before, this case reached its seasons by setting `elapsedMs` to multiples of
+    // `SEASON_MS` (the nine-real-day wheel). The reason is the ticket: there is no wheel and no
+    // `SEASON_MS` any more, so a season is reached by putting the world on a real date inside it
+    // and asking the world's own calendar where that season starts and ends. Every assertion below
+    // is the same assertion it was.
     const s = createInitialState(1, { events: false });
     const mid = stubDeck([{ id: 'c' }], [{ id: 'midSummer', trigger: { kind: 'simDate', season: 'summer', dayOfSeason: 0.5 } }]);
     const event = mid.authored[0]!;
-    expect(event.deferred).toBeUndefined();
-    // A season is SEASON_MS of sim time; summer is the second quarter of the four-season wheel.
-    s.season = { ...s.season, elapsedMs: SEASON_MS + SEASON_MS * 0.5 };
+    // Seed 1's own summer, drift and all: its start, and its own realized length.
+    at(s, realMsOfCivil(2026, 7, 15)); // inside summer on every seed (it starts July 1 at the latest)
+    const summer = seasonSpanOf(s.season);
+    const midSummer = summer.startMs + (summer.endMs - summer.startMs) * 0.5;
+    at(s, midSummer);
     expect(seasonFraction(s)).toBeCloseTo(0.5, 9);
     expect(triggerMet(s, viewOf(s), event)).toBe(true);
     // Still true anywhere inside that one sim-day (three real minutes), and false the next one.
+    // Measured from the start of the season-day the midpoint falls in, not from the midpoint
+    // itself: the season's own length is not a whole number of sim-days, so the midpoint sits
+    // somewhere inside its day rather than at its edge.
     const dayMs = PERIOD * 1000;
-    s.season = { ...s.season, elapsedMs: SEASON_MS + SEASON_MS * 0.5 + dayMs * 0.9 };
+    const midDayStart = summer.startMs + Math.floor((midSummer - summer.startMs) / dayMs) * dayMs;
+    at(s, midDayStart);
     expect(triggerMet(s, viewOf(s), event)).toBe(true);
-    s.season = { ...s.season, elapsedMs: SEASON_MS + SEASON_MS * 0.5 + dayMs * 1.1 };
+    at(s, midDayStart + dayMs * 0.9);
+    expect(triggerMet(s, viewOf(s), event)).toBe(true);
+    at(s, midDayStart + dayMs * 1.1);
     expect(triggerMet(s, viewOf(s), event)).toBe(false);
     // The right season, too: the same fraction of spring is not the same fraction of summer.
-    s.season = { ...s.season, elapsedMs: SEASON_MS * 0.5 };
+    at(s, realMsOfCivil(2026, 4, 15));
+    const spring = seasonSpanOf(s.season);
+    at(s, spring.startMs + (spring.endMs - spring.startMs) * 0.5);
     expect(triggerMet(s, viewOf(s), event)).toBe(false);
     // And the season fraction is a fraction: 0 at the season's first moment, never 1.
-    s.season = { ...s.season, elapsedMs: 0 };
+    at(s, spring.startMs);
     expect(seasonFraction(s)).toBe(0);
     expect(seasonDayOfFraction(s, 0)).toBe(1);
-    expect(seasonDayOfFraction(s, 0.5)).toBe(dayOfSeason({ ...s, season: { ...s.season, elapsedMs: SEASON_MS * 0.5 } }));
+    const half = spring.startMs + (spring.endMs - spring.startMs) * 0.5;
+    expect(seasonDayOfFraction(s, 0.5)).toBe(dayOfSeason({ ...s, season: { ...s.season, realEpochMs: half - s.season.elapsedMs } }));
   });
 
   it('a stock threshold: the cliff storm waits for a real drought', () => {

@@ -20,7 +20,20 @@ const DAY = 180_000; // RULES.clock.periodSec (180s) in ms, the default day leng
 
 /** The state as a v5 build would hash it: the ledger snapshot present, no chronicle, no events, version 5. */
 function v5View(s: SimState): Record<string, unknown> {
-  return { ...s, version: 5, chronicle: undefined, events: undefined };
+  return { ...s, version: 5, chronicle: undefined, events: undefined, season: preCalendarSeason(s.season), ledger: preCalendarLedger(s.ledger) };
+}
+
+/**
+ * A `season` as a build before #84 stored it: without `realEpochMs` and `seed`, the two numbers the
+ * real-year calendar reads. The Ledger snapshot carries a `season` of its own and needs the same
+ * treatment. See test/calendar.test.ts for the v7 view and the reason.
+ */
+function preCalendarSeason(season: SimState['season']): Record<string, unknown> {
+  return { ...season, realEpochMs: undefined, seed: undefined };
+}
+
+function preCalendarLedger(ledger: SimState['ledger']): Record<string, unknown> {
+  return { ...ledger, season: preCalendarSeason(ledger.season) };
 }
 
 /** A v5-comparable world: the engine off (#40), so the actors run exactly the tick a v5 build ran. */

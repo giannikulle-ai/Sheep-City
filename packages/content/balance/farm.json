@@ -15,7 +15,7 @@
       "chance":      { "value": 0.35,            "comment": "Base chance a roll brings rain (the season table below overrides it in season mode)." },
       "lengthMs":    { "value": [20000, 45000],  "comment": "Rain lasts a uniform time in this range; snow lasts up to 1.5x the spread." }
     },
-    "season":  { "realDays": { "value": 9, "comment": "SIM COMPAT ONLY (packages/sim/src/rules.ts, clock.ts SEASON_MS): the old fixed nine-real-day season the sim still reads today. Superseded by outsideRules.seasons.calendar below, the owner's real-year model (2026-09-08); sim ticket #84 retires this field once the sim reads the calendar instead. Do not tune this number for feel any more." } },
+    "season":  { "realDays": { "value": 9, "comment": "PROTOTYPE PARITY ONLY since #84. The sim no longer reads this number for anything: seasons follow outsideRules.seasons.calendar below, the owner's real-year model (2026-09-08), and clock.ts SEASON_MS is gone. It stays here because packages/sim/test/rules-parity.test.ts asserts this whole rules block leaf for leaf against the prototype's own RULES literal (prototype/luna-farm/src/sim_template.html has season: { realDays: 9 }), so deleting it would mean narrowing that parity pin rather than retiring dead data - a call for the owner, raised on #84 rather than taken there. Do not tune this number for feel; it is a record of what the prototype did." } },
     "speed": {
       "sheepWander":   { "value": 9,  "comment": "Sheep px/s when wandering." },
       "sheepWalk":     { "value": 16, "comment": "Sheep px/s when walking to a need (tuft, hay, trough, barn)." },

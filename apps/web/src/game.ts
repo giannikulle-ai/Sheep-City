@@ -24,6 +24,15 @@ export interface GameOptions {
   onMoment?: (m: Moment) => void;
   /** called after every tick that crossed a sim-minute boundary */
   onMinute?: (sim: SimState) => void;
+  /**
+   * The real instant a fresh world is created at, for the sim's real-year season calendar (#84;
+   * `Season.realEpochMs`). A **function**, not a number, because `reset` builds a new world later
+   * in the page's life and a real player's new farm should start on the real date it is started on,
+   * not on the date the tab was opened. Returning `undefined` — which is what a pinned or QA world
+   * does — leaves the sim on its own fixed `DEFAULT_REAL_EPOCH_MS`. See `worldRealNowMs` in
+   * query.ts for who returns what and why. Omitted entirely: the sim's default, every time.
+   */
+  realEpochMs?: () => number | undefined;
 }
 
 /** How many intents the log keeps for QA and the tray. */
@@ -51,7 +60,10 @@ export class Game {
   }
 
   private fresh(seed: number): SimState {
-    const s = cloneState(createInitialState(seed));
+    // Asked once per fresh world, so a farm started an hour from now starts on the calendar an hour
+    // from now. `undefined` is passed straight through: `createInitialState` reads it as "no real
+    // time given" and uses the sim's own default epoch.
+    const s = cloneState(createInitialState(seed, { realEpochMs: this.opts.realEpochMs?.() }));
     for (const intent of this.opts.boot ?? []) for (const si of toSimIntents(intent, s)) applyIntent(s, si);
     return s;
   }

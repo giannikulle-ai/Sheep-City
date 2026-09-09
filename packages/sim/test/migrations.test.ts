@@ -330,7 +330,14 @@ describe('v4 to v5', () => {
     expect(rest).toEqual(v4.world);
     expect(lastLedgerAt).toBe((v4.world['clock'] as { nowMs: number }).nowMs);
     // The snapshot is the loaded world's own summary: the migration and `summarise` agree.
-    expect(ledger).toEqual(summarise(fromSave(v4)));
+    //
+    // PIN MOVED (#84). Before: `expect(ledger).toEqual(summarise(fromSave(v4)))`. The reason is the
+    // ticket: `fromSave` now runs the chain all the way to v8, which adds `realEpochMs` and `seed`
+    // to every `season` including the snapshot's, while `v5LedgerSnapshot.up` on its own stops at
+    // v5 and cannot know about fields two versions in its future. So the comparison drops exactly
+    // those two fields, and everything else is still asserted equal.
+    const { realEpochMs: _epoch, seed: _seasonSeed, ...v5Season } = summarise(fromSave(v4)).season;
+    expect(ledger).toEqual({ ...summarise(fromSave(v4)), season: v5Season });
     expect(migrateSave(v4, MIGRATIONS.slice(0, 5), 5)).toEqual(migrated);
   });
 

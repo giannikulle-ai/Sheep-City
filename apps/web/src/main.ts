@@ -25,8 +25,8 @@ import { hitTest, type SpriteSizes } from './hit';
 import { describeIntent, type ClientIntent, type Target } from './intents';
 import { emitMoment } from './moments';
 import { PinOverlay } from './pin-overlay';
-import { parseSceneParams } from './query';
-import { awayLabel, restore, SAVE_KEY, saveText } from './save';
+import { parseSceneParams, worldRealNowMs } from './query';
+import { awayLabel, restoreForLoad, SAVE_KEY, saveText } from './save';
 import {
   addPage,
   buildStorybookPage,
@@ -181,12 +181,21 @@ async function main(): Promise<void> {
     saveNote.textContent = text;
   };
 
+  // The one place the host tells the sim what time it is in the real world (#84). The sim keeps no
+  // clock of its own, so without this its real-year season calendar sits on its own fixed default
+  // epoch and the owner's farm is in the wrong season. `qaDriven` is read live inside the closure,
+  // so the moment `window.sheepcliff.qa.seed()` takes the page over, every later fresh world is
+  // pinned again. See `worldRealNowMs` (query.ts) for the rule and the reason.
+  let qaDriven = false;
+  const realNow = (): number | undefined => worldRealNowMs(params, qaDriven, Date.now);
+
   const game = new Game({
     seed: params.seed,
     liveWeather: params.liveWeather,
     boot: bootIntents(location.search),
     onMoment: emitMoment,
     onMinute: () => save('sim-minute'),
+    realEpochMs: realNow,
   });
 
   function save(why: string): boolean {
@@ -266,7 +275,12 @@ async function main(): Promise<void> {
   /** Take a restored world over, catch it up on the time away, and open its storybook page if the
    * gap earned one. */
   function adopt(text: string, why: string): void {
-    const r = restore(text);
+    // `realNowMs` reaches the sim's v8 migration, which anchors a pre-calendar save (v7 or older)
+    // to the real present on its first load and leaves it deterministic afterwards (#84). A save
+    // that already carries its own epoch ignores it, so this changes nothing for a v8 document.
+    // `restoreForLoad` (save.ts) is the composition of `worldRealNowMs` and `restore`, pulled out
+    // of this DOM-bound function so it is the pure, tested seam rather than this one-line call.
+    const r = restoreForLoad(text, params, qaDriven, Date.now);
     pageStore = { ...pageStore, ...r.pages };
     const awayMs = r.savedAt ? Date.now() - r.savedAt : 0;
     const c = catchUp(r.sim, awayMs);
@@ -427,7 +441,7 @@ async function main(): Promise<void> {
   resize();
 
   // --- QA hooks and the page API ----------------------------------------------------------
-  let qaDriven = false;
+  // (`qaDriven` is declared up beside `realNow`, which reads it.)
   const api: SheepcliffApi = {
     qa: {
       seed(seed) {

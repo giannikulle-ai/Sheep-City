@@ -27,7 +27,16 @@ const DAY = RULES.clock.periodSec * 1000;
 
 /** The state as a v4 build would hash it: no ledger snapshot, no chronicle, no events, version 4. */
 function v4View(s: SimState): Record<string, unknown> {
-  return { ...s, version: 4, ledger: undefined, lastLedgerAt: undefined, chronicle: undefined, events: undefined };
+  return { ...s, version: 4, ledger: undefined, lastLedgerAt: undefined, chronicle: undefined, events: undefined, season: preCalendarSeason(s.season) };
+}
+
+/**
+ * A `season` as a build before #84 stored it: without `realEpochMs` and `seed`, the two numbers the
+ * real-year calendar reads. (`ledger` is already stripped whole here, so its own copy of `season`
+ * goes with it.) See test/calendar.test.ts for the v7 view and the reason.
+ */
+function preCalendarSeason(season: SimState['season']): Record<string, unknown> {
+  return { ...season, realEpochMs: undefined, seed: undefined };
 }
 
 /** A v4-comparable world: the engine off, so the actors run exactly the tick a v4 build ran. */

@@ -66,7 +66,14 @@ describe('sheep grow wool: moved, not changed', () => {
   it('the whole world hashes as it did before the move (the parity pins, in one line)', () => {
     // test/engine-parity.test.ts is the full set; this is the fleece-shaped one, kept here so a
     // change to `growWool` fails in the file that owns it too.
-    expect(hashState({ ...advance(createInitialState(11, { events: false }), 1800), version: 6, events: undefined })).toBe('c69b538ba6cd2e56');
+    //
+    // The v6 view needs one more strip since #84: `season` carries `realEpochMs` and `seed` now
+    // (and so does the Ledger snapshot's copy of it), which a v6 build never stored. The hash is
+    // unchanged — `c69b538ba6cd2e56` before and after — which is the whole point of the strip.
+    const s = advance(createInitialState(11, { events: false }), 1800);
+    const season = { ...s.season, realEpochMs: undefined, seed: undefined };
+    const ledger = { ...s.ledger, season: { ...s.ledger.season, realEpochMs: undefined, seed: undefined } };
+    expect(hashState({ ...s, version: 6, events: undefined, season, ledger })).toBe('c69b538ba6cd2e56');
   });
 });
 

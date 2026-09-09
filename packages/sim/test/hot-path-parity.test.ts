@@ -44,6 +44,18 @@
 // least half the unowned grazing-visibility rate survives. Same reasoning again: only the three
 // 40-sheep worlds move.
 //
+// They moved an eighth time in #84, for the schema only: `season` now carries `realEpochMs` and
+// `seed`, the two numbers the real-year calendar is read from, and the state is v8. Nothing in the
+// tick moved — a world created without a real time starts on `DEFAULT_REAL_EPOCH_MS` (April 1),
+// which is spring on every seed, exactly the season the old nine-day wheel started every world in,
+// and no draw changed. test/calendar.test.ts pins the same six worlds on their **v7 view** (those
+// two fields stripped from `season` and from the Ledger snapshot's copy of it, version back to 7)
+// to the six hashes this file carried before #84, which is what proves it. Those were:
+//
+//   seed 6, 5 sheep   0791cd39c7e2aab8      seed 6, 40 sheep   ab75ceacb516b7ae
+//   seed 7, 5 sheep   0ed2243395f4d7e2      seed 7, 40 sheep   a33d55048b809e3d
+//   seed 11, 5 sheep  0e4a4606aab31838      seed 11, 40 sheep  ce2977de7b3d70d2
+//
 // If a hash here moves, some sheep, DL, or NPC took a different path or drew a different die.
 // That is a parity break, not a number to update: find the behaviour change first, and if it is a
 // deliberate new draw, say so in the PR.
@@ -57,12 +69,13 @@ import { advance } from '../src/tick';
 const TICKS = 6000;
 
 const BEFORE: readonly { seed: number; sheep: number; hash: string }[] = [
-  { seed: 6, sheep: 5, hash: '0791cd39c7e2aab8' },
-  { seed: 6, sheep: 40, hash: 'ab75ceacb516b7ae' }, // moved in #63's fix round 2: hay2's bonus lowered 2.5 -> 1.9
-  { seed: 7, sheep: 5, hash: '0ed2243395f4d7e2' },
-  { seed: 7, sheep: 40, hash: 'a33d55048b809e3d' }, // moved in #63's fix round 2: hay2's bonus lowered 2.5 -> 1.9
-  { seed: 11, sheep: 5, hash: '0e4a4606aab31838' },
-  { seed: 11, sheep: 40, hash: 'ce2977de7b3d70d2' }, // moved in #63's fix round 2: hay2's bonus lowered 2.5 -> 1.9
+  // All six moved in #84 (the eighth move above), for the schema only: `season` gained two fields.
+  { seed: 6, sheep: 5, hash: '8b4c7ff08f37275e' },
+  { seed: 6, sheep: 40, hash: 'd637ce8f1cf1d3ff' },
+  { seed: 7, sheep: 5, hash: 'de7c876e352c18ce' },
+  { seed: 7, sheep: 40, hash: '8d66f001c3c251a0' },
+  { seed: 11, sheep: 5, hash: 'f35b857536c259a8' },
+  { seed: 11, sheep: 40, hash: 'e6ff3ff1b1edd3b1' },
 ];
 
 describe('hot path parity (#27)', () => {

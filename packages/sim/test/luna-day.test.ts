@@ -119,12 +119,21 @@ describe('scripted day', () => {
   // told (#114), so the chronicle entries the hash covers hold "Digital Luna" where they held
   // "{dl}". `EXPECTED` — her transitions — is byte-for-byte unchanged by both, which is the point
   // of re-pinning the hash rather than loosening it.
+  //
+  // It moved once more in **#84**, and this one is schema-only: `575fc853e800bd3d` →
+  // `16cca63404b910fb`. `season` now carries `realEpochMs` and `seed` (and so does the Ledger
+  // snapshot's copy of it), the two numbers the real-year calendar is read from, and the state is
+  // v8. This day is unchanged in every other way — a world made without a real time starts on
+  // April 1 (`DEFAULT_REAL_EPOCH_MS`), which is spring on every seed, the same season the old
+  // nine-day wheel started every world in, so not one draw or card moved. `EXPECTED` is again
+  // byte-for-byte the same, and test/calendar.test.ts pins this day's **v7 view** to
+  // `575fc853e800bd3d`, the value above.
   it('seed 11 twice gives the same day and the same hash', () => {
     const a = scriptedDay(11);
     const b = scriptedDay(11);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('575fc853e800bd3d');
+    expect(hashState(a.state)).toBe('16cca63404b910fb');
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "her 28 transitions at seed 11 are unchanged

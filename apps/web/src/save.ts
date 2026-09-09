@@ -6,6 +6,7 @@
 // has its own copy. The DOM side (localStorage, the visibilitychange hook, the export modal) is in
 // main.ts.
 import { fromSave, SaveError, toSave, type SaveDoc, type SimState } from '@sheepcliff/sim';
+import { worldRealNowMs, type SceneParams } from './query';
 import { EMPTY_PAGE_STORE, parsePageStore, type PageStore } from './storybook';
 
 export const SAVE_KEY = 'sheepcliff-save';
@@ -72,6 +73,19 @@ export function restore(text: string, options: RestoreOptions = {}): Restored {
     return { sim: fromSave(env.save, options), savedAt, pages: parsePageStore(env.pages) };
   }
   return { sim: fromSave(doc, options), savedAt: 0, pages: EMPTY_PAGE_STORE };
+}
+
+/**
+ * `restore`, with the one line that decides whether the sim is told the real time (#84, round 3 —
+ * the Verifier's finding 3: `main.ts`'s own `restore(text, { realNowMs: realNow() })` had no test on
+ * either side, only `restore`'s own pass-through and `worldRealNowMs`'s own rule did). This is the
+ * whole of that composition, pulled out of `main.ts`'s DOM-bound `adopt` so it is pure and
+ * unit-testable: `main.ts` now calls this with its own `params`, `qaDriven` and `Date.now`, and the
+ * seam a test can no longer reach — main.ts passing the right three things to this call — is a
+ * one-line, eyeballable pass-through rather than the composition itself.
+ */
+export function restoreForLoad(text: string, params: Pick<SceneParams, 'realNow' | 'scratch'>, qaDriven: boolean, wallNow: () => number): Restored {
+  return restore(text, { realNowMs: worldRealNowMs(params, qaDriven, wallNow) });
 }
 
 /** "2 h 05 min", "3 d 4 h", "45 s" — the finer-grained span, used as a subtitle beside the

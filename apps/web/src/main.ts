@@ -26,7 +26,7 @@ import { describeIntent, type ClientIntent, type Target } from './intents';
 import { emitMoment } from './moments';
 import { PinOverlay } from './pin-overlay';
 import { parseSceneParams, worldRealNowMs } from './query';
-import { awayLabel, restore, SAVE_KEY, saveText } from './save';
+import { awayLabel, restoreForLoad, SAVE_KEY, saveText } from './save';
 import {
   addPage,
   buildStorybookPage,
@@ -278,7 +278,9 @@ async function main(): Promise<void> {
     // `realNowMs` reaches the sim's v8 migration, which anchors a pre-calendar save (v7 or older)
     // to the real present on its first load and leaves it deterministic afterwards (#84). A save
     // that already carries its own epoch ignores it, so this changes nothing for a v8 document.
-    const r = restore(text, { realNowMs: realNow() });
+    // `restoreForLoad` (save.ts) is the composition of `worldRealNowMs` and `restore`, pulled out
+    // of this DOM-bound function so it is the pure, tested seam rather than this one-line call.
+    const r = restoreForLoad(text, params, qaDriven, Date.now);
     pageStore = { ...pageStore, ...r.pages };
     const awayMs = r.savedAt ? Date.now() - r.savedAt : 0;
     const c = catchUp(r.sim, awayMs);

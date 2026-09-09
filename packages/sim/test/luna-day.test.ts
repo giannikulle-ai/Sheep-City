@@ -133,7 +133,7 @@ describe('scripted day', () => {
     const b = scriptedDay(11);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('16cca63404b910fb');
+    expect(hashState(a.state)).toBe('72b482515856e681'); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 16cca63404b910fb
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "her 28 transitions at seed 11 are unchanged

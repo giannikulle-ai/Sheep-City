@@ -13,6 +13,7 @@ import { v5LedgerSnapshot } from './v5-ledger-snapshot';
 import { v6Chronicle } from './v6-chronicle';
 import { v7Events } from './v7-events';
 import { v8Calendar } from './v8-calendar';
+import { v9Settlement } from './v9-settlement';
 
 /**
  * What a migration is allowed to know about the world outside the document it is given.
@@ -46,7 +47,7 @@ export interface Migration {
 }
 
 /** In order. `MIGRATIONS[i].from === i`, and the last one writes `SAVE_VERSION`. */
-export const MIGRATIONS: readonly Migration[] = [v1WrapWorld, v2LunaFetchFields, v3FlockAndNpcFields, v4GroundAndStamps, v5LedgerSnapshot, v6Chronicle, v7Events, v8Calendar];
+export const MIGRATIONS: readonly Migration[] = [v1WrapWorld, v2LunaFetchFields, v3FlockAndNpcFields, v4GroundAndStamps, v5LedgerSnapshot, v6Chronicle, v7Events, v8Calendar, v9Settlement];
 
 /**
  * Check that a migration list is a complete, ordered chain from 0 to `target`. Throws

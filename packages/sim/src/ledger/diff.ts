@@ -31,8 +31,19 @@ export interface LedgerDiff {
   grownUp: number;
   /** Wool in the bank now minus then. Negative after a merchant visit sold it. */
   wool: number;
-  /** Coins now minus then. Negative after the merchant's coins bought an upgrade. */
+  /**
+   * The farm's coins now minus then. **Zero across every span the sim itself runs since #86**:
+   * nothing on the farm earns or spends them any more (plan decision 12), so this only moves when
+   * a host or the owner's own tray hands the farm coins. Kept because the number is still in the
+   * save and the client still shows it.
+   */
   coins: number;
+  /**
+   * The settlement's coins now minus then (#86): what the market paid for the wool the farmer
+   * walked out at dawn, less whatever `buyUpgrades` spent on the farm's builds. This is the stock
+   * that actually moves now, and it is diffed like any other.
+   */
+  settlementCoins: number;
   /** Upgrades owned now that were not then, in purchase order. */
   upgrades: string[];
   weather: LedgerChange<WeatherKind>;
@@ -64,6 +75,7 @@ export function diffLedger(before: Ledger, after: Ledger): LedgerDiff {
     grownUp: Math.max(0, after.wool.length - before.wool.length),
     wool: after.banks.wool - before.banks.wool,
     coins: after.banks.coins - before.banks.coins,
+    settlementCoins: after.settlement.coins - before.settlement.coins,
     upgrades: after.banks.owned.filter((u) => !before.banks.owned.includes(u)),
     weather: change(before.weather.kind, after.weather.kind),
     season: change(currentSeason(before.season), currentSeason(after.season)),

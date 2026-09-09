@@ -101,6 +101,7 @@ export function respawn(ledger: Ledger, chronicle: Chronicle, seed: number = led
     luna,
     npcs: { farmer: null, merchant: null, merchantAtMs: ledger.merchantAtMs, lastVisitKey: ledger.lastVisitKey },
     banks: { wool: ledger.banks.wool, coins: ledger.banks.coins, owned: ledger.banks.owned.slice() },
+    settlement: { coins: ledger.settlement.coins },
     life: { rabbit: null, bird: null, bflies, flies },
     ground: { prints: [], mud: [], wasSnowy: false },
     nameIdx: Math.max(ledger.nameIdx, sheep.length),

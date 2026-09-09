@@ -25,7 +25,10 @@ import { createWeather, type Weather } from './weather';
  * (the event engine's own slice: what is running, what is on cooldown, its own generator; see
  * engine/events.ts) and the optional `lost` flag on a `Lamb`; v8 (#84) adds `realEpochMs` and
  * `seed` to `season` (and to the `ledger` snapshot's own copy of it), the two numbers the real-year
- * calendar is read from — see clock.ts and calendar.ts.
+ * calendar is read from — see clock.ts and calendar.ts; v9 (#86) adds `settlement` (the
+ * settlement's coin stand-in, on the world and on the `ledger` snapshot), which is where the wool
+ * the farmer walks to market is paid for now that nothing on the farm sells anything — see
+ * `Settlement` below.
  *
  * PR #43 (deity intents) adds `actCmd` to `Sheep` and `Luna`, and `holdUntilMs` / `foggy` to
  * `Weather`, all as optional fields with no stored default: absent means what it always meant
@@ -33,7 +36,7 @@ import { createWeather, type Weather } from './weather';
  * this pattern for a field that needs a real default; it works here only because "absent" was
  * already the correct old behaviour.
  */
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 
 /** Stable actor ids. Sheep are `sheep-<n>`; Digital Luna is `luna`. */
 export type ActorId = string;
@@ -183,6 +186,21 @@ export interface Banks {
   owned: string[];
 }
 
+/**
+ * The settlement's ledger, as a stand-in (#86; plan decision 12, "the economy is not the farm's").
+ * One number for now: the coins the settlement's market has paid out for the farm's wool. Village
+ * Green's own ledger replaces it in Phase 2, so nothing should grow a second field here without
+ * that ticket saying so.
+ *
+ * Deliberately **not** a field on `Banks`: `banks` is the farm district's own stock, and the whole
+ * of the owner's decision is that this money is not the farm's. `banks.coins` stays in the save,
+ * untouched by anything on the farm, for the owner's own build table (plan section 3, "farm builds
+ * are the owner's") to use later.
+ */
+export interface Settlement {
+  coins: number;
+}
+
 export interface Npcs {
   farmer: Npc | null;
   merchant: Npc | null;
@@ -252,6 +270,8 @@ export interface SimState {
   luna: Luna;
   npcs: Npcs;
   banks: Banks;
+  /** The settlement's coin stand-in (#86). Nothing on the farm earns or spends `banks.coins` now. */
+  settlement: Settlement;
   life: Life;
   ground: Ground;
   /** Next index into `NAMES` / `COLORS` for a lamb that grows up: the prototype's `nameIdx`. */
@@ -434,6 +454,7 @@ export function createInitialState(seed: number, options: InitialStateOptions = 
     luna,
     npcs: { farmer: null, merchant: null, merchantAtMs: RULES.merchantFirstAtMs, lastVisitKey: -1 },
     banks: { wool: 0, coins: 0, owned: [] },
+    settlement: { coins: 0 },
     life: { rabbit: null, bird: null, bflies, flies },
     ground: { prints: [], mud: [], wasSnowy: false },
     // The prototype resets `nameIdx` to 5 whatever the flock; a bigger flock here continues from its own size so ids stay unique.
@@ -479,6 +500,7 @@ export function cloneState(state: SimState): SimState {
       merchant: state.npcs.merchant ? cloneNpc(state.npcs.merchant) : null,
     },
     banks: { ...state.banks, owned: state.banks.owned.slice() },
+    settlement: { ...state.settlement },
     life: {
       rabbit: state.life.rabbit ? { ...state.life.rabbit } : null,
       bird: state.life.bird ? { ...state.life.bird } : null,

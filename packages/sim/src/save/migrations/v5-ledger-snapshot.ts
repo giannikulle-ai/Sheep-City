@@ -7,6 +7,7 @@
 import { summarise } from '../../ledger/ledger';
 import type { SimState } from '../../state';
 import type { Migration } from './index';
+import { v9SettlementDefault } from './v9-settlement';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -33,10 +34,19 @@ function readable(world: Record<string, unknown>): world is Record<string, unkno
   );
 }
 
-/** The snapshot a v4 world gets: its own numbers, read now. Null when the world cannot be read. */
+/**
+ * The snapshot a v4 world gets: its own numbers, read now. Null when the world cannot be read.
+ *
+ * `summarise` reads the world as the **current** build shapes it, and the chain runs in order, so
+ * a field a later migration adds is not on the document yet when this one runs. `settlement` (v9,
+ * #86) is the one such field `summarise` copies, so it is defaulted here to the same empty purse
+ * `v9Settlement` would give it a few steps later; the later migration then finds it already there
+ * and leaves it alone. A field a v4 world happens to carry is kept.
+ */
 export function v5LedgerDefault(world: Record<string, unknown>): Record<string, unknown> | null {
   if (!readable(world)) return null;
-  return summarise(world) as unknown as Record<string, unknown>;
+  const settlement = isRecord(world['settlement']) ? world['settlement'] : v9SettlementDefault();
+  return summarise({ ...world, settlement } as unknown as SimState) as unknown as Record<string, unknown>;
 }
 
 export const v5LedgerSnapshot: Migration = {

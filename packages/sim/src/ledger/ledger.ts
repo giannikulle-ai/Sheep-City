@@ -11,7 +11,7 @@
 
 import type { Clock, Season } from '../clock';
 import { RULES } from '../rules';
-import type { Banks, SimState } from '../state';
+import type { Banks, Settlement, SimState } from '../state';
 import type { Weather } from '../weather';
 
 /** A lamb in the ledger: which grown sheep it trails (an index into `wool`) and how old it is. */
@@ -35,6 +35,12 @@ export interface Ledger {
   lambs: LedgerLamb[];
   /** Wool banked, coins, upgrades owned: the state's `banks`. */
   banks: Banks;
+  /**
+   * The settlement's coin stand-in, as the state's `settlement` (#86). A district's numbers with
+   * no actors in the room have to carry it, or a catch-up would sell the wool into nothing: the
+   * dawn market walk `advanceLedger` schedules pays into this, and `buyUpgrades` spends from it.
+   */
+  settlement: Settlement;
   /** Sim time of the merchant's next visit. */
   merchantAtMs: number;
   /** The farmer's last-visit guard, as `Npcs.lastVisitKey`. */
@@ -102,6 +108,7 @@ export function summarise(state: SimState): Ledger {
     wool: state.sheep.map((s) => s.wool),
     lambs,
     banks: { wool: state.banks.wool, coins: state.banks.coins, owned: state.banks.owned.slice() },
+    settlement: { coins: state.settlement.coins },
     merchantAtMs,
     lastVisitKey: state.npcs.lastVisitKey,
     nameIdx: state.nameIdx,
@@ -122,6 +129,7 @@ export function cloneLedger(ledger: Ledger): Ledger {
     wool: ledger.wool.slice(),
     lambs: ledger.lambs.map((l) => ({ ...l })),
     banks: { ...ledger.banks, owned: ledger.banks.owned.slice() },
+    settlement: { ...ledger.settlement },
   };
 }
 

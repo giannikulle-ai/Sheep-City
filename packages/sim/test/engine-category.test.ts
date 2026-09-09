@@ -70,10 +70,19 @@ describe('sheep grow wool: moved, not changed', () => {
     // The v6 view needs one more strip since #84: `season` carries `realEpochMs` and `seed` now
     // (and so does the Ledger snapshot's copy of it), which a v6 build never stored. The hash is
     // unchanged — `c69b538ba6cd2e56` before and after — which is the whole point of the strip.
+    //
+    // And one more since #86: `settlement`, on the world and on the Ledger snapshot. **The hash is
+    // still `c69b538ba6cd2e56`**, and on this world that is a real result rather than a formality:
+    // it is a whole sim-day with the engine off, and the merchant's 45-second visit falls inside it.
+    // He used to buy the bank there and buys nothing now — but at 45 s the bank is still empty (the
+    // farmer's afternoon shearing has not finished a single fleece yet), so his visit moved no
+    // number before this ticket either, and stripping the new field is enough to bring the pin back
+    // exactly. The 6,000-tick worlds in test/hot-path-parity.test.ts run long enough to reach a sale
+    // and those pins did move; see that file.
     const s = advance(createInitialState(11, { events: false }), 1800);
     const season = { ...s.season, realEpochMs: undefined, seed: undefined };
-    const ledger = { ...s.ledger, season: { ...s.ledger.season, realEpochMs: undefined, seed: undefined } };
-    expect(hashState({ ...s, version: 6, events: undefined, season, ledger })).toBe('c69b538ba6cd2e56');
+    const ledger = { ...s.ledger, season: { ...s.ledger.season, realEpochMs: undefined, seed: undefined }, settlement: undefined };
+    expect(hashState({ ...s, version: 6, events: undefined, season, ledger, settlement: undefined })).toBe('c69b538ba6cd2e56');
   });
 });
 
@@ -149,12 +158,26 @@ describe('the farmer walks to the market at dawn', () => {
     expect(second.notability).toBe(0);
   });
 
-  it('runs in a real day, at dawn, without the engine drawing it', () => {
+  it('runs in a real day, at dawn, without the engine drawing it, and the wool goes with him', () => {
     // The scheduled category actions are the engine's, not a card's: nothing about this is a draw.
     const s = advance(createInitialState(71), 1800);
-    const walks = s.chronicle.entries.filter((e) => e.source === 'category');
+    // Two `category` lines a day now (#86): the walk itself, and the sale it carried. They are
+    // separated by picture, because the walk is told whether or not there was anything to sell.
+    const walks = s.chronicle.entries.filter((e) => e.source === 'category' && e.picture === 'farmerMarket');
     expect(walks).toHaveLength(1);
     // Dawn on the first day is tick 1,332 onwards (t >= .92 from a .18 start).
     expect(walks[0]!.atMs).toBeGreaterThanOrEqual(1332 * 100);
+    // The sale (#86): the bank the farmer's afternoon shearing filled goes out at dawn, told once,
+    // and the settlement pays for it at `woolPrice`. Nothing lands on the farm's own coins.
+    const sales = s.chronicle.entries.filter((e) => e.source === 'category' && e.picture === 'coins');
+    expect(sales).toHaveLength(1);
+    expect(sales[0]!.line).toBe('The farmer sold 5 wool at the market.');
+    expect(sales[0]!.atMs).toBeGreaterThan(walks[0]!.atMs); // he stops, looks the flock over, then goes
+    expect(s.banks.wool).toBe(0);
+    expect(s.banks.coins).toBe(0); // the farm's own coins never move any more
+    // 5 x woolPrice = 15 into the settlement's purse, and the flower bed (12) bought straight out
+    // of it, which is the whole of the Foreman's proposal working end to end on one farm day.
+    expect(s.settlement.coins).toBe(5 * RULES.merchant.woolPrice - 12);
+    expect(s.banks.owned).toEqual(['flowerbed']);
   });
 });

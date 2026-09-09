@@ -553,12 +553,12 @@ describe('parity: no deity intent moves the pin', () => {
   it('luna-day.test.ts, seed 11: the end-of-day hash is unchanged', () => {
     let s = createInitialState(11);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('16cca63404b910fb');
+    expect(hashState(s)).toBe('72b482515856e681'); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 16cca63404b910fb
   });
 
   it('sheep-day.test.ts, seed 71: the end-of-day hash is unchanged', () => {
     let s = createInitialState(71);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('7cbfaceab05ef214');
+    expect(hashState(s)).toBe('8971628f989ca315'); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 7cbfaceab05ef214
   });
 });

@@ -490,8 +490,12 @@ function farmAction(state: SimState, act: FarmAction): void {
       state.life.rabbit = { x: 30, y: 150 + nextFloat(state.rng) * 120, t0Ms: now };
       return;
     case 'coins':
+      // The owner's tray, unchanged by #86: fifty coins into the **farm's** purse and a buy out of
+      // it. This is the owner's hand reaching in, not the farm earning anything, and it is the one
+      // thing left in the package that moves `banks.coins` at all. Everything the world itself does
+      // now pays into and out of `state.settlement` (see `buyUpgrades` and `sellWoolAtMarket`).
       state.banks.coins += 50;
-      buyUpgrades(state);
+      buyUpgrades(state.banks, state.banks.owned);
       return;
     default: {
       const never: never = act;

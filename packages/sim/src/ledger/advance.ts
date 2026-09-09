@@ -13,9 +13,16 @@
 //   and he shears nobody. The actor visit takes a minute of walking and the flock keeps growing
 //   fleece under his hands, so a sheep just under the line at his arrival can still be shorn
 //   there; here the line is read at the instant of the visit.
-// - The merchant trades `WALK_IN_MS` after `merchantAtMs`, buys all the wool at `woolPrice`,
-//   spends the coins on `upgrades` in order (the same `buyUpgrades`), stays `stayMs`, walks out,
-//   and is due again `everyMs` later, as the actor's job plan runs.
+// - The merchant comes `WALK_IN_MS` after `merchantAtMs`, **buys nothing** (#86, plan decision 12:
+//   "the economy is not the farm's"), stays `stayMs`, walks out, and is due again `everyMs` later,
+//   as the actor's job plan runs. The event is kept because his timer is a Ledger number the
+//   watched world reads back through `summarise` and `respawn`; it simply moves no stock.
+// - The farmer walks to market at dawn, once a day, on the same `lastVisitKey` slot his two
+//   shearing visits book (#86; the watched world's own `farmerMarketWalk` category action, see
+//   engine/category.ts). The whole wool bank goes with him: `banks.wool` to 0, the settlement's
+//   coins up by `wool * merchant.woolPrice`, and `buyUpgrades` out of that same settlement purse —
+//   the same `sellWoolAtMarket` the actor path calls, so a week away sells at the same price and
+//   in the same order a watched week does.
 // - A lamb-less sheep rolls for a lamb: the actor rolls `lambChancePerSec * TICK_SEC` every fair
 //   tick, so a step rolls once per sheep with the same odds over the step's ticks, and a birth
 //   that lands in rain or over `flockCap` does not happen, as the actor's would not.
@@ -34,8 +41,9 @@
 // the step, weather at its rolls), so a ledger, a span, and a generator state give one result.
 
 import { phaseOf, seasonAtOffset, SEASON_ODDS, type SeasonName } from '../clock';
+import { MARKET_VISIT_K } from '../engine/category';
 import { NPC_SIZE, SPOT, type Point } from '../geometry';
-import { buyUpgrades, NPC_FOOT } from '../npcs';
+import { NPC_FOOT, sellWoolAtMarket } from '../npcs';
 import { chance, nextFloat, type Rng } from '../rng';
 import { hay2RegrowMult, RULES, TICK_MS } from '../rules';
 import { setWeather, tempTarget } from '../weather';
@@ -63,6 +71,23 @@ export const GRAZE_SHARE = (RULES.sheep.pick.graze * (1 / RULES.sheep.stopEating
 
 /** The actor's per-tick lamb roll. */
 const BIRTH_PER_TICK = RULES.lambChancePerSec * (TICK_MS / 1000);
+
+/**
+ * Every daily crossing the farmer keeps, as a clock bucket `k` (hundredths of a day, the unit
+ * `Npcs.lastVisitKey` is written in) plus how wide the watched world's own window on it is.
+ *
+ * His two shearing visits fire from `tickNpcs`, which compares `Math.floor(t * 100)` against the
+ * bucket, so their window is one hundredth of a day. The market walk fires from the
+ * `farmerMarketWalk` category action, whose `due` reads `phaseOf(t) === 'dawn'` — the whole of
+ * dawn, from `RULES.clock.phases.dawn` to midnight — so its window is that much wider, and this
+ * carries the width rather than assuming a hundredth for all three. Without it a catch-up that
+ * began after the first hundredth of dawn would skip that day's sale where a watched world would
+ * have made it.
+ */
+const VISITS: readonly { k: number; window: number; market: boolean }[] = [
+  ...RULES.farmer.visitsAt.map((v) => ({ k: Math.floor(v * 100), window: 0.01, market: false })),
+  { k: MARKET_VISIT_K, window: 1 - RULES.clock.phases.dawn, market: true },
+];
 
 const NONE = 0;
 const ROLL = 1;
@@ -140,17 +165,21 @@ function stepLedger(L: Ledger, span: number, rng: Rng): void {
     for (let i = 0; i < L.grass.length; i++) L.grass[i] = clamp01((L.grass[i] as number) - bites + regrow);
   };
 
-  /** The farmer's next visit at or after `cursor`: the bucket crossing `tickNpcs` fires on, with its key. */
-  const nextVisit = (cursor: number): { at: number; key: number } | null => {
+  /**
+   * The farmer's next appointment at or after `cursor`: the bucket crossing the watched world fires
+   * on, with its key and whether it is the market walk (#86) or one of his two shearing visits.
+   * All three share the one `lastVisitKey` slot, exactly as they do on the watched path, and their
+   * buckets never collide (6, 38, 92).
+   */
+  const nextVisit = (cursor: number): { at: number; key: number; market: boolean } | null => {
     if (clock0.paused) return null;
-    let best: { at: number; key: number } | null = null;
+    let best: { at: number; key: number; market: boolean } | null = null;
     const u = unwrapped(cursor);
-    for (const v of RULES.farmer.visitsAt) {
-      const k = Math.floor(v * 100);
+    for (const { k, window, market } of VISITS) {
       const c = k / 100;
-      const crossing = (n: number): { at: number; key: number } => ({ at: t0 + (n + c - clock0.t) * periodMs, key: k * 1000 + clock0.dayCount + n });
+      const crossing = (n: number): { at: number; key: number; market: boolean } => ({ at: t0 + (n + c - clock0.t) * periodMs, key: k * 1000 + clock0.dayCount + n, market });
       let n = Math.floor(u - c);
-      let next = u - (n + c) < 0.01 ? { at: cursor, key: k * 1000 + clock0.dayCount + n } : crossing(++n);
+      let next = u - (n + c) < window ? { at: cursor, key: k * 1000 + clock0.dayCount + n, market } : crossing(++n);
       if (next.key === L.lastVisitKey) next = crossing(n + 1);
       if (!best || next.at < best.at) best = next;
     }
@@ -248,9 +277,14 @@ function stepLedger(L: Ledger, span: number, rng: Rng): void {
         break;
       }
       case FARMER: {
-        const v = visit as { at: number; key: number };
+        const v = visit as { at: number; key: number; market: boolean };
         L.lastVisitKey = v.key;
-        if (!L.weather.rain) {
+        if (v.market) {
+          // The market walk (#86): the whole bank goes out and the settlement pays for it. The same
+          // function the watched `market` job calls, with no chronicle to tell into — the gap's own
+          // diff tells the total once instead (chronicle/ledger-diff.ts).
+          sellWoolAtMarket(L);
+        } else if (!L.weather.rain) {
           for (let i = 0; i < L.wool.length; i++) {
             if ((L.wool[i] as number) >= RULES.farmer.shearAt) {
               L.wool[i] = RULES.sheep.shornWool;
@@ -262,11 +296,9 @@ function stepLedger(L: Ledger, span: number, rng: Rng): void {
         break;
       }
       case MERCHANT: {
-        if (L.banks.wool > 0) {
-          L.banks.coins += L.banks.wool * RULES.merchant.woolPrice;
-          L.banks.wool = 0;
-        }
-        buyUpgrades(L);
+        // Nothing changes hands (#86). He is still scheduled, because `merchantAtMs` is a Ledger
+        // number the watched world reads back through `summarise` and `respawn` and because the
+        // loop needs the event to keep the timer moving; he simply moves no stock while he is here.
         L.merchantAtMs = at + RULES.merchant.stayMs + WALK_OUT_MS + RULES.merchant.everyMs;
         break;
       }

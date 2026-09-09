@@ -14,6 +14,7 @@ import { summarise } from '../src/ledger/ledger';
 import { createChronicle, tell } from '../src/chronicle/store';
 import { v7EventsDefault } from '../src/save/migrations/v7-events';
 import { v8CalendarDefault } from '../src/save/migrations/v8-calendar';
+import { v9SettlementDefault } from '../src/save/migrations/v9-settlement';
 import { DEFAULT_REAL_EPOCH_MS } from '../src/calendar';
 import { SAVE_FORMAT } from '../src/save/doc';
 import { fromSave, toSave, toSaveText } from '../src/save/serialize';
@@ -82,6 +83,9 @@ export function buildFixtureState(): SimState {
   s.life.rabbit = { x: 90, y: 300, t0Ms: now - 1_000 };
   s.life.bird = { x: 168, y: 108, tx: 168, ty: 108, state: 'sit', t0Ms: now - 2_000 };
   s.banks = { wool: 2, coins: 6, owned: ['flowerbed'] };
+  // The settlement's purse (#86, save v9), non-zero by hand so the fixture covers the field with a
+  // real number rather than the default the migration would have written anyway.
+  s.settlement = { coins: 9 };
   s.ground.prints.push({ x: 300, y: 250, tMs: now - 20_000 }, { x: 306, y: 248, tMs: now - 19_300 });
   s.pendingIntents.push({ type: 'setSeason', season: 'winter', at: s.clock.tick + 500 });
   // Hand-filled engine corners (#40) so the fixture covers every type on `EventsState`: a card
@@ -271,7 +275,10 @@ describe('save fixtures', () => {
     }
     if (from < 5) {
       const clock = out['clock'] as { nowMs: number };
-      out = { ...out, ledger: summarise(out as unknown as SimState), lastLedgerAt: clock.nowMs };
+      // `summarise` reads the world the current build's shape, and `settlement` (v9) is not on a
+      // pre-v5 document yet; the v5 migration defaults it to the same empty purse for the same
+      // reason, so the expectation is built the same way. See `v5LedgerDefault`.
+      out = { ...out, ledger: summarise({ ...out, settlement: v9SettlementDefault() } as unknown as SimState), lastLedgerAt: clock.nowMs };
     }
     if (from < 6) out = { ...out, chronicle: createChronicle() };
     if (from < 7) out = { ...out, events: v7EventsDefault(out) };
@@ -282,6 +289,13 @@ describe('save fixtures', () => {
       const fill = v8CalendarDefault(out, DEFAULT_REAL_EPOCH_MS);
       const withFill = (season: unknown): Record<string, unknown> => ({ ...(season as Record<string, unknown>), ...fill });
       out = { ...out, season: withFill(out['season']), ledger: { ...(out['ledger'] as Record<string, unknown>), season: withFill((out['ledger'] as { season: unknown }).season) } };
+    }
+    if (from < 9) {
+      // The settlement's purse (#86). Empty on both the world and the Ledger snapshot: an older
+      // world has no record of what the settlement was owed, and the coins it did earn under the
+      // old rule stay where they are, in `banks.coins`. See `v9-settlement.ts`.
+      const ledger = out['ledger'] as Record<string, unknown>;
+      out = { ...out, settlement: v9SettlementDefault(), ledger: { ...ledger, settlement: ledger['settlement'] ?? v9SettlementDefault() } };
     }
     return out;
   }

@@ -205,7 +205,12 @@ describe('scripted sheep day', () => {
     expect(events).toEqual(EVENTS);
     expect(transitions).toEqual(EXPECTED);
     expect(state.sheep.map((q) => q.name)).toEqual(['Clover', 'Daisy', 'Biscuit', 'Pepper', 'Maple', 'Willow']);
-    expect(state.banks.wool).toBe(5); // the farmer's afternoon shearing; nothing sells it this day
+    // PIN MOVED (#86): was 5, the farmer's afternoon shearing with nothing on the farm to sell it.
+    // The wool leaves at dawn now — the market walk carries the whole bank out — so a sim-day that
+    // runs past dawn ends with an empty bank and the settlement holding what it fetched.
+    expect(state.banks.wool).toBe(0);
+    expect(state.settlement.coins).toBe(5 * 3 - 12); // 5 wool at woolPrice 3, less the flower bed
+    expect(state.banks.owned).toEqual(['flowerbed']); // bought out of the settlement's purse, not the farm's
     // Zero coins, and no merchant involved: with `merchantCaravan` a **big** card as of #101, the
     // draw this day lands on is still `windfall` (a small one, same as the #101-alone pin), but
     // **re-pinned again for #86's merge**: decision 12 ("no transaction on the farm") drops
@@ -215,6 +220,8 @@ describe('scripted sheep day', () => {
     // 600, hours before the farmer's afternoon shearing put five fleeces in the bank, so he found
     // nothing to buy and left empty-handed) — this round it is 0 again, and honestly this time: no
     // card on the shipped deck moves a coin any more (see `farm.json`'s own comment on `windfall`).
+    // And since #86 nothing else on the farm moves one either: the market's coins go to the
+    // settlement, so this stays 0 for the life of the farm unless the owner's tray hands it some.
     expect(state.banks.coins).toBe(0);
     // The shower is still on at midnight: the walk to the barn left mud, and there is no snow to print.
     expect(state.ground.prints).toEqual([]);
@@ -262,7 +269,7 @@ describe('scripted sheep day', () => {
     const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('7cbfaceab05ef214');
+    expect(hashState(a.state)).toBe('8971628f989ca315'); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 7cbfaceab05ef214
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "the sheep's 91 transitions at seed 71 are

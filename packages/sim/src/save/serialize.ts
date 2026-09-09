@@ -283,6 +283,7 @@ export function validateWorld(world: unknown): asserts world is SaveWorld {
   num(npcs['lastVisitKey'], 'world.npcs.lastVisitKey');
 
   banksShape(w['banks'], 'world.banks');
+  settlementShape(w['settlement'], 'world.settlement');
 
   const life = obj(w['life'], 'world.life');
   nullOr(life['rabbit'], 'world.life.rabbit', point);
@@ -412,7 +413,12 @@ function banksShape(value: unknown, path: string): void {
   arr(banks['owned'], `${path}.owned`).forEach((item, i) => str(item, `${path}.owned[${i}]`));
 }
 
-/** The Ledger snapshot: the same clock, season, weather, and banks checks as the world, plus its own arrays. */
+/** The settlement's coin stand-in (#86, save v9). One non-negative number, on the world and on the Ledger snapshot. */
+function settlementShape(value: unknown, path: string): void {
+  nonNegative(obj(value, path)['coins'], `${path}.coins`);
+}
+
+/** The Ledger snapshot: the same clock, season, weather, banks and settlement checks as the world, plus its own arrays. */
 export function ledgerShape(value: unknown, path: string): void {
   const l = obj(value, path);
   uint32(l['seed'], `${path}.seed`);
@@ -430,6 +436,7 @@ export function ledgerShape(value: unknown, path: string): void {
     num(lb['ageMs'], `${p}.ageMs`);
   });
   banksShape(l['banks'], `${path}.banks`);
+  settlementShape(l['settlement'], `${path}.settlement`);
   num(l['merchantAtMs'], `${path}.merchantAtMs`);
   num(l['lastVisitKey'], `${path}.lastVisitKey`);
   const nameIdx = nonNegative(l['nameIdx'], `${path}.nameIdx`);

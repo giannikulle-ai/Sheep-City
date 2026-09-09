@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RULES, phaseOf, type ChronicleEntry } from '@sheepcliff/sim';
 import {
   addPage,
+  apCountPhrase,
   awayTitle,
   buildStorybookPage,
   EMPTY_PAGE_STORE,
@@ -321,7 +322,8 @@ describe('buildStorybookPage collapses a repeated card into one line (#113)', ()
     const entries = [crows('A', 0.2, 0), crows('B', 0, 10)];
     const page = buildStorybookPage(entries, 2 * 3600_000, 0, 2 * 3600_000, 5000, 180); // 2h: "a night"
     expect(page!.title).toBe('a night');
-    expect(page!.lines[0]!.line).toBe('Three crows landed on the hay and Digital Luna sent them packing, two times tonight.');
+    // AP style (plan decision 20): two reads as "twice", never "two times"
+    expect(page!.lines[0]!.line).toBe('Three crows landed on the hay and Digital Luna sent them packing, twice tonight.');
   });
 
   it('pagedEntryIds counts every entry a collapsed line stands for, so none of them reads as unseen again', () => {
@@ -364,6 +366,43 @@ describe('buildStorybookPage collapses a repeated card into one line (#113)', ()
     expect(lineCount({ entryId: 'x', line: 'l', picture: 'p' })).toBe(1); // no entryIds, no count
     expect(lineCount({ entryId: 'x', line: 'l', picture: 'p', entryIds: ['x', 'y'] })).toBe(2); // no count: falls back
     expect(lineCount({ entryId: 'x', line: 'l', picture: 'p', entryIds: ['x'], count: 73 })).toBe(73); // count wins
+  });
+});
+
+// #127: the storybook's counted line follows AP style (plan section 11, decision 20, 2026-09-09) —
+// the owner, asked whether "1577 times this week" should read as a number or as shape words:
+// "Follow AP style rules." One through nine spelled out (two as the idiom "twice"), 10 and above
+// numerals with a comma separator from 1,000. `apCountPhrase` is the pure helper `collapsedLine`
+// builds a collapsed line's count suffix from; a count of one never reaches it at all — a card told
+// only once never collapses, so it stays the plain, unsuffixed line (pinned above, "a card told only
+// once collapses to nothing").
+describe('apCountPhrase (AP style numbers, #127)', () => {
+  it('one: never called at all — a card told once stays the plain, unsuffixed line, not a "1 time" this helper would have to word', () => {
+    const once = entry({ id: 'A', source: 'card', picture: 'crows', notability: 0.35, atMs: 0, line: 'Three crows landed on the hay and Digital Luna sent them packing.' });
+    const page = buildStorybookPage([once], 7 * 24 * 3600_000, 0, 1000, 5000, 180);
+    expect(page!.lines).toEqual([
+      { entryId: 'A', line: 'Three crows landed on the hay and Digital Luna sent them packing.', picture: 'crows', entryIds: ['A'] },
+    ]);
+  });
+
+  it('two reads as the idiom "twice", not "two times"', () => {
+    expect(apCountPhrase(2)).toBe('twice');
+  });
+
+  it('three through nine are spelled out, with "times"', () => {
+    expect(apCountPhrase(3)).toBe('three times');
+    expect(apCountPhrase(9)).toBe('nine times');
+  });
+
+  it('10 and above are numerals, with "times", no comma below 1,000', () => {
+    expect(apCountPhrase(10)).toBe('10 times');
+    expect(apCountPhrase(999)).toBe('999 times');
+  });
+
+  it('a comma separator from 1,000', () => {
+    expect(apCountPhrase(1000)).toBe('1,000 times');
+    expect(apCountPhrase(1577)).toBe('1,577 times');
+    expect(apCountPhrase(14710)).toBe('14,710 times');
   });
 });
 

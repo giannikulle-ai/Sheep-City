@@ -95,9 +95,11 @@ describe('worldRealNowMs: who gets the wall clock (#84)', () => {
   // The clock is a spy, so "never reads the wall clock" is a fact about the call and not a guess
   // from the value that came back.
   it('a real player’s farm gets the wall clock', () => {
+    // The zone is pinned to UTC (offset 0) so the case reads the same on the owner's box as on CI;
+    // the decision-18 cases below are the ones that exercise a real offset.
     const clock = spy(1_788_912_000_000);
-    expect(worldRealNowMs(parseSceneParams(''), false, clock.now)).toBe(1_788_912_000_000);
-    expect(worldRealNowMs(parseSceneParams('?fresh=1'), false, clock.now)).toBe(1_788_912_000_000);
+    expect(worldRealNowMs(parseSceneParams(''), false, clock.now, () => 0)).toBe(1_788_912_000_000);
+    expect(worldRealNowMs(parseSceneParams('?fresh=1'), false, clock.now, () => 0)).toBe(1_788_912_000_000);
     expect(clock.calls).toBe(2);
   });
 

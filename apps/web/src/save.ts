@@ -84,8 +84,16 @@ export function restore(text: string, options: RestoreOptions = {}): Restored {
  * seam a test can no longer reach — main.ts passing the right three things to this call — is a
  * one-line, eyeballable pass-through rather than the composition itself.
  */
-export function restoreForLoad(text: string, params: Pick<SceneParams, 'realNow' | 'scratch'>, qaDriven: boolean, wallNow: () => number): Restored {
-  return restore(text, { realNowMs: worldRealNowMs(params, qaDriven, wallNow) });
+export function restoreForLoad(
+  text: string,
+  params: Pick<SceneParams, 'realNow' | 'scratch'>,
+  qaDriven: boolean,
+  wallNow: () => number,
+  // Same seam `worldRealNowMs` has (decision 18): a test pins a zone instead of inheriting the
+  // runner's, so the suite reads the same on the owner's box (US Central) as on CI (UTC).
+  tzOffsetMinutes?: () => number,
+): Restored {
+  return restore(text, { realNowMs: worldRealNowMs(params, qaDriven, wallNow, tzOffsetMinutes) });
 }
 
 /** "2 h 05 min", "3 d 4 h", "45 s" — the finer-grained span, used as a subtitle beside the

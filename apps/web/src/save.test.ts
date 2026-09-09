@@ -143,7 +143,8 @@ describe('restoreForLoad: the composition main.ts’s load path actually calls (
   it('a real player’s v7 save lands on the wall-clock date main.ts hands it', () => {
     const text = v7Envelope(advance(createInitialState(5), 200), 1_700_000_000_000);
     const clock = spy();
-    const r = restoreForLoad(text, parseSceneParams(''), false, clock.now);
+    // Zone pinned to UTC (offset 0), as in query.test.ts, so the date below is the same on every box.
+    const r = restoreForLoad(text, parseSceneParams(''), false, clock.now, () => 0);
     expect(clock.calls, 'a real player’s load reads the wall clock').toBe(1);
     expect(realMsOf(r.sim.season)).toBe(DECEMBER_15);
     expect(realDateAt(realMsOf(r.sim.season))).toEqual({ year: 2026, month: 12, day: 15 });

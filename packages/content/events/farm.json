@@ -19,7 +19,7 @@
         { "on": "weather", "op": "eq", "value": "sun" },
         { "on": "timeOfDay", "op": "in", "value": ["dawn"] }
       ],
-      "weight": { "base": 16, "multipliers": [] },
+      "weight": { "base": 10, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 3120, "cooldownSimHours": 48 },
       "durationSimMinutes": 240,
       "hooks": {
@@ -47,7 +47,7 @@
         { "on": "ledger.flock", "op": "gte", "value": 1 }
       ],
       "weight": {
-        "base": 14,
+        "base": 8,
         "multipliers": [
           { "when": { "on": "ledger.grass", "op": "gte", "value": 0.6 }, "times": 2, "comment": "Plenty of grazing left standing reads as hay worth stealing." }
         ]
@@ -77,7 +77,7 @@
         { "on": "weather", "op": "in", "value": ["sun", "rain"] }
       ],
       "weight": {
-        "base": 4,
+        "base": 5,
         "multipliers": [
           { "when": { "on": "lambFarFromMother", "op": "eq", "value": true }, "times": 3, "comment": "This is what \"lost\" means; the strongest driver, once sim on #40 can produce it (see the card comment: PROPOSED, not true in today's sim)." },
           { "when": { "on": "flockScattered", "op": "eq", "value": true }, "times": 2, "comment": "Nobody was minding the edges." },
@@ -104,12 +104,12 @@
     {
       "id": "merchantCaravan",
       "title": "Merchant caravan",
-      "comment": "Write-up and the KNOWN GAP (three code paths still sell wool on this card): docs/content/EVENT_DECK.md, \"Merchant caravan\". Owner's decision 12: no transaction on the farm; data has no coins/wool hook.",
+      "comment": "Write-up and the KNOWN GAP (three code paths still sell wool on this card): docs/content/EVENT_DECK.md, \"Merchant caravan\". Owner's decision 12: no transaction on the farm; data has no coins/wool hook. Weight stays at 10, not trunk's 14: the day-only window (dropping dusk) is roughly half of trunk's day-or-dusk window, so trunk's weight would land this card almost as often inside a narrower slice of the clock — 10 keeps its per-eligible-tick odds close to trunk's own feel instead of concentrating trunk's frequency into half the hours.",
       "conditions": [
         { "on": "merchantPresent", "op": "eq", "value": false },
         { "on": "timeOfDay", "op": "in", "value": ["day"], "comment": "Daytime only now (was day or dusk): a road event has no reason to keep the old trade window, and 'daytime' is the issue's own word for it." }
       ],
-      "weight": { "base": 8, "multipliers": [] },
+      "weight": { "base": 10, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 2160, "cooldownSimHours": 32 },
       "durationSimMinutes": 240,
       "hooks": {
@@ -134,7 +134,7 @@
         { "on": "ledger.wool", "op": "gte", "value": 0.5, "comment": "The flock's mean fleece is already more than half grown; this is a day whose time has come, not a random draw." }
       ],
       "weight": {
-        "base": 4,
+        "base": 6,
         "multipliers": [
           { "when": { "on": "ledger.wool", "op": "gte", "value": 0.75 }, "times": 2, "comment": "The fuller the flock already is, the readier the day." }
         ]
@@ -164,7 +164,7 @@
         { "on": "simMinutesSinceRain", "op": "lte", "value": 20 },
         { "on": "timeOfDay", "op": "in", "value": ["day", "dusk"] }
       ],
-      "weight": { "base": 18, "multipliers": [] },
+      "weight": { "base": 12, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 1530, "cooldownSimHours": 24 },
       "durationSimMinutes": 90,
       "hooks": {
@@ -189,7 +189,7 @@
         { "on": "timeOfDay", "op": "in", "value": ["dusk", "night"] }
       ],
       "weight": {
-        "base": 5,
+        "base": 7,
         "multipliers": [
           { "when": { "on": "flockScattered", "op": "eq", "value": false }, "times": 1.3, "comment": "A settled flock is a quieter field for a cautious visitor." }
         ]
@@ -214,7 +214,7 @@
         { "on": "timeOfDay", "op": "in", "value": ["dawn"] },
         { "on": "farmerPresent", "op": "eq", "value": false }
       ],
-      "weight": { "base": 10, "multipliers": [] },
+      "weight": { "base": 6, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 6480, "cooldownSimHours": 96 },
       "durationSimMinutes": 720,
       "hooks": {
@@ -241,7 +241,7 @@
         { "on": "timeOfDay", "op": "in", "value": ["night"] }
       ],
       "weight": {
-        "base": 20,
+        "base": 10,
         "multipliers": [
           { "when": { "on": "flockScattered", "op": "eq", "value": false }, "times": 1.2, "comment": "A settled flock means DL is free to bounce after lights instead of minding sheep." }
         ]
@@ -303,7 +303,7 @@
         { "on": "ledger.grass", "op": "lte", "value": 0.3, "comment": "The mean tuft level reads parched, not just dry-ish." }
       ],
       "weight": {
-        "base": 5,
+        "base": 7,
         "multipliers": [
           { "when": { "on": "farmerPresent", "op": "eq", "value": false }, "times": 1.4, "comment": "Nobody around yet to top it up before it gets bad." }
         ]
@@ -333,7 +333,7 @@
         { "on": "weather", "op": "in", "value": ["sun", "rain"] },
         { "on": "timeOfDay", "op": "in", "value": ["dawn", "day"] }
       ],
-      "weight": { "base": 10, "multipliers": [] },
+      "weight": { "base": 5, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 4350, "cooldownSimHours": 72 },
       "durationSimMinutes": 30,
       "hooks": {
@@ -356,7 +356,7 @@
         { "on": "timeOfDay", "op": "in", "value": ["night"] }
       ],
       "weight": {
-        "base": 20,
+        "base": 8,
         "multipliers": [
           { "when": { "on": "flockScattered", "op": "eq", "value": false }, "times": 1.3, "comment": "A scattered flock does not settle down together to watch the sky." }
         ]
@@ -385,7 +385,7 @@
         { "on": "flockScattered", "op": "eq", "value": true }
       ],
       "weight": {
-        "base": 14,
+        "base": 9,
         "multipliers": [
           { "when": { "on": "dlFarFromFlock", "op": "eq", "value": true }, "times": 1.5, "comment": "A bigger job, a bigger moment, when she has further to run." }
         ]
@@ -415,7 +415,7 @@
         { "on": "merchantPresent", "op": "eq", "value": true },
         { "on": "farmerPresent", "op": "eq", "value": true }
       ],
-      "weight": { "base": 2, "multipliers": [] },
+      "weight": { "base": 3, "multipliers": [] },
       "limits": { "concurrent": 1, "minGapSimMinutes": 5805, "cooldownSimHours": 96 },
       "durationSimMinutes": 45,
       "hooks": {

@@ -128,10 +128,11 @@ for (const c of CASES) {
 // farm bar's list, and check every invariant above holds again — a page read back off the store
 // must trace to the chronicle exactly as freshly-shown one does. Uses a *running* world (no
 // `freeze`), the same seed 17 / gap 120 pair `storybook.spec.ts`'s "and N more" test measures at
-// 5 shown + 50 more = 55 lines — the `MAX_STORED_MORE` cap, not the gap's own total (re-measured
-// merging #86 into #101: this gap's real chronicle is 79 entries, up from 34 at #111 alone and 8
-// before that; the cap started binding with this merge, since 79 exceeds 5 + 50), so the reopened
-// card is exercised with something behind "and N more".
+// 5 shown + 47 more = 52 lines — the gap's own total, measured on this head. (It was 34 at #111
+// alone and 8 before that; at the engine's old rate of 8 with #86's conditions it was 79 and the
+// `MAX_STORED_MORE` cap clipped it to 55. With the rate derived from the owner's four-in-five
+// target it is back under the cap.) Either way the reopened card is exercised with plenty behind
+// "and N more".
 test('reopening a page from "earlier pages" traces to the chronicle exactly as the first showing did', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -166,15 +167,15 @@ test('reopening a page from "earlier pages" traces to the chronicle exactly as t
   expect(reopened.title).toBe(firstShowing.title);
   expect(reopened.subtitle).toBe(firstShowing.subtitle);
   expect(reopened.shownCount).toBe(5);
-  // Re-measured merging #86 into #101: 55 (5 shown + the 50-line `MAX_STORED_MORE` cap — this gap's
-  // own chronicle is 79 entries, which the cap now clips). Was 34 at #111 alone (its own real total,
-  // uncapped), 8 before that landed.
-  expect(reopened.apiLines.length).toBe(55);
+  // Measured on this head: 52 (5 shown + 47 more), which is this gap's own chronicle in full — the
+  // `MAX_STORED_MORE` cap of 50 does not bind at 52. Was 34 at #111 alone, 8 before that landed,
+  // and 79 (clipped to 55) at the engine's old rate of 8 with #86's conditions.
+  expect(reopened.apiLines.length).toBe(52);
 
   // and the same holds once "and N more" is opened on the reopened card too
   await expect(page.locator('#storyMore')).toHaveCount(1);
   await page.locator('#storyMore').click();
   const reopenedExpanded = await readCardCoverage(page);
   expectCardTracesToChronicle(reopenedExpanded);
-  expect(reopenedExpanded.domRows.length).toBe(55); // 5 shown + 50 kept behind the cap
+  expect(reopenedExpanded.domRows.length).toBe(52); // 5 shown + the gap's own 47, under the cap
 });

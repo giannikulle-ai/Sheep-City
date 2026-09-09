@@ -177,6 +177,28 @@ describe('save fixtures', () => {
     expect(hashState(after)).not.toBe(hashState(loaded));
   });
 
+  it('the v7 fixture’s stale realDate cooldown does not survive the v8 migration (finding 4, round 3)', () => {
+    // The v7 fixture is frozen from before #84 (README: "another id on cooldown, with its start
+    // behind it") and its `dlBirthday` cooldown is the old hand-started bar — just under 34.2 real
+    // days of sim time (`SEASON_MS * 4 * PACING.simDateCooldownCycles`, back when a season was nine
+    // real days). Nothing else in the v8 migration touches `events`, so without this fix that stale
+    // bar would ride straight through and hold the owner's first held birthday for weeks after a
+    // real load. See `v8-calendar.ts` for the fix and why it is by id, not by trigger kind.
+    const doc = readFixture('save-v7.json') as { world: { events: { cooldowns: Record<string, number> } } };
+    expect(doc.world.events.cooldowns['dlBirthday'], 'the fixture no longer carries the cooldown this test is about').toBeDefined();
+    const otherCooldown = doc.world.events.cooldowns['merchantCaravan'];
+    expect(otherCooldown).toBeDefined();
+
+    const realNowMs = 1_797_292_800_000; // 2026-12-15T00:00:00Z; arbitrary and irrelevant to this fix
+    const loaded = fromSave(doc, { realNowMs });
+    expect(loaded.events.cooldowns['dlBirthday'], 'the stale realDate cooldown rode through the migration').toBeUndefined();
+    // Nothing else on cooldowns moved: this is a drop, not a reset.
+    expect(loaded.events.cooldowns['merchantCaravan']).toBe(otherCooldown);
+    expect(Object.keys(loaded.events.cooldowns)).toEqual(['merchantCaravan']);
+    // Deterministic: the same document loaded twice at the same instant is the same world.
+    expect(hashState(fromSave(doc, { realNowMs }))).toBe(hashState(loaded));
+  });
+
   it(`the current fixture round-trips: toSave(fromSave(save-v${SAVE_VERSION}.json)) equals it byte for byte`, () => {
     const name = `save-v${SAVE_VERSION}.json`;
     const doc = readFixture(name);

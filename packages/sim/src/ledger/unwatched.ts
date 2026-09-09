@@ -33,7 +33,7 @@ import { FARM_DISTRICT } from '../chronicle/types';
 import { phaseOf, realMsOf, REAL_YEAR_MS, seasonAtOffset, seasonLengthOf, seasonSpanOf, type Phase, type SeasonName } from '../clock';
 import { FARM_DECK, type AuthoredEvent, type Card, type Deck, type EventHook, type EventHooks, type Predicate, type PredicateOn } from '../engine/deck';
 import type { EventsState } from '../engine/events';
-import { drawChance, msToSimMinutes, NO_REPEAT_SIM_MINUTES, PACING, simHoursToMs, simMinutesToMs, SIZE_PACING, UNWATCHED_LOOK_SIM_MINUTES, WARMUP_SIM_MINUTES } from '../engine/pacing';
+import { drawChance, msToSimMinutes, NO_REPEAT_SIM_MINUTES, PACING, simDaysToMs, simHoursToMs, simMinutesToMs, SIZE_PACING, UNWATCHED_LOOK_SIM_MINUTES, WARMUP_SIM_MINUTES } from '../engine/pacing';
 import { compare } from '../engine/view';
 import { lastDrawOfSizeIn } from '../engine/engine';
 import { nextFloat, type Rng } from '../rng';
@@ -218,11 +218,15 @@ function ledgerTriggerMet(view: LedgerView, event: AuthoredEvent, atOffsetMs: nu
     // This is the unwatched path (catch-up.ts's file header), and a real calendar date is the sort
     // of thing the owner asked not to miss: plan decision 16, "the big ones should not happen when
     // I am not watching". Digital Luna's birthday is a big authored event, so the size filter in
-    // `look` already holds it back; returning false here says the same thing a second time and
-    // says it for any `realDate` event of any size, which is the rule rather than a side effect of
-    // one event's size. The consequence is plain and is the owner's to accept or overturn: if
-    // nobody opens the tab on December 15, that year has no birthday — it is not replayed on the
-    // 16th and it is not deferred to the next visit.
+    // `look` already holds it back before this line is ever reached; returning false here says the
+    // same thing a second time and says it for any `realDate` event of any size, which is the rule
+    // rather than a side effect of one event's size — the day someone authors a *small* `realDate`
+    // event, this line is what still holds it back. The consequence is the owner's hold (decision
+    // 17, round 2): a missed December 15 is not lost and it is not replayed on the unwatched 16th
+    // either. It stays owed — `realDateDue` in `engine.ts` reads it as a debt, not a door — and it
+    // starts on the first **watched** step after, whether that is later the same week, in January,
+    // or in March. This path never starts it and never clears the debt; only a look with a player at
+    // the screen can.
     case 'realDate':
       return false;
     default: {
@@ -236,7 +240,14 @@ function ledgerTriggerMet(view: LedgerView, event: AuthoredEvent, atOffsetMs: nu
 function cooldownMsOf(view: LedgerView, entry: Card | AuthoredEvent, kind: 'card' | 'authored'): number {
   if (kind === 'card') return simHoursToMs((entry as Card).limits.cooldownSimHours, view.periodSec);
   const t = (entry as AuthoredEvent).trigger;
-  if (t.kind === 'simDate' || t.kind === 'realDate') return REAL_YEAR_MS * PACING.simDateCooldownCycles;
+  if (t.kind === 'simDate') return REAL_YEAR_MS * PACING.simDateCooldownCycles;
+  // `realDate` cannot start here today — `ledgerTriggerMet` above answers `false` for every
+  // `realDate` trigger, whatever its size — so this line never stamps a cooldown in the shipped
+  // world. It still has to agree with `engine.ts`'s `cooldownMs`, which gives `realDate` one farm
+  // day rather than the real-year bar `simDate` keeps: once-a-year is enforced by the occurrence
+  // itself now (`realDateDue`), and a year-long bar here would be the same latent wrong answer the
+  // watched path fixed. Kept in step so the two paths cannot disagree if the guard above ever moves.
+  if (t.kind === 'realDate') return simDaysToMs(1, view.periodSec);
   return t.cooldownSimDays * view.periodSec * 1000;
 }
 

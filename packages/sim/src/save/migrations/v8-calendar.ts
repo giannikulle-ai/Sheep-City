@@ -51,6 +51,44 @@ function withCalendar(season: unknown, fill: { realEpochMs: number; seed: number
   return next;
 }
 
+// A v7 world can carry a **stale** `realDate` cooldown (finding 4, round 3): before #84, the only
+// way `dlBirthday` ever ran was the owner starting it by hand from the tray
+// (`applyAuthoredIntent`), and that stamped a cooldown of just under a real year (the bar `simDate`
+// still carries) — `SEASON_MS * 4 * PACING.simDateCooldownCycles`, back when a season was nine real
+// days. #84 replaced the debt-and-hold rule (`realDateDue`) as what enforces once-a-year, and gave
+// `realDate` a one-farm-day cooldown to match — but that only reaches a cooldown stamped by the new
+// code. A cooldown left over from the old hand-started path is still sitting at ~34.2 real days of
+// sim time, and this migration otherwise touches nothing but `season`, so that old bar would ride
+// straight through and bar the very first held birthday for up to ~34 real days after the load. A
+// delay, never a loss — `events.starts` still says the debt is owed — but there is no reason to
+// leave it.
+//
+// The migration harness gives an `up` only the document and `realNowMs` (`MigrationContext` above);
+// it does not carry the deck, so this cannot ask "what trigger kind does this id use" the way the
+// live engine can. Dropping every cooldown would be too broad — an ordinary card's or `simDate`'s
+// bar is real and earned. So this drops `dlBirthday`'s entry by id, the one shipped event whose
+// trigger is `realDate` today. If a second `realDate` event is ever authored, its id belongs beside
+// this one; `test/rules-parity.test.ts`-style deck coverage is not available to a migration to make
+// that automatic.
+const STALE_REAL_DATE_COOLDOWN_IDS: readonly string[] = ['dlBirthday'];
+
+/** `events` with any stale `realDate`-trigger cooldown dropped (finding 4). Keeps everything else. */
+function withoutStaleRealDateCooldowns(events: unknown): unknown {
+  if (!isRecord(events)) return events;
+  const cooldowns = events['cooldowns'];
+  if (!isRecord(cooldowns)) return events;
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [id, value] of Object.entries(cooldowns)) {
+    if (STALE_REAL_DATE_COOLDOWN_IDS.includes(id)) {
+      changed = true;
+      continue;
+    }
+    next[id] = value;
+  }
+  return changed ? { ...events, cooldowns: next } : events;
+}
+
 export const v8Calendar: Migration = {
   from: 7,
   title: 'v7 to v8: anchor the world’s season calendar to the real present, and give it the world’s seed',
@@ -63,6 +101,7 @@ export const v8Calendar: Migration = {
     const next: Record<string, unknown> = { ...world, season: withCalendar(world['season'], fill) };
     const ledger = world['ledger'];
     if (isRecord(ledger)) next['ledger'] = { ...ledger, season: withCalendar(ledger['season'], fill) };
+    if ('events' in world) next['events'] = withoutStaleRealDateCooldowns(world['events']);
     return { ...doc, version: 8, world: next };
   },
 };

@@ -18,6 +18,7 @@ import {
   civilFromDays,
   daysFromCivil,
   DEFAULT_REAL_EPOCH_MS,
+  lastRealDateOccurrence,
   MS_PER_REAL_DAY,
   realDateAt,
   realDateMatches,
@@ -29,12 +30,16 @@ import {
   type SeasonName,
 } from '../src/calendar';
 import { currentSeason, realMsOf, seasonSpanOf } from '../src/clock';
+import { createChronicle } from '../src/chronicle/store';
 import { FARM_DECK } from '../src/engine/deck';
+import { createEvents } from '../src/engine/events';
 import { triggerMet } from '../src/engine/engine';
 import { viewOf } from '../src/engine/view';
 import { hashState } from '../src/hash';
 import { catchUp } from '../src/ledger/catch-up';
-import { dayMs } from '../src/ledger/ledger';
+import { dayMs, summarise } from '../src/ledger/ledger';
+import { advanceUnwatched } from '../src/ledger/unwatched';
+import { cloneRng } from '../src/rng';
 import { fromSave, toSave } from '../src/save/serialize';
 import { createInitialState, type SimState } from '../src/state';
 import { advance } from '../src/tick';
@@ -296,6 +301,27 @@ describe('Digital Luna’s birthday, December 15', () => {
     }
   });
 
+  it('a SMALL realDate event never starts on the unwatched path either, so the guard is real and not just the size filter', () => {
+    // `dlBirthday` is `big`, so `look`'s own size filter (`ledger/unwatched.ts`) already holds it
+    // back before `ledgerTriggerMet` is ever asked about it — the test above proves the outcome for
+    // the shipped deck, but it cannot tell the size filter and the `case 'realDate': return false`
+    // guard apart. This one can: a stub deck's `realDate` event is `small`, so the size filter lets
+    // it through to `ledgerTriggerMet`, and the guard is the only thing left holding it. Flip
+    // `unwatched.ts`'s `case 'realDate': return false` to `return true` and this is the test that
+    // fails (see the PR body for the mutation and its result — nothing else in the suite moves).
+    for (const seed of SEEDS) {
+      const deck = stubDeck([], [{ id: 'smallRealDate', size: 'small', trigger: { kind: 'realDate', month: 12, day: 15 } }]);
+      const state = createInitialState(seed, { realEpochMs: realMsOfCivil(2026, 12, 14) });
+      const ledger = summarise(state);
+      const events = createEvents(seed, ledger.clock.nowMs);
+      const log = { chronicle: createChronicle() };
+      const run = advanceUnwatched(ledger, 3 * REAL_DAY_IN_SIM_MS, cloneRng(state.rng), events, log, deck); // across the 15th
+      expect(run.drawn.map((d) => d.id), `seed ${seed}`).not.toContain('smallRealDate');
+      expect(events.starts['smallRealDate'], `seed ${seed}`).toBeUndefined();
+      expect(log.chronicle.entries.some((e) => e.line.includes('smallRealDate')), `seed ${seed}`).toBe(false);
+    }
+  });
+
   it('a world with no watched step on December 15 has its birthday on its first watched step in January', () => {
     // The owner's decision, 2026-09-09: "a year where nobody watches on that day gets no birthday —
     // that is not good. Maybe it should hold until I am viewing." Twenty real days away, crossing
@@ -346,6 +372,39 @@ describe('Digital Luna’s birthday, December 15', () => {
     expect(triggerMet(next, viewOf(next), BIRTHDAY)).toBe(true);
   });
 
+  it('the realDate cooldown is one farm day, not a real year: a held-and-paid birthday still starts on its own next December 15', () => {
+    // The Verifier's own scenario (verdict finding 3, mutation M8): born 2026-12-14, unwatched over
+    // the 15th so the birthday holds, paid on the first watched step on 2027-01-03. If the `realDate`
+    // cooldown were still the real-year bar `simDate` keeps (`REAL_YEAR_MS * PACING.simDateCooldownCycles`,
+    // the value engine.ts carried before #84's round 2), that bar would still be up on 2027-12-15 —
+    // it lifts only late that day — and the next birthday would not start when the owner opens the
+    // tab that morning. With the one-farm-day cooldown this branch actually ships, the only thing
+    // barring the next birthday is the occurrence itself (`realDateDue`), and it starts the moment a
+    // watched step sees December 15 next year, not some hours or a day into it.
+    let world = createInitialState(4, { realEpochMs: realMsOfCivil(2026, 12, 14) });
+    const away = catchUp(world, 20 * REAL_DAY_IN_SIM_MS); // crosses the 15th, unwatched
+    expect(iso(realMsOf(away.state.season))).toBe('2027-01-03');
+    expect(away.state.events.starts['dlBirthday']).toBeUndefined(); // still held, not paid yet
+
+    let paid = advance(away.state, 1); // the first watched step pays it
+    expect(paid.events.running.map((r) => r.id)).toContain('dlBirthday');
+    // Let it run to completion so its own cooldown is actually stamped (endEvent, not startEvent) —
+    // the same real path a live world takes, not a shortcut that could hide the bug being pinned.
+    for (let i = 0; i < 20_000 && paid.events.running.some((r) => r.id === 'dlBirthday'); i++) paid = advance(paid, 1);
+    expect(paid.events.running.map((r) => r.id)).not.toContain('dlBirthday');
+
+    // Jump straight to next December 15, mid-morning, the same way the file's other year-long cases
+    // do — moving the clock and the real epoch together (`later`), not ticking a year through.
+    const nextDec15 = later(paid, realMsOfCivil(2027, 12, 15) + 9 * 3_600_000);
+    expect(triggerMet(nextDec15, viewOf(nextDec15), BIRTHDAY)).toBe(true); // owed again, a year on
+
+    // And a watched step right there starts it — this is the line the real-year cooldown would fail:
+    // reverted, the cooldown stamped when the previous birthday ended in January would still be up,
+    // and this assertion is the one that breaks.
+    const back = advance(nextDec15, 1);
+    expect(back.events.running.map((r) => r.id)).toContain('dlBirthday');
+  });
+
   it('a window opts an event out of holding: it is due inside its window and never after it', () => {
     // `windowSimMinutes` is the "narrow door on the day, or not at all" reading, kept for an event
     // that wants it. Nothing in the shipped deck sets one; the birthday holds.
@@ -374,6 +433,37 @@ describe('a real date that does not exist in every year', () => {
       }
       expect(due, String(year)).toBe(false);
     }
+  });
+
+  it('lastRealDateOccurrence walks February 29 back to the previous leap year, not quietly to March 1', () => {
+    // The body's own claim under "What the new tests actually prove" — round-tripped directly here,
+    // since `realDateMatches` above (and the birthday's own trigger, which is December 15 and never
+    // exercises the leap-year branch) cannot stand in for it.
+    for (const nonLeapYear of [2025, 2026, 2027]) {
+      // Anywhere in the non-leap year, after its own February: the walk-back skips this year (no
+      // February 29 to round-trip) and lands on the most recent leap year's own February 29 — never
+      // invents March 1 in a year that has none.
+      const at = realMsOfCivil(nonLeapYear, 6, 1);
+      const occurrence = lastRealDateOccurrence(at, 2, 29);
+      expect(occurrence, String(nonLeapYear)).toBeDefined();
+      const found = realDateAt(occurrence!);
+      expect(found, String(nonLeapYear)).toEqual({ year: 2024, month: 2, day: 29 });
+      expect(found.year, String(nonLeapYear)).toBeLessThan(nonLeapYear);
+    }
+    // Asked from inside the leap year itself, on or after the day: this year's own February 29.
+    expect(realDateAt(lastRealDateOccurrence(realMsOfCivil(2024, 3, 1), 2, 29)!)).toEqual({ year: 2024, month: 2, day: 29 });
+    expect(realDateAt(lastRealDateOccurrence(realMsOfCivil(2028, 12, 31), 2, 29)!)).toEqual({ year: 2028, month: 2, day: 29 });
+  });
+
+  it('lastRealDateOccurrence, an ordinary date: this year on or after it, last year before it', () => {
+    // The plain case the leap-year test above cannot exercise on its own: a date that exists every
+    // year still has to walk back to the *previous* year when asked before it has happened this year.
+    expect(realDateAt(lastRealDateOccurrence(realMsOfCivil(2026, 12, 15), 12, 15)!)).toEqual({ year: 2026, month: 12, day: 15 });
+    expect(realDateAt(lastRealDateOccurrence(realMsOfCivil(2026, 12, 31), 12, 15)!)).toEqual({ year: 2026, month: 12, day: 15 });
+    expect(realDateAt(lastRealDateOccurrence(realMsOfCivil(2027, 1, 3), 12, 15)!)).toEqual({ year: 2026, month: 12, day: 15 });
+    expect(realDateAt(lastRealDateOccurrence(realMsOfCivil(2026, 12, 14), 12, 15)!)).toEqual({ year: 2025, month: 12, day: 15 });
+    // The occurrence itself is that day's UTC midnight, not the instant asked at.
+    expect(lastRealDateOccurrence(realMsOfCivil(2026, 12, 15) + 9 * 3_600_000, 12, 15)).toBe(realMsOfCivil(2026, 12, 15));
   });
 });
 

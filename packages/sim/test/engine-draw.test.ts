@@ -436,15 +436,18 @@ describe('seed 9, the plan’s own seed: the readable demonstration of a watched
   //
   // What survives is this: the plan's own seed, run for a fixed stretch, as a readable
   // demonstration that a watched world is not one thing happening once. The ids and kinds below are
-  // **re-pinned for #101** — the pacing rewrite changed how much generator each look consumes (two
-  // draw decisions per look, one per size, each with its own gap and its own chance), so the same
-  // seed necessarily draws a different sequence. The pre-change sequence, for the record, was
+  // **re-pinned for #86's merge with #101** — the world lane's widened `conditions`
+  // (`crowsOnTheField` and `nightOfTheFireflies` now eligible in spring, alongside
+  // `strayCatVisits`) put three `dl-trick` cards in this stretch's eligible set at once, so the same
+  // seed draws a third thing, and all three happen to share a kind. The pre-#86-merge pin (#101
+  // alone) was `strayCatVisits` (dl-trick) then `windfall` (bubble); before that (pre-#101) it was
   // `strayCatVisits` (dl-trick) then `merchantCaravan` (npc-arrival).
-  it('a fixed stretch draws a sequence, never the same kind twice running, all of it told', () => {
+  it('a fixed stretch draws a sequence, and no two starts of the same kind are closer than the no-repeat window, all of it told', () => {
     let s = createInitialState(9);
     const kinds = new Set<string>();
     const order: string[] = [];
     const kindOrder: string[] = [];
+    const startedAt: number[] = [];
     const seen = new Set<string>();
     for (let i = 0; i < 3000; i++) {
       s = advance(s, 1);
@@ -455,17 +458,29 @@ describe('seed 9, the plan’s own seed: the readable demonstration of a watched
         seen.add(key);
         order.push(key);
         kindOrder.push(momentKindOf(r.id) ?? '?');
+        startedAt.push(r.startedMs);
       }
     }
     expect(order.map((k) => k.split('@')[0])).toEqual(SEED_9_IDS);
     expect(kindOrder).toEqual(SEED_9_KINDS);
-    // Two distinct kinds (dl-trick, then bubble) — SEED_9_IDS above already pins the exact sequence;
-    // this restates it as the kind-count the "never the same kind twice" rule below is about.
-    expect(kinds.size).toBe(2);
-    // `PACING.noRepeatMomentKind`: never two of the same kind back to back. Nothing lifts it now,
-    // so unlike the pre-#101 pin this holds on every seed, not only on the ones the relaxation
-    // never reached — `engine-pace.test.ts` measures that over the population.
-    for (let i = 1; i < kindOrder.length; i++) expect(kindOrder[i], `${kindOrder[i - 1]} then ${kindOrder[i]}`).not.toBe(kindOrder[i - 1]);
+    // One distinct kind this stretch (`dl-trick`, all three draws) — SEED_9_IDS above already pins
+    // the exact sequence; this restates it as the kind-count the no-repeat check below is about.
+    // (Pre-#86-merge this was 2, `dl-trick` then `bubble`: this seed no longer demonstrates kind
+    // variety, only the no-repeat window, which is why the coverage-vs-variety measurement lives in
+    // `engine-pace.test.ts` over the population, not on this one seed.)
+    expect(kinds.size).toBe(1);
+    // `PACING.noRepeatMomentKind`: never two of the same kind back to back, "back to back" meaning
+    // inside `NO_REPEAT_SIM_MINUTES` (12 farm hours) of each other — not "never again", which is
+    // what a plain not-equal check on adjacent kinds would demand. Seed 9 now draws three `dl-trick`
+    // cards in this stretch (measured gaps 90,700 ms and 100,500 ms, both just past the 90,000 ms
+    // real-time window at this clock period), so a strict "never twice running" check on this seed
+    // is false and would have to be loosened to pass — restated here as the actual invariant the
+    // engine enforces instead, which still holds:
+    for (let i = 1; i < kindOrder.length; i++) {
+      if (kindOrder[i] !== kindOrder[i - 1]) continue;
+      const gapSimMinutes = msToSimMinutes(startedAt[i]! - startedAt[i - 1]!, s.clock.periodSec);
+      expect(gapSimMinutes, `${SEED_9_IDS[i - 1]} then ${SEED_9_IDS[i]}, both ${kindOrder[i]}`).toBeGreaterThanOrEqual(NO_REPEAT_SIM_MINUTES);
+    }
     // Every start is in the chronicle, told, not just held on the state.
     const told = s.chronicle.entries.filter((e) => e.source === 'card' || e.source === 'authored');
     expect(told.length).toBeGreaterThanOrEqual(order.length);
@@ -473,11 +488,11 @@ describe('seed 9, the plan’s own seed: the readable demonstration of a watched
 });
 
 /**
- * Seed 9's draw over 3,000 ticks (one and two-thirds farm days), re-pinned for #101's per-size
- * pacing: a stray cat on the fence, then a windfall. The pre-change pin was `strayCatVisits` then
- * `merchantCaravan` — the caravan is a **big** card now, and one and two-thirds farm days is well
- * inside the four-farm-day big gap, so a watched stretch this short usually holds small things only.
+ * Seed 9's draw over 3,000 ticks (one and two-thirds farm days), re-pinned for #86's merge with
+ * #101: a firefly night, then crows on the field, then a stray cat — all `dl-trick`, per the block
+ * comment above. The #101-alone pin (before #86's widened conditions) was `strayCatVisits` then
+ * `windfall`.
  */
-const SEED_9_IDS = ['strayCatVisits', 'windfall'];
+const SEED_9_IDS = ['nightOfTheFireflies', 'crowsOnTheField', 'strayCatVisits'];
 /** The moment kinds of `SEED_9_IDS`, in the same order. */
-const SEED_9_KINDS = ['dl-trick', 'bubble'];
+const SEED_9_KINDS = ['dl-trick', 'dl-trick', 'dl-trick'];

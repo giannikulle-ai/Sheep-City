@@ -17,6 +17,14 @@
 //
 // Every floor here sits well under its measured value so a few seeds of drift are tolerated and a
 // collapse fails. Every measured value was measured on this head, by this file's own harness.
+//
+// **Re-measured merging #86 into #101.** The world lane's own #86 (widened `conditions` on several
+// small cards — `crowsOnTheField` and `nightOfTheFireflies` gained spring, `stargazingNight`
+// widened to every season, `strayCatVisits` widened to sun or rain, `lambZoomiesHour` and
+// `windfall` gained dawn — plus `merchantCaravan` narrowing from day-or-dusk to day-only) moves
+// every number below. No floor here needed loosening — every one still clears with more margin
+// than before, mostly a lot more — but the measured values themselves moved and are restated at
+// each assertion rather than left describing the pre-merge deck.
 import { describe, expect, it } from 'vitest';
 import { FARM_DECK, momentKindOf, sizeOf } from '../src/engine/deck';
 import { PACE_TARGETS, SIZE_PACING } from '../src/engine/pacing';
@@ -96,29 +104,39 @@ describe('thirty seeds, thirty farm days, watched', () => {
     });
   });
 
-  it('a small thing on most farm days — measured 18 of 30 (mean 17.93, range 15 to 21)', () => {
+  it('a small thing on most farm days — measured 30 of 30 (median 30, mean 29.57, range 28 to 30)', () => {
     // The owner's target is four farm days in five (`PACE_TARGETS.smallDaysInFive`), which is 24 of
-    // 30. **This deck delivers three in five, not four**, and that is stated rather than hidden: the
-    // ceiling is the deck's coverage, not the pacing — see `PACE_TARGETS.smallDaysInFive`'s own
-    // comment for the in-process sweep that shows pushing the rate twelve-fold buys about two more
-    // days. The floor below is 12 of 30 (measured 15 at the thinnest seed), so several seeds may
-    // drift without failing and a collapse cannot pass.
-    const report = `days with a small start, per 30: median ${median(smallDays)}, mean ${mean(smallDays).toFixed(2)}, range ${range(smallDays)} (measured median 18, mean 17.93, 15 to 21); target is ${PACE_TARGETS.smallDaysInFive} in 5 = 24 of 30`;
+    // 30. Before #86 merged into #101, this deck delivered three in five (measured 18 of 30, mean
+    // 17.93, range 15 to 21) — stated rather than hidden, since the ceiling was the deck's coverage,
+    // not the pacing. **Re-measured merging #86 into #101: 30 of 30, median 30, mean 29.57, range 28
+    // to 30** — #86's widened `conditions` (see the file-top comment) close almost every remaining
+    // gap in the season × time-band table, and a small thing now lands on nearly every farm day. The
+    // floor below is still 12 of 30 (now cleared with far more margin than the 15-at-the-thinnest-
+    // seed it was written against), so several seeds may drift without failing and a collapse cannot
+    // pass; it is not raised to match the new measurement, since the point of the floor is the
+    // invariant ("most days"), not chasing the ceiling.
+    const report = `days with a small start, per 30: median ${median(smallDays)}, mean ${mean(smallDays).toFixed(2)}, range ${range(smallDays)} (measured median 30, mean 29.57, 28 to 30, after #86 merged into #101); target is ${PACE_TARGETS.smallDaysInFive} in 5 = 24 of 30`;
     expect(median(smallDays), report).toBeGreaterThanOrEqual(15);
     expect(smallDays.filter((n) => n >= 12).length, report).toBeGreaterThanOrEqual(28); // measured 30 of 30
     expect(Math.min(...smallDays), report).toBeGreaterThan(0); // no seed goes a whole month without one
-    // And the small things are the everyday texture, not a trickle: measured 22.6 starts a month.
-    expect(median(smallStarts), `small starts per 30 days: median ${median(smallStarts)}, mean ${mean(smallStarts).toFixed(2)}, range ${range(smallStarts)} (measured median 23, mean 22.57, 20 to 26)`).toBeGreaterThanOrEqual(15);
+    // And the small things are the everyday texture, not a trickle: re-measured 57 starts a month
+    // (median), mean 56.90, range 54 to 60 — roughly two and a half times the pre-#86-merge 22.57
+    // mean, since several of the newly-eligible cards are also among the deck's heavier weights.
+    expect(median(smallStarts), `small starts per 30 days: median ${median(smallStarts)}, mean ${mean(smallStarts).toFixed(2)}, range ${range(smallStarts)} (measured median 57, mean 56.90, 54 to 60, after #86 merged into #101)`).toBeGreaterThanOrEqual(15);
   });
 
-  it('a big thing a few times a farm month — measured median 2, mean 2.30, range 0 to 5', () => {
-    // The owner's target is about three in thirty farm days, and this one lands: between one and
-    // five on **28 of 30** seeds, and zero on two of them (seeds 8 and 14). Zero is not a failure —
-    // nothing is forced, and a quiet month is allowed (plan decision 16) — so the band is asserted
-    // over the population, not per seed.
+  it('a big thing a few times a farm month — measured median 1, mean 1.60, range 0 to 4', () => {
+    // The owner's target is about three in thirty farm days. Before #86 merged into #101 this landed
+    // between one and five on 28 of 30 seeds (median 2, mean 2.30), zero on two (seeds 8 and 14).
+    // **Re-measured merging #86 into #101: median 1, mean 1.60, range 0 to 4, in band on 27 of 30**
+    // (zero on three now — seeds 6, 8 and 14). `merchantCaravan` is the only `big` card #86 touches
+    // (day-only, not day-or-dusk, at weight 10 not trunk's 14 — see its own `farm.json` comment), so
+    // a narrower window for one of the deck's big cards pulling the aggregate down a little is
+    // expected, not a regression; zero is still not a failure — nothing is forced, and a quiet month
+    // is allowed (plan decision 16) — so the band is asserted over the population, not per seed.
     const inBand = bigStarts.filter((n) => n >= 1 && n <= 5).length;
-    const report = `big starts per 30 farm days: median ${median(bigStarts)}, mean ${mean(bigStarts).toFixed(2)}, range ${range(bigStarts)}, in 1..5 on ${inBand}/30 (measured median 2, mean 2.30, 0 to 5, in band on 28/30); target ${PACE_TARGETS.bigPerThirtyFarmDays}`;
-    expect(inBand, report).toBeGreaterThanOrEqual(24); // measured 28 of 30
+    const report = `big starts per 30 farm days: median ${median(bigStarts)}, mean ${mean(bigStarts).toFixed(2)}, range ${range(bigStarts)}, in 1..5 on ${inBand}/30 (measured median 1, mean 1.60, 0 to 4, in band on 27/30, after #86 merged into #101); target ${PACE_TARGETS.bigPerThirtyFarmDays}`;
+    expect(inBand, report).toBeGreaterThanOrEqual(24); // measured 27 of 30
     expect(median(bigStarts), report).toBeGreaterThanOrEqual(1);
     expect(Math.max(...bigStarts), report).toBeLessThanOrEqual(8); // the four-farm-day gap caps it near 7
   });
@@ -167,11 +185,16 @@ describe('an unwatched span: small things happen, big things do not', () => {
   });
 
   it('small things do happen across an unwatched week, and they are in the chronicle', () => {
-    // Measured over the same thirty seeds, a seven-farm-day gap: **median 7 small things, mean 6.40,
-    // range 4 to 9**, on **median 5 of the 7 days, mean 4.93, range 3 to 7**. That is a better day
-    // rate than watched play manages (17.93 of 30, three days in five, against five in seven here),
-    // because the unwatched look walks every time band of every day at one look a farm hour while a
-    // watched world's actors are elsewhere and its own eligibility windows are narrower.
+    // Measured over the same thirty seeds, a seven-farm-day gap, before #86 merged into #101:
+    // median 7 small things, mean 6.40, range 4 to 9, on median 5 of the 7 days, mean 4.93, range 3
+    // to 7. **Re-measured merging #86 into #101: median 12 small things, mean 12.60, range 11 to
+    // 16, on median 7 of the 7 days, mean 6.87, range 5 to 8** — #86's widened `conditions` lift the
+    // unwatched count the same way they lift the watched one above, and every seed now sees a small
+    // thing on nearly every unwatched day, not just most of them. That is a better day rate than
+    // watched play manages (29.57 of 30, essentially every day, against 6.87 of 7 here — closer than
+    // before #86 merged, since watched play's own coverage rose further), because the unwatched look
+    // walks every time band of every day at one look a farm hour while a watched world's actors are
+    // elsewhere and its own eligibility windows are narrower.
     const counts: number[] = [];
     const days: number[] = [];
     for (let seed = 1; seed <= SEEDS; seed++) {
@@ -193,7 +216,7 @@ describe('an unwatched span: small things happen, big things do not', () => {
         expect(line!.source).toBe(d.kind);
       }
     }
-    const report = `unwatched week: draws median ${median(counts)}, mean ${mean(counts).toFixed(2)}, range ${range(counts)} (measured median 7, mean 6.40, 4 to 9); days with one, of 7: median ${median(days)}, mean ${mean(days).toFixed(2)}, range ${range(days)} (measured median 5, mean 4.93, 3 to 7)`;
+    const report = `unwatched week: draws median ${median(counts)}, mean ${mean(counts).toFixed(2)}, range ${range(counts)} (measured median 12, mean 12.60, 11 to 16, after #86 merged into #101); days with one, of 7: median ${median(days)}, mean ${mean(days).toFixed(2)}, range ${range(days)} (measured median 7, mean 6.87, 5 to 8)`;
     expect(median(counts), report).toBeGreaterThanOrEqual(4);
     expect(Math.min(...counts), report).toBeGreaterThan(0); // no seed comes back to an empty week
     expect(median(days), report).toBeGreaterThanOrEqual(3);

@@ -108,12 +108,18 @@ describe('scripted day', () => {
   // `b3da5ab0c4e981ed` → `7c413f504c6d5a57`.
   // Her transitions above did not move by a line on any of the three — the test below pins that as
   // an equality, not by eye, and it is the point of re-pinning the hash rather than loosening it.
+  //
+  // It moved once more merging **#86 into #101**: `7c413f504c6d5a57` → `b0c813bd71455c38`. Same
+  // story as above — the transitions list (`EXPECTED`) is untouched by the merge, only the state's
+  // own numbers moved, because the world lane's widened `conditions` (#86) shift which card the
+  // generator draws on this seed's own day, even though DL's own behaviour and priority order did
+  // not change by a line.
   it('seed 11 twice gives the same day and the same hash', () => {
     const a = scriptedDay(11);
     const b = scriptedDay(11);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('7c413f504c6d5a57');
+    expect(hashState(a.state)).toBe('b0c813bd71455c38');
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "her 28 transitions at seed 11 are unchanged

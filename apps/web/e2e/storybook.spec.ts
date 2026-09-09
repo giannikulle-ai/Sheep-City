@@ -3,6 +3,12 @@ import { expect, test } from '@playwright/test';
 import type { SheepcliffApi } from '../src/api';
 import { e2eDir, expectGolden } from './lib/golden';
 
+// `storybook.ts`'s own `MAX_STORED_MORE` — not imported directly, since that module pulls in
+// `@sheepcliff/sim`'s JSON content with an import attribute Playwright's own Node loader (this file
+// runs outside Vite) does not handle. Kept as a literal, named the same, so a future change to the
+// real constant is a one-line update here too rather than a silent mismatch.
+const MAX_STORED_MORE = 50;
+
 // The storybook page (issue #42). ?gap=<minutes> (query.ts) forces a catch-up on a fresh scratch
 // world of that many real (wall-clock) minutes, deterministically — the same unit the real load/wake
 // path's awayMs is in (fix round 1: F2 — `?gap=` used to feed a day-length-scaled "sim minutes" unit
@@ -60,10 +66,16 @@ for (const c of [NIGHT, WEEK]) {
 
     // Every line the page shows must trace to a real chronicle entry id — the storybook only
     // tells; a line without a chronicle entry behind it is a bug (CLAUDE.md). And every entry the
-    // gap told must be on the page, shown or kept behind "and N more": nothing a gap told is
-    // dropped (issue #42, the owner's change round). This world is fresh and caught up once, so
-    // its whole chronicle is exactly this gap's.
-    const result = await page.evaluate(() => {
+    // gap told must be on the page, shown or kept behind "and N more", **up to `MAX_STORED_MORE`**
+    // (`storybook.ts`'s own documented cap: "a gap that told more than `MAX_PAGE_LINES +
+    // MAX_STORED_MORE` lines loses its least notable ones") — nothing a gap told below that cap is
+    // dropped (issue #42, the owner's change round), but a gap that tells more than the cap is
+    // designed to shed its least notable entries, not keep every one forever. This world is fresh
+    // and caught up once, so its whole chronicle is exactly this gap's; `maxKept` below is what the
+    // cap allows, not always the gap's own total (decision 16, PR #111 + #86: small cards now draw
+    // and tell during an unwatched catch-up, so the `week` case's real chronicle is thousands of
+    // entries long and genuinely exceeds the cap — `night` still does not).
+    const result = await page.evaluate((maxStoredMore: number) => {
       const app = (window as unknown as WithApp).sheepcliff;
       const sb = app.storybook.current();
       if (!sb) return { ok: false, reason: 'no page shown', title: '', lineCount: 0, moreCount: 0 };
@@ -71,15 +83,16 @@ for (const c of [NIGHT, WEEK]) {
       const ids = new Set(told.map((e) => e.id));
       const bad = [...sb.lines, ...sb.more].filter((l) => !ids.has(l.entryId));
       const kept = sb.lines.length + sb.more.length;
+      const maxKept = Math.min(told.length, sb.lines.length + maxStoredMore);
       const reason = bad.length
         ? `unknown entry ids: ${bad.map((l) => l.entryId).join(',')}`
-        : kept !== told.length
-          ? `page keeps ${kept} of the gap's ${told.length} entries`
+        : kept !== maxKept
+          ? `page keeps ${kept} of the gap's ${told.length} entries (expected up to ${maxKept}, the "and N more" cap)`
           : sb.lines.length < 1
             ? 'no lines shown'
             : '';
       return { ok: reason === '', reason, title: sb.title, lineCount: sb.lines.length, moreCount: sb.more.length };
-    });
+    }, MAX_STORED_MORE);
     expect(result.ok, result.reason).toBe(true);
     // the title and subtitle are the only words the client composes itself (fix round 1, #42: F2) —
     // they must read exactly what this case's real gap supports, not a word or a number the gap does
@@ -110,11 +123,13 @@ test('one tap dismisses the page', async ({ page }) => {
 });
 
 // The owner's change round on #42: "I want more than 5 … it should be based on how long away, with
-// a minimum", and nothing a gap told is dropped. Both run on a *running* world (no `freeze`), where
-// seed 17 tells 34 lines over the night gap and 60 over the week gap (decision 16, PR #111: small
-// cards now draw and tell during an unwatched catch-up, so both totals are far larger than before
-// that landed) — plenty for the floor to leave a remainder and for the longer absence to show more
-// of it.
+// a minimum", and nothing a gap told is dropped **below the `MAX_STORED_MORE` cap** (`storybook.ts`).
+// Both run on a *running* world (no `freeze`). Re-measured merging #86 into #101: seed 17's real
+// chronicle over the night gap is 79 entries (was 34 at #111 alone, was 8 before that landed at
+// all) — past the 55-entry cap (5 shown + `MAX_STORED_MORE` 50), so the night case below is now the
+// cap binding, not the gap's own total. The week gap's real chronicle is 5,568 entries (was 60 at
+// #111 alone) — the cap (10 shown + 50) was already binding before this merge, so its kept total is
+// unchanged even though the underlying gap grew nearly a hundredfold.
 test('a longer absence shows more of its gap, and a short one keeps the rest behind "and N more"', async ({ page }) => {
   const read = async (gapMinutes: number): Promise<{ shown: number; more: number; rows: number; moreLabel: string | null }> => {
     await page.goto(`/?seed=17&gap=${gapMinutes}`);
@@ -132,19 +147,20 @@ test('a longer absence shows more of its gap, and a short one keeps the rest beh
     };
   };
 
-  // two hours away: the floor, five lines shown, with the rest kept behind "and N more". Decision
-  // 16 (PR #111): small cards now draw and tell during an unwatched catch-up, so this gap's whole
-  // chronicle grew from 8 entries to 34 (measured, stable across runs) — the floor of 5 shown is
-  // unchanged, only how much is left over.
+  // two hours away: the floor, five lines shown, with the rest kept behind "and N more". Re-measured
+  // merging #86 into #101: this gap's whole chronicle is now 79 entries (was 34 at #111 alone, 8
+  // before that) — past the 55-entry cap, so "more" is now the `MAX_STORED_MORE` cap (50) itself,
+  // not the gap's own remainder (79 - 5 = 74). The floor of 5 shown is unchanged.
   const night = await read(120);
   expect(night.shown).toBe(5);
   expect(night.rows).toBe(5);
-  expect(night.more).toBe(29);
-  expect(night.moreLabel).toBe('and 29 more');
+  expect(night.more).toBe(50);
+  expect(night.moreLabel).toBe('and 50 more');
 
   // a week away, same seed: a longer absence draws even more small cards during its catch-up
-  // (measured 60 entries total, also stable) — the page shows more of it too, ten lines rather
-  // than the night's five, which is the point of this test's name.
+  // (re-measured 5,568 entries total, up from 60 at #111 alone — the cap was already binding then
+  // and still is now) — the page shows more of it too, ten lines rather than the night's five,
+  // which is the point of this test's name.
   const week = await read(10_080);
   expect(week.shown).toBe(10);
   expect(week.rows).toBe(10);
@@ -168,10 +184,12 @@ test('"and N more" opens the rest of the gap in place, and never dismisses the p
     };
   });
   expect(kept.allTold).toBe(true);
-  // decision 16, PR #111: small cards now draw and tell during this gap's catch-up, so the 29
-  // lines kept behind "and N more" here are mostly card lines, not just Ledger diffs — measured
-  // stable across runs (was 3 before that landed).
-  expect(kept.lines.length).toBe(29);
+  // decision 16, PR #111: small cards now draw and tell during this gap's catch-up, so the lines
+  // kept behind "and N more" here are mostly card lines, not just Ledger diffs. Re-measured merging
+  // #86 into #101: the gap's real chronicle grew to 79 entries (was 34 at #111 alone, 3 before that
+  // landed), past the 55-entry cap (5 shown + `MAX_STORED_MORE` 50) — so the 50 lines below are the
+  // cap itself, not the gap's own remainder.
+  expect(kept.lines.length).toBe(50);
 
   await expect(page.locator('#storyLines .storyline')).toHaveCount(5);
   await page.locator('#storyMore').click();
@@ -179,7 +197,7 @@ test('"and N more" opens the rest of the gap in place, and never dismisses the p
   // the page is still open — the row that opens the rest must not be the tap that closes the card
   await expect(page.locator('#storybook')).toBeVisible();
   await expect(page.locator('#storyMore')).toHaveCount(0);
-  await expect(page.locator('#storyLines .storyline')).toHaveCount(34);
+  await expect(page.locator('#storyLines .storyline')).toHaveCount(55); // 5 shown + 50 kept behind the cap
 
   // and the revealed rows are the kept lines themselves, verbatim, in order
   const revealed = await page.locator('#storyLines .storyline span').allInnerTexts();

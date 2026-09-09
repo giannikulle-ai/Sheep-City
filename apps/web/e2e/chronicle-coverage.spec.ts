@@ -128,9 +128,10 @@ for (const c of CASES) {
 // farm bar's list, and check every invariant above holds again — a page read back off the store
 // must trace to the chronicle exactly as freshly-shown one does. Uses a *running* world (no
 // `freeze`), the same seed 17 / gap 120 pair `storybook.spec.ts`'s "and N more" test measures at
-// 5 shown + 29 more = 34 lines (decision 16, PR #111: small cards now draw and tell during this
-// gap's catch-up, up from 3 more / 8 total before that landed), so the reopened card is exercised
-// with something behind "and N more".
+// 5 shown + 50 more = 55 lines — the `MAX_STORED_MORE` cap, not the gap's own total (re-measured
+// merging #86 into #101: this gap's real chronicle is 79 entries, up from 34 at #111 alone and 8
+// before that; the cap started binding with this merge, since 79 exceeds 5 + 50), so the reopened
+// card is exercised with something behind "and N more".
 test('reopening a page from "earlier pages" traces to the chronicle exactly as the first showing did', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -165,13 +166,15 @@ test('reopening a page from "earlier pages" traces to the chronicle exactly as t
   expect(reopened.title).toBe(firstShowing.title);
   expect(reopened.subtitle).toBe(firstShowing.subtitle);
   expect(reopened.shownCount).toBe(5);
-  // decision 16, PR #111: was 8 before small cards drew and told during this gap's catch-up.
-  expect(reopened.apiLines.length).toBe(34);
+  // Re-measured merging #86 into #101: 55 (5 shown + the 50-line `MAX_STORED_MORE` cap — this gap's
+  // own chronicle is 79 entries, which the cap now clips). Was 34 at #111 alone (its own real total,
+  // uncapped), 8 before that landed.
+  expect(reopened.apiLines.length).toBe(55);
 
   // and the same holds once "and N more" is opened on the reopened card too
   await expect(page.locator('#storyMore')).toHaveCount(1);
   await page.locator('#storyMore').click();
   const reopenedExpanded = await readCardCoverage(page);
   expectCardTracesToChronicle(reopenedExpanded);
-  expect(reopenedExpanded.domRows.length).toBe(34); // decision 16, PR #111: was 8
+  expect(reopenedExpanded.domRows.length).toBe(55); // 5 shown + 50 kept behind the cap
 });

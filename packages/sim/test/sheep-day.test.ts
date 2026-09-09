@@ -206,15 +206,16 @@ describe('scripted sheep day', () => {
     expect(transitions).toEqual(EXPECTED);
     expect(state.sheep.map((q) => q.name)).toEqual(['Clover', 'Daisy', 'Biscuit', 'Pepper', 'Maple', 'Willow']);
     expect(state.banks.wool).toBe(5); // the farmer's afternoon shearing; nothing sells it this day
-    // Twelve coins, and no merchant involved: with `merchantCaravan` a **big** card as of #101, the
-    // draw this day lands on is `windfall` (a small one), whose start hook puts twelve coins
-    // straight in the bank. It used to be 0 here — the merchant came at tick 600, hours before the
-    // farmer's afternoon shearing put five fleeces in the bank, so he found nothing to buy and left
-    // empty-handed. Both numbers say the same thing about the same unfinished feature (plan line
-    // 11's "the merchant comes when there is wool to sell" is not implemented, and his card's only
-    // conditions are still "he isn't here already" and "it's day or dusk"); this one just says it
-    // through the card that drew instead of him.
-    expect(state.banks.coins).toBe(12);
+    // Zero coins, and no merchant involved: with `merchantCaravan` a **big** card as of #101, the
+    // draw this day lands on is still `windfall` (a small one, same as the #101-alone pin), but
+    // **re-pinned again for #86's merge**: decision 12 ("no transaction on the farm") drops
+    // `windfall`'s `coins` hook entirely — the card still fires on this exact day, DL still digs by
+    // the tree, but the find is a `mood` bump now, not twelve coins in the bank. Before #86 merged
+    // this line read 12; before #101 it read 0 for a different reason (the merchant came at tick
+    // 600, hours before the farmer's afternoon shearing put five fleeces in the bank, so he found
+    // nothing to buy and left empty-handed) — this round it is 0 again, and honestly this time: no
+    // card on the shipped deck moves a coin any more (see `farm.json`'s own comment on `windfall`).
+    expect(state.banks.coins).toBe(0);
     // The shower is still on at midnight: the walk to the barn left mud, and there is no snow to print.
     expect(state.ground.prints).toEqual([]);
     expect(state.ground.mud.length).toBe(MUD_AT_DAY_END);
@@ -235,12 +236,18 @@ describe('scripted sheep day', () => {
   // onwards and every seed's card draws shift with it: `24517bbf7e9a89d5` → `550c55dafd2ae243`. The
   // *sheep* list above did not move by a single line on any of the six; test/engine-parity.test.ts
   // pins this day with the engine off, on its v6 view, to the hash from before #40.
+  //
+  // It moved a seventh time merging **#86 into #101**: `550c55dafd2ae243` → `b88ada428b712422`.
+  // `EVENTS` above and every sheep transition are byte-for-byte the same as the #101-alone pin — the
+  // world lane's widened `conditions` do not touch this scripted day's own card draw or NPC timing
+  // — the only thing that moved is the state itself, because `windfall`'s dropped `coins` hook
+  // (decision 12, see the coins assertion above) leaves `state.banks.coins` at 0 instead of 12.
   it('seed 71 twice gives the same day and the same hash', () => {
     const a = scriptedDay(71);
     const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('550c55dafd2ae243');
+    expect(hashState(a.state)).toBe('b88ada428b712422');
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "the sheep's 91 transitions at seed 71 are
@@ -282,16 +289,23 @@ describe('scripted sheep day', () => {
   // month**, because a day is no longer the right window to ask the question in: the owner made
   // `merchantCaravan` a **big** card (plan decision 16), and big things are drawn at about three a
   // thirty-farm-day month behind a four-farm-day gap. Asking "did he come today" of a card paced a
-  // few times a month measures luck, not the pace. Measured on this head, `advance()`-driven,
-  // thirty farm days each, no scripting: **27 of 30 seeds see at least one visit, median 1 visit,
-  // range 0 to 3** (the three that see none are seeds 4, 8 and 14).
+  // few times a month measures luck, not the pace.
   //
-  // The floor is 18 of 30, well under the measured 27, so several seeds may drift without failing
+  // **Re-measured a second time merging #86 into #101**, `advance()`-driven, thirty farm days each,
+  // no scripting: **20 of 30 seeds see at least one visit, median 1 visit, range 0 to 3** — down
+  // from the #101-alone measurement of 27 of 30 (the ten that now see none are seeds 2, 5, 6, 7, 8,
+  // 9, 14, 17, 21, 25). The world lane's own #86 merge narrowed `merchantCaravan`'s window from day
+  // or dusk to day-only (decision 12: a road event has no reason to keep the old trade window) —
+  // half the eligible clock the card competes for its share of the generator against every other
+  // `big` card in — so a rarer merchant here is the narrowed window doing exactly what its own
+  // `farm.json` comment says it does, not a regression.
+  //
+  // The floor is 18 of 30, still under the measured 20, so several seeds may drift without failing
   // and a collapse cannot pass; the failure message names the seeds that survived so the next
   // reader can see which ones went rather than just that a count moved. Nothing yet implements plan
   // line 11's "the merchant comes when there is wool to sell" — his card's only conditions are "he
-  // isn't here already" and "it's day or dusk" (`packages/content/events/farm.json`, the world
-  // lane's) — so which day he comes is still a coin flip, only a rarer one.
+  // isn't here already" and "it's day" (`packages/content/events/farm.json`, the world lane's, day
+  // and no longer dusk as of #86) — so which day he comes is still a coin flip, only a rarer one.
   it('the merchant still shows up over a farm month, just rarely, seeds 1-30', () => {
     const seen: number[] = [];
     const misses: number[] = [];
@@ -312,7 +326,7 @@ describe('scripted sheep day', () => {
     }
     expect(
       seen.length,
-      `the merchant came on ${seen.length} of seeds 1-30 over a farm month (measured 27 at this head; missed 4, 8, 14). Seen on: ${seen.join(', ')}. Missed: ${misses.join(', ')}. Visits: ${visits.join(',')}`,
+      `the merchant came on ${seen.length} of seeds 1-30 over a farm month (measured 20 at this head, after #86 merged into #101; missed 2, 5, 6, 7, 8, 9, 14, 17, 21, 25). Seen on: ${seen.join(', ')}. Missed: ${misses.join(', ')}. Visits: ${visits.join(',')}`,
     ).toBeGreaterThanOrEqual(18);
     expect(Math.max(...visits), `visits per farm month: ${visits.join(',')} (measured max 3)`).toBeLessThanOrEqual(8);
   }, 900_000);

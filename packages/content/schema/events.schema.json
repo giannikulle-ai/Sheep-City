@@ -26,6 +26,12 @@
   "required": ["source", "comment", "district", "timeScale", "events"],
   "additionalProperties": false,
   "$defs": {
+    "size": {
+      "type": "string",
+      "enum": ["small", "big"],
+      "description": "How big a thing this is in the world (the owner's decision, 2026-09-09, plan decision 16: \"small thing most days, big thing a few a month; the big ones should not happen when I am not watching; the weight is for what is big or small\"). `small` is the everyday texture — a stray cat on the fence, a rainbow, lamb zoomies, fog, fireflies, stargazing, a windfall — and draws on most farm days, watched or not: while the farm is unwatched the engine keeps drawing small cards at farm-day resolution and tells them to the chronicle, so the storybook has something to say about a week away. `big` is a set piece — the cliff storm, the first snow, a lost lamb, the caravan, shearing day, the birthday — drawn a few times a farm month and **only while the farm is watched**, so the owner never misses one. Size decides pacing and the watched gate; `weight` still decides which card of that size is drawn. The size of every card, with a one-line reason, is the table in docs/content/EVENT_DECK.md.",
+      "$comment": "Required on every card and every authored event. packages/sim/src/engine/deck.ts fails at load on a missing or unknown size, the same way it fails on an unknown trigger kind — a card whose size the engine cannot read is a bug in one lane or the other, not a card that quietly never fires."
+    },
     "season":  { "type": "string", "enum": ["spring", "summer", "autumn", "winter"] },
     "weather": { "type": "string", "enum": ["sun", "rain", "snow"] },
     "phase":   { "type": "string", "enum": ["dawn", "day", "dusk", "night"] },
@@ -206,6 +212,7 @@
       "properties": {
         "id":    { "$ref": "_defs.schema.json#/$defs/id" },
         "title": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "size":  { "$ref": "#/$defs/size" },
         "comment": { "$ref": "_defs.schema.json#/$defs/comment" },
         "conditions": { "$ref": "#/$defs/preconditions" },
         "weight": { "$ref": "#/$defs/weight" },
@@ -216,7 +223,7 @@
         "moment": { "$ref": "#/$defs/moment" },
         "beat": { "$ref": "#/$defs/beat" }
       },
-      "required": ["id", "title", "comment", "conditions", "weight", "limits", "durationSimMinutes", "hooks", "storybook", "moment", "beat"],
+      "required": ["id", "title", "size", "comment", "conditions", "weight", "limits", "durationSimMinutes", "hooks", "storybook", "moment", "beat"],
       "additionalProperties": false
     }
   }

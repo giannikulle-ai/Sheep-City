@@ -7,6 +7,8 @@ import {
   daysUntilBirthday,
   realDayKey,
   REMINDER_DAYS_BEFORE,
+  TRAY_READ_DWELL_MS,
+  trayDwell,
   trayIsFree,
   traySequence,
   type TrayFreeState,
@@ -136,5 +138,101 @@ describe('trayIsFree', () => {
   // cannot be read until the card is dismissed.
   it('does not write while the storybook card covers the tray', () => {
     expect(trayIsFree({ ...free, storybookVisible: true })).toBe(false);
+  });
+});
+
+// Opus verifier round 3, blocker B4. `trayIsFree` alone is true on the very first frame of a load —
+// it deliberately does not count the load message the reminder is trailing as a live one — so round
+// 2's "wait for the tray" replaced "restored: back after …" (or "the saved farm could not be read
+// …") 23 ms after it was written, on the built app. The load message needs time on screen, not just
+// an empty queue behind it. This suite drives the load sequence a frame at a time against a fake
+// tray, exactly as main.ts's `requestAnimationFrame` chain does, on a clock the test owns.
+describe('trayDwell', () => {
+  const free: TrayFreeState = { liveMessage: false, awaitingCall: false, waitingCue: false, storybookVisible: false };
+  const LOAD_MESSAGE = 'restored: back after 2 h 05 min';
+  const REMINDER = beforeBirthdayLine(3);
+
+  /** A tray already holding the load message at t = 0, and main.ts's own per-frame poll over it. */
+  function loadSequence() {
+    let text = LOAD_MESSAGE;
+    let settled = false;
+    const dwell = trayDwell(0);
+    return {
+      /** what the player reads right now */
+      say: () => text,
+      abandoned: () => settled && text === LOAD_MESSAGE,
+      frame(nowMs: number, state: Partial<TrayFreeState> = {}): void {
+        if (settled) return; // main.ts stops polling on 'show' and on 'abandon'
+        const step = dwell.step(nowMs, { ...free, ...state });
+        if (step === 'abandon') settled = true;
+        if (step === 'show') {
+          text = REMINDER;
+          settled = true;
+        }
+      },
+    };
+  }
+
+  it('a reminder due at load leaves the load message up for the whole dwell, then takes the tray', () => {
+    const seq = loadSequence();
+
+    // the frames of the first four seconds: the load message is never replaced early
+    for (const t of [0, 16, 100, 1_000, 2_500, TRAY_READ_DWELL_MS - 1]) {
+      seq.frame(t);
+      expect(seq.say()).toBe(LOAD_MESSAGE);
+    }
+
+    seq.frame(TRAY_READ_DWELL_MS);
+    expect(seq.say()).toBe(REMINDER);
+  });
+
+  it('counts the dwell from when the message was shown, not from the first poll', () => {
+    // main.ts hands `trayDwell` the instant the load message went onto the tray, and the poll only
+    // starts a frame or two later; the read the player already had must count.
+    const dwell = trayDwell(1_000);
+    expect(dwell.step(1_000 + TRAY_READ_DWELL_MS - 1, free)).toBe('wait');
+    expect(dwell.step(1_000 + TRAY_READ_DWELL_MS, free)).toBe('show');
+  });
+
+  it('gives the message under a dismissed storybook card the same dwell, card time not counted', () => {
+    const seq = loadSequence();
+
+    // the card is up from the first frame (a gap that crossed the storybook's gate opens one during
+    // `adopt`), long past the dwell: nothing is written under it
+    for (let t = 0; t <= 20_000; t += 500) {
+      seq.frame(t, { storybookVisible: true });
+      expect(seq.say()).toBe(LOAD_MESSAGE);
+    }
+
+    // dismissed just after 20 s — the restored message becomes readable only now, so the four
+    // seconds start here rather than having quietly run out while it was hidden (without the reset
+    // the line would have landed at 4 s, under the card, and been read by nobody)
+    const dismissedAt = 20_000; // the last frame the card was up
+    seq.frame(dismissedAt + 16);
+    expect(seq.say()).toBe(LOAD_MESSAGE);
+    seq.frame(dismissedAt + TRAY_READ_DWELL_MS - 1);
+    expect(seq.say()).toBe(LOAD_MESSAGE);
+
+    seq.frame(dismissedAt + TRAY_READ_DWELL_MS);
+    expect(seq.say()).toBe(REMINDER);
+  });
+
+  it('still never lands on an open deity prompt or a waiting cue, however long the dwell has run', () => {
+    const dwell = trayDwell(0);
+    const late = TRAY_READ_DWELL_MS * 3;
+    expect(dwell.step(late, { ...free, awaitingCall: true })).toBe('wait');
+    expect(dwell.step(late, { ...free, waitingCue: true })).toBe('wait');
+    // and once the prompt is answered and the tray is free again, the dwell is already satisfied
+    expect(dwell.step(late, free)).toBe('show');
+  });
+
+  it('abandons the reminder when the player says something else, rather than polling forever', () => {
+    const seq = loadSequence();
+    seq.frame(500, { liveMessage: true }); // a stage tap: the player's own feedback owns the tray
+    expect(seq.abandoned()).toBe(true);
+
+    // `liveMessage` never clears again for the rest of the open, so a later frame must not revive it
+    seq.frame(TRAY_READ_DWELL_MS * 2);
+    expect(seq.say()).toBe(LOAD_MESSAGE);
   });
 });

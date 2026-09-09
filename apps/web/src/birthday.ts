@@ -122,3 +122,66 @@ export interface TrayFreeState {
 export function trayIsFree(state: TrayFreeState): boolean {
   return !state.liveMessage && !state.awaitingCall && !state.waitingCue && !state.storybookVisible;
 }
+
+/**
+ * How long the tray's current message must have been readable before the deferred birthday line is
+ * allowed to replace it — Opus verifier round 3, blocker B4.
+ *
+ * Round 2 waited for the tray to be *free*, which is necessary and not sufficient: `trayIsFree`
+ * deliberately does not count the load message the reminder is trailing as `liveMessage`, so the
+ * very first polled frame was already free. Measured on the built app: "the saved farm could not be
+ * read (bad-version); starting a new one" at 24 ms, the birthday line at 47 ms. Twenty-three
+ * milliseconds is not a read, and that line is the only notice the player's farm was replaced.
+ * Dismissing a storybook card was no better — the card hides the tray, so the restored message
+ * underneath it was swapped out in the same frame the card went away, never having been visible.
+ *
+ * Four seconds of *visible* tray is the floor. It is the same read round 1's fixed timer allowed,
+ * kept as a floor under the round-2 wait rather than as the whole rule, so the line still never
+ * lands on a player's own feedback or an open deity prompt.
+ */
+export const TRAY_READ_DWELL_MS = 4_000;
+
+/** What one poll of {@link trayDwell} decides: keep waiting, write the line now, or give up on this
+ * open entirely (something else owns the tray and never gives it back). */
+export type TrayDwellStep = 'wait' | 'show' | 'abandon';
+
+export interface TrayDwellPoll {
+  /**
+   * One animation frame's decision. `nowMs` is the client's own monotonic clock
+   * (`performance.now()` in main.ts): the dwell is real time on the player's screen, and no clock
+   * read here reaches the sim — the reminder's *content* still comes from the world's own real now
+   * (`realMsOf(sim.season)`), never from this.
+   */
+  step(nowMs: number, state: TrayFreeState): TrayDwellStep;
+}
+
+/**
+ * The deferred birthday line's own state between frames: the tray must be free (`trayIsFree`) *and*
+ * the message currently on it must have been readable for {@link TRAY_READ_DWELL_MS}.
+ *
+ * `shownAtMs` is when that message went onto the tray. Card time is not reading time: while the
+ * storybook card covers the tray the dwell keeps restarting, so dismissing a card gives the message
+ * underneath it the same four seconds a message that was never covered gets.
+ *
+ * A message from anywhere else (`liveMessage` — the player's own tap feedback, a weather chip, a
+ * second `adopt`) abandons the reminder rather than waiting: that signal never clears again for the
+ * rest of the open, so waiting on it would poll every frame until the tab closes and still never
+ * write. Abandoning is also why main.ts must not spend the once-per-real-day key until the line is
+ * really written (round 2 finding).
+ */
+export function trayDwell(shownAtMs: number): TrayDwellPoll {
+  // When the message now on the tray became readable: when it was said, or when the card that was
+  // covering it went away, whichever is later.
+  let readableSinceMs = shownAtMs;
+  return {
+    step(nowMs, state) {
+      if (state.liveMessage) return 'abandon';
+      if (state.storybookVisible) {
+        readableSinceMs = nowMs;
+        return 'wait';
+      }
+      if (!trayIsFree(state)) return 'wait';
+      return nowMs - readableSinceMs >= TRAY_READ_DWELL_MS ? 'show' : 'wait';
+    },
+  };
+}

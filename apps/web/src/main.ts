@@ -19,7 +19,7 @@ import {
 import { catchUp, chronicleBetween, realMsOf, SaveError, type SimState } from '@sheepcliff/sim';
 import type { SheepcliffApi } from './api';
 import { BACKGROUND_URLS, SHEET_META_URL, SHEET_URL } from './assets';
-import { birthdayReminder, trayIsFree, traySequence } from './birthday';
+import { birthdayReminder, trayDwell, traySequence } from './birthday';
 import { buildFixture } from './fixture';
 import { Game, MAX_FRAME_MS } from './game';
 import { hitTest, type SpriteSizes } from './hit';
@@ -303,6 +303,10 @@ async function main(): Promise<void> {
   // it synchronously, and this is captured so the birthday reminder further down never overwrites
   // it at the same instant — see `traySequence` in birthday.ts.
   let loadMessage: string | null = null;
+  // When that message went onto the tray, on the client's own monotonic clock — the instant the
+  // reminder's readable dwell is measured from (round 3, blocker B4; `trayDwell` in birthday.ts).
+  // Nothing here reaches the sim: the sim's own "now" is still `realMsOf(game.sim.season)`.
+  let loadMessageAtMs = 0;
   if (saving) {
     if (params.fresh) storage.remove(SAVE_KEY);
     const text = params.fresh ? null : storage.get(SAVE_KEY);
@@ -317,6 +321,7 @@ async function main(): Promise<void> {
         tray.say(loadMessage);
         console.error(err);
       }
+      if (loadMessage !== null) loadMessageAtMs = performance.now();
     }
     save('load');
   } else noteSave(params.fixture ? 'fixture still (not saved)' : 'scratch world from the URL (not saved)');
@@ -517,34 +522,52 @@ async function main(): Promise<void> {
     const lastShownDayKey = saving ? storage.get(BIRTHDAY_REMINDER_KEY) : null;
     const r = birthdayReminder(realMsOf(game.sim.season), lastShownDayKey);
     if (r.line !== null) {
-      if (saving) storage.set(BIRTHDAY_REMINDER_KEY, r.dayKey);
       const line = r.line;
+      // The once-per-real-day key is spent where the line is actually written, never at decision
+      // time (round 2 finding): a deferred line that is abandoned — the player says something else
+      // first, or closes the tab while a storybook card is still up — must leave the day unspent,
+      // so the next open still has the reminder to give.
+      const showLine = (): void => {
+        if (saving) storage.set(BIRTHDAY_REMINDER_KEY, r.dayKey);
+        tray.say(line);
+      };
       const seq = traySequence(loadMessage, line);
       if (seq.length === 1) {
-        // nothing else said on this open — the tray is free, say it now
-        tray.say(line);
+        // nothing else said on this open — the tray is free and empty of news, say it now
+        showLine();
       } else {
-        // A load message is already on the tray (said synchronously above). Round 1 gave it a
-        // fixed 4-second read before an unconditional write — Opus verifier round 2, blocker B1:
-        // that write landed on whatever the tray held four seconds later regardless, wiping a
-        // player's own tap feedback, or a still-open "tap the stage for Digital Luna to walk to"
-        // deity `call` prompt, silently. There is no substitute fixed wait here: the line is polled
-        // in every animation frame against `trayIsFree` (birthday.ts) and written the first frame
-        // the tray holds nothing live, no pending call, no waiting cue, and the storybook card
-        // (round 2 finding F3) is not covering it — however long, or short, that turns out to be.
+        // A load message is already on the tray (said synchronously above), and it is the only
+        // notice the player gets that the farm was restored, or that the save could not be read and
+        // has been replaced. Two things have to be true before the birthday line may take the tray,
+        // and both are `trayDwell`'s (birthday.ts):
+        //
+        //   * the tray is free — nothing live on it, no pending deity `call` prompt, no waiting
+        //     cue, no storybook card over it (round 2, blocker B1 and finding F3). A fixed timer
+        //     alone, which is what round 1 shipped, wiped a player's own tap feedback and open
+        //     prompts four seconds in, silently.
+        //   * that message has been *visible* for `TRAY_READ_DWELL_MS` (round 3, blocker B4). Free
+        //     alone was true on the first polled frame, so round 2 replaced the load message 23 ms
+        //     after writing it and no one ever read it. Card time does not count towards the dwell,
+        //     so dismissing a storybook card starts the four seconds rather than ending them.
+        //
+        // Polled every animation frame rather than scheduled once, so the wait tracks what is
+        // actually on screen; `abandon` stops the chain when the tray has passed to someone else
+        // for good, instead of polling for the rest of the session.
         const sayCountAtLoad = tray.sayCount();
+        const dwell = trayDwell(loadMessageAtMs);
         const tryShow = (): void => {
-          const free = trayIsFree({
+          const step = dwell.step(performance.now(), {
             liveMessage: tray.sayCount() !== sayCountAtLoad,
             awaitingCall: awaitingCall !== null,
             waitingCue: tray.isWaiting(),
             storybookVisible: storybook.visible,
           });
-          if (!free) {
+          if (step === 'abandon') return;
+          if (step === 'wait') {
             requestAnimationFrame(tryShow);
             return;
           }
-          tray.say(line);
+          showLine();
         };
         requestAnimationFrame(tryShow);
       }

@@ -8,6 +8,7 @@ import {
   gapSpansNight,
   LINE_COUNT_STEPS,
   lineCountFor,
+  lineEntryIds,
   MAX_PAGE_LINES,
   MAX_STORED_MORE,
   MIN_PAGE_LINES,
@@ -245,13 +246,94 @@ describe('buildStorybookPage', () => {
       fromMs: 0,
       toMs: 1000,
       worldDays: 1000 / 180_000, // the gap's own bounds through the world's day length
-      lines: [{ entryId: 'c1', line: '3 wool banked', picture: 'wool' }],
+      lines: [{ entryId: 'c1', line: '3 wool banked', picture: 'wool', entryIds: ['c1'] }],
       more: [],
     });
   });
 
   it('returns null for an empty range: no invented "nothing happened" line', () => {
     expect(buildStorybookPage([], 5000, 0, 1000, 5000, 180)).toBeNull();
+  });
+});
+
+// A long absence's storybook page used to repeat the same small-card line many times — "crows,
+// windfall, crows, crows, windfall, crows" was the owner's own report of a real week away.
+// `buildStorybookPage` collapses every run of a same-picture 'card' entry into one line before
+// `selectLines` ever sees it, so no two of its shown lines are ever the same card, and the
+// tellings it did not give a line of their own are folded into that one line's count rather than
+// dropped: it is still backed by every entry it speaks for (#113).
+describe('buildStorybookPage collapses a repeated card into one line (#113)', () => {
+  const crows = (id: string, notability: number, atMs: number) =>
+    entry({ id, atMs, notability, source: 'card', picture: 'crows', line: 'Three crows landed on the hay and Digital Luna sent them packing.' });
+
+  it('never shows the same card line twice: a run of same-picture card entries becomes one line, at its most notable member\'s own slot', () => {
+    // already most-notable-first, as chronicleBetween hands buildStorybookPage its entries
+    const entries = [
+      entry({ id: 'L1', source: 'ledger', picture: 'wool', line: '4 lambs born', notability: 0.6, atMs: 10 }),
+      crows('A', 0.35, 0),
+      crows('B', 0, 20),
+      crows('C', 0, 30),
+    ];
+    const page = buildStorybookPage(entries, 7 * 24 * 3600_000, 0, 1000, 5000, 180);
+    expect(page!.lines.map((l) => l.line)).toEqual([
+      '4 lambs born',
+      // the anchor's own line, verbatim, period swapped for a mechanical count suffix — never new
+      // prose (#113's own done-means)
+      'Three crows landed on the hay and Digital Luna sent them packing, three times this week.',
+    ]);
+    const crowsLine = page!.lines[1]!;
+    expect(crowsLine.entryId).toBe('A'); // the most notable telling anchors the line and its slot
+    // backed by all three tellings, not only the one the text was drawn from
+    expect(lineEntryIds(crowsLine).slice().sort()).toEqual(['A', 'B', 'C']);
+    // no other line on the page repeats it
+    expect(page!.lines.filter((l) => l.picture === 'crows')).toHaveLength(1);
+    expect(page!.more).toEqual([]);
+  });
+
+  it('a card told only once collapses to nothing — a plain one-entry line, same as before #113', () => {
+    const entries = [crows('A', 0.35, 0)];
+    const page = buildStorybookPage(entries, 7 * 24 * 3600_000, 0, 1000, 5000, 180);
+    expect(page!.lines).toEqual([
+      { entryId: 'A', line: 'Three crows landed on the hay and Digital Luna sent them packing.', picture: 'crows', entryIds: ['A'] },
+    ]);
+  });
+
+  it('a repeat that does not fit the shown lines is still collapsed inside "and N more", never repeated there either', () => {
+    // five higher-notability, all-distinct ledger lines fill the floor (5 shown, a 2h "night" gap)
+    // before the crows group is ever reached, pushing the whole group into "more".
+    const filler = ['a', 'b', 'c', 'd', 'e'].map((k, i) =>
+      entry({ id: `L${k}`, source: 'ledger', picture: `p${k}`, line: `line ${k}`, notability: 0.9 - i * 0.01, atMs: i }),
+    );
+    const entries = [...filler, crows('A', 0.2, 10), crows('B', 0, 20), crows('C', 0, 30)];
+    const page = buildStorybookPage(entries, 2 * 3600_000, 0, 2 * 3600_000, 5000, 180);
+    expect(page!.lines).toHaveLength(5); // the floor; none of them is a crows line
+    expect(page!.lines.some((l) => l.picture === 'crows')).toBe(false);
+    // the whole crows group is one row behind "and N more", not three
+    expect(page!.more).toHaveLength(1);
+    const crowsLine = page!.more[0]!;
+    expect(crowsLine.picture).toBe('crows');
+    expect(lineEntryIds(crowsLine).slice().sort()).toEqual(['A', 'B', 'C']);
+    expect(crowsLine.line).toBe('Three crows landed on the hay and Digital Luna sent them packing, three times tonight.');
+  });
+
+  it('the count suffix reads the page\'s own title word: "tonight" on a night page, never a span the title does not support', () => {
+    const entries = [crows('A', 0.2, 0), crows('B', 0, 10)];
+    const page = buildStorybookPage(entries, 2 * 3600_000, 0, 2 * 3600_000, 5000, 180); // 2h: "a night"
+    expect(page!.title).toBe('a night');
+    expect(page!.lines[0]!.line).toBe('Three crows landed on the hay and Digital Luna sent them packing, two times tonight.');
+  });
+
+  it('pagedEntryIds counts every entry a collapsed line stands for, so none of them reads as unseen again', () => {
+    const entries = [crows('A', 0.35, 0), crows('B', 0, 10), crows('C', 0, 20)];
+    const page = buildStorybookPage(entries, 7 * 24 * 3600_000, 0, 1000, 5000, 180)!;
+    const store = addPage(EMPTY_PAGE_STORE, page);
+    expect(pagedEntryIds(store)).toEqual(new Set(['A', 'B', 'C']));
+    expect(unseenEntries(entries, store)).toEqual([]);
+  });
+
+  it('lineEntryIds falls back to [entryId] for a line with no entryIds (a page saved before #113)', () => {
+    expect(lineEntryIds({ entryId: 'x', line: 'l', picture: 'p' })).toEqual(['x']);
+    expect(lineEntryIds({ entryId: 'x', line: 'l', picture: 'p', entryIds: ['x', 'y'] })).toEqual(['x', 'y']);
   });
 });
 

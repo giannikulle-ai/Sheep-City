@@ -310,8 +310,9 @@ export const NO_REPEAT_SIM_MINUTES = farmHoursToSimMinutes(PACING.noRepeatMoment
  * something**, which is what the owner asked for: that depends on how much of each day any small
  * card is eligible at all, which is the deck's shape and not a formula. So each target here carries
  * the rate that was measured to deliver it, with the measurement beside it (seeds 1-30, thirty farm
- * days each, watched throughout — the harness in `test/engine-pace.test.ts`, whose control run at
- * the shipped rate reproduces the shipped row exactly).
+ * days each, watched throughout — the harness in `test/engine-pace.test.ts`; the sweep's control run
+ * at the engine's previous rate of 8 reproduced that rate's already-published row figure for figure,
+ * so the points below are on the same ruler as the numbers this file used to carry).
  *
  * Move `PACE_TARGETS.smallDaysInFive` and the rate moves with it. A target with no measured point
  * here will not compile, which is the honest failure: it needs somebody to measure the deck at that

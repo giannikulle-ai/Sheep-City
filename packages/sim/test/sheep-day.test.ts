@@ -269,7 +269,7 @@ describe('scripted sheep day', () => {
     const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('7e4da67be5ec78ba'); // moved in #113: a card/authored start's own id now runs through `tell`'s `repeats` (chronicle.stats), which the hash covers even where notability itself is unmoved; was 8971628f989ca315
+    expect(hashState(a.state)).toBe('8971628f989ca315'); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 7cbfaceab05ef214
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "the sheep's 91 transitions at seed 71 are

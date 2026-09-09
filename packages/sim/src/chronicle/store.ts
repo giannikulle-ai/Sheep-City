@@ -82,33 +82,16 @@ function recordFacts(stats: ChronicleStats, facts: Record<string, FactValue>, ac
  * notability comes from `facts` alone (chronicle/notability.ts has the one formula, including the
  * first-occurrence flag that can push it to 1). An entry with no numeric facts and no first among
  * them, from a source that gets no hint, is notability 0 — routine, not absent: it is still told.
- * `input.repeats` (`card`/`authored` only, #113) then runs through the very same `noteFact` EMA a
- * second time, folded in the opposite direction from `facts`: a first-ever telling of it leaves
- * `notability` exactly as `hint`/`facts` set it, and a later telling — no deviation from that
- * world's own normal, its value never varying telling to telling — floors `notability` at 0. Meant
- * for a card or authored event's own id (`TellInput.repeats`'s own doc comment, types.ts), so the
- * tenth telling of the same small card in a long gap reads below its own first.
  *
- * `first`: true if telling this entry was the first-ever telling of one of its fact keys, the
- * first telling of a (fact key, actor) pair among its `actors`, or the first-ever telling of
- * `input.repeats` (`noteFact`, notability.ts). Always false for an entry with no `facts` and no
- * `repeats`, regardless of its `hint`.
+ * `first`: true if telling this entry was the first-ever telling of one of its fact keys, or the
+ * first telling of a (fact key, actor) pair among its `actors` (`noteFact`, notability.ts). Always
+ * false for an entry with no `facts`, regardless of its `hint`.
  */
 export function tell(state: Pick<SimState, 'chronicle'>, input: TellInput): ChronicleEntry {
   const actors = input.actors ? [...input.actors] : [];
   const facts = input.facts ? { ...input.facts } : {};
-  const { notability: factNotability, first: factsFirst } = recordFacts(state.chronicle.stats, facts, actors);
-  const isCardOrAuthored = input.source === 'card' || input.source === 'authored';
-  let notability = isCardOrAuthored ? Math.max(notabilityScale(input.hint ?? 0), factNotability) : factNotability;
-  let first = factsFirst;
-  if (isCardOrAuthored && input.repeats !== undefined) {
-    const repeat = noteFact(state.chronicle.stats, input.repeats, 1, actors);
-    if (repeat.first) first = true;
-    // Not a first: the same reading `repeats` itself computed can only ever pull this entry's
-    // notability down from here, never up — `Math.min`, never `Math.max` — so it never fights
-    // `facts`'s own first-beats-a-low-hint contract (chronicle.test.ts) over the same entry.
-    else notability = Math.min(notability, repeat.notability);
-  }
+  const { notability: factNotability, first } = recordFacts(state.chronicle.stats, facts, actors);
+  const notability = input.source === 'card' || input.source === 'authored' ? Math.max(notabilityScale(input.hint ?? 0), factNotability) : factNotability;
   // `freezeChronicleEntry` does the actual freezing (readonly here is just what TS can express for
   // an array/object literal); ChronicleEntry's own fields stay plainly typed since nothing outside
   // this function is meant to know or care that its instances happen to be frozen.

@@ -509,10 +509,10 @@ describe('the pre-calendar view (#84 moves the schema, not the tick)', () => {
   // and the walk now carries the wool bank out and pays the settlement for it. That is a change to
   // the world, not to its shape, so the v7 strip cannot bring these back and they are re-pinned.
   it("Digital Luna's scripted day (seed 11, 1,800 ticks) hashes as pinned on the v7 view", () => {
-    expect(hashState(v7View(advance(createInitialState(11), 1800)))).toBe('1899be688c0b1e5d'); // moved in #113: a card/authored start's own id now runs through `tell`'s `repeats` (chronicle.stats), which the hash covers even where notability itself is unmoved; was b1b26b76c94b3f0d
+    expect(hashState(v7View(advance(createInitialState(11), 1800)))).toBe('b1b26b76c94b3f0d'); // moved in #86: the dawn market walk sells the bank; was 575fc853e800bd3d
   });
 
   it("the sheep's scripted day (seed 71, 1,800 ticks) hashes as pinned on the v7 view", () => {
-    expect(hashState(v7View(advance(createInitialState(71), 1800)))).toBe('cef5550002443b73'); // moved in #113: a card/authored start's own id now runs through `tell`'s `repeats` (chronicle.stats), which the hash covers even where notability itself is unmoved; was 278dd8ac81253279
+    expect(hashState(v7View(advance(createInitialState(71), 1800)))).toBe('278dd8ac81253279'); // moved in #86: the dawn market walk sells the bank; was db82b911ed86c1f8
   });
 });

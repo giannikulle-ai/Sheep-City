@@ -467,12 +467,12 @@ describe('the v8 view: the new field on its own moves nothing', () => {
   it('Digital Luna’s day up to its first dawn (seed 11, 1,300 ticks) hashes as trunk did on the v8 view', () => {
     const s = advance(createInitialState(11), 1300);
     expect(s.settlement.coins).toBe(0);
-    expect(hashState(v8View(s))).toBe('798d9ba6b0975ee5'); // moved in #113: a card/authored start's own id now runs through `tell`'s `repeats` (chronicle.stats), which the hash covers even where notability itself is unmoved; was f15abfa9ab8fa0c2
+    expect(hashState(v8View(s))).toBe('f15abfa9ab8fa0c2');
   });
 
   it('the sheep’s day up to its first dawn (seed 71, 1,300 ticks) hashes as trunk did on the v8 view', () => {
     const s = advance(createInitialState(71), 1300);
     expect(s.settlement.coins).toBe(0);
-    expect(hashState(v8View(s))).toBe('c09cb7a4e8d89e5f'); // moved in #113: a card/authored start's own id now runs through `tell`'s `repeats` (chronicle.stats), which the hash covers even where notability itself is unmoved; was c8de869dbe82ce27
+    expect(hashState(v8View(s))).toBe('c8de869dbe82ce27');
   });
 });

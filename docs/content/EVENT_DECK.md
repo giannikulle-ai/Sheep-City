@@ -76,6 +76,65 @@ grass parched — could not move the odds, only gate them on or off. v2 replaces
 `op` is `eq`/`ne` for one value, `in`/`not-in` for a list (v1's old allow-list, in
 predicate shape), and `gte`/`lte`/`gt`/`lt` for a number.
 
+## Small or big
+
+Every card and every authored event carries a **`size`**, `small` or `big`. It is a
+required field on both schemas as of #102, and the engine refuses to load a deck with
+one missing or unknown — the same way it refuses an unknown trigger kind, because size
+decides both how often a thing is drawn and whether it may happen at all while nobody
+is watching, and a thing the engine cannot size is not one it can honestly draw.
+
+The owner's decision (2026-09-09, plan decision 16), in the owner's own words: *"small
+thing most days, big thing a few a month; the big ones should not happen when I am not
+watching; the weight is for what is big or small."* So:
+
+- **Small** is the everyday texture. A small thing draws on most farm days, and it keeps
+  drawing while the farm is unwatched: during a catch-up the engine draws small cards at
+  Ledger resolution against the same conditions and weights, and tells each one to the
+  chronicle, so the storybook has something true to say about a week away.
+- **Big** is a set piece. A big thing is drawn about three times in thirty farm days,
+  behind a gap of several farm days, and **only while the farm is being watched** — so
+  the owner never comes back to find they missed the storm.
+
+`weight` still decides *which* card of a size is drawn; `size` decides how often, and
+whether unwatched. The two are different questions and they are now different fields.
+
+A note on what the sizes cost. Making the caravan big makes the merchant rarer: measured
+over thirty seeds, he comes on 27 of 30 in a farm month (median one visit) where he used
+to turn up on a given *day* on 6 of 30. That is the intended shape — decision 12 already
+made him a passer-by rather than the farm's economy — but it is a real change and it is
+written down rather than discovered.
+
+| Card | Size | Why |
+|---|---|---|
+| Fog morning | small | Weather that changes the light and the flock's shape for a morning. Nothing happens *to* anyone; you notice it and the day goes on. |
+| Crows on the field | small | Three birds on the hay and a dog who has opinions. The hay-fall kind of thing: a minute of business, no consequence. |
+| Lost lamb | **big** | The owner named it. Something is wrong and Digital Luna has a job; it is the one card with a beginning, a middle and a relief. |
+| Merchant caravan | **big** | The owner named it. A visitor from off the farm is an arrival, and the road only brings one every so often. |
+| Shearing day | **big** | The owner named it. The whole flock at once, the farmer out of his usual hours — the farm's own festival. |
+| Rainbow after rain | small | Twenty sim-minutes after a shower, a thing to look at. The definition of texture. |
+| A stray cat visits | small | The owner named it. A cat on the fence at dusk; the flock stares, and then it is gone. |
+| The farmer's day off | small | An absence, not an event: the farmer simply does not come, and the fleeces keep growing. Its consequence is the next shearing day being bigger, which the Ledger carries. |
+| Night of the fireflies | small | The owner named it. A summer night with lights in it. |
+| Lamb zoomies hour | small | The owner named it. A lamb runs in circles for an hour. Nothing else. |
+| The well runs low | small | Judgement: a background worry the field shows rather than a set piece. It changes no stock, it has no beat beyond the look of the place, and the real drought is the cliff storm's own trigger below. |
+| A windfall | small | The owner named it. Twelve coins found; the only small card that moves a Ledger number, which is why it is also the one whose hook still applies on an unwatched day. |
+| Stargazing night | small | The owner named it. A clear night and a dog on her back. |
+| Rain, and a flock to gather | small | The owner named it as "the flock huddle". A minute of shepherding in a shower, which is Digital Luna's ordinary job rather than an exception to it. |
+| The farmer meets the merchant | small | Judgement: a vignette that can only happen when the world has already put two people in the field. It is a thing you catch, not a thing that is staged — and it needs both of them present, so it never draws unwatched. |
+| DL's birthday | **big** | The owner named it. Once a real year, on a real date. |
+| A storm off the cliff | **big** | The owner named it. The weather turning on the farm, off the back of a real drought. |
+| First snow of the season | **big** | The owner named it. A first, which is the plan's own definition of notable. |
+
+Which small cards can actually draw while unwatched, and which cannot. There are no
+actors in the room during a Ledger catch-up, so `flockScattered`, `dlFarFromFlock`,
+`lambFarFromMother`, `merchantPresent` and `farmerPresent` all read false. That rules
+out **Rain, and a flock to gather** (it needs the flock scattered) and **The farmer
+meets the merchant** (it needs both of them standing there), and it makes the
+**Rainbow** effectively unreachable, since its twenty-sim-minute window after rain is
+finer than the Ledger's own resolution. The other nine draw unwatched exactly as they do
+watched.
+
 ## The fifteen cards
 
 ---

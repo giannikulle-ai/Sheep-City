@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState, realMsOf, realMsOfCivil } from '@sheepcliff/sim';
-import { BIRTHDAY_TODAY_LINE, beforeBirthdayLine, birthdayReminder, daysUntilBirthday, realDayKey, REMINDER_DAYS_BEFORE, traySequence } from './birthday';
+import {
+  BIRTHDAY_TODAY_LINE,
+  beforeBirthdayLine,
+  birthdayReminder,
+  daysUntilBirthday,
+  realDayKey,
+  REMINDER_DAYS_BEFORE,
+  trayIsFree,
+  traySequence,
+  type TrayFreeState,
+} from './birthday';
 
 describe('daysUntilBirthday', () => {
   it('counts down to December 15 and wraps to next year the day after', () => {
@@ -92,5 +102,39 @@ describe('traySequence', () => {
     expect(traySequence(null, "Digital Luna's birthday is in 1 day")).toEqual(["Digital Luna's birthday is in 1 day"]);
     expect(traySequence('restored: the farm continues where it was', null)).toEqual(['restored: the farm continues where it was']);
     expect(traySequence(null, null)).toEqual([]);
+  });
+});
+
+describe('trayIsFree', () => {
+  // A tray with nothing live on it, no pending prompt, no waiting cue, and no storybook card in
+  // the way: the one state the deferred birthday line is allowed to write in.
+  const free: TrayFreeState = { liveMessage: false, awaitingCall: false, waitingCue: false, storybookVisible: false };
+
+  it('is free when the tray holds nothing live, pending, waiting, or covered', () => {
+    expect(trayIsFree(free)).toBe(true);
+  });
+
+  // Opus verifier round 2, blocker B1, the deity `call` verb: tapped from the tray, "call" asks the
+  // stage for a point and leaves `awaitingCall` set and the tray reading "tap the stage for Digital
+  // Luna to walk to" with its waiting cue lit until a stage tap resolves it. The round-1 fixed
+  // 4-second timer wiped both silently; this state must never say the birthday line is safe to write.
+  it('does not overwrite a still-open deity call prompt (awaiting a stage tap)', () => {
+    expect(trayIsFree({ ...free, awaitingCall: true, waitingCue: true })).toBe(false);
+    // even if only one of the two signals for it is set — each blocks independently
+    expect(trayIsFree({ ...free, awaitingCall: true })).toBe(false);
+    expect(trayIsFree({ ...free, waitingCue: true })).toBe(false);
+  });
+
+  // The other half of B1: a player's own feedback from tapping the stage (petting a sheep, say) —
+  // live, but with no waiting cue at all (the sim already answered). The round-1 timer overwrote
+  // this one too, four seconds after the tap, wiping feedback the player had just read.
+  it('does not overwrite a live message from the player\'s own stage tap', () => {
+    expect(trayIsFree({ ...free, liveMessage: true })).toBe(false);
+  });
+
+  // Round 2 finding F3: the storybook card sits on top of the tray, so a line written under it
+  // cannot be read until the card is dismissed.
+  it('does not write while the storybook card covers the tray', () => {
+    expect(trayIsFree({ ...free, storybookVisible: true })).toBe(false);
   });
 });

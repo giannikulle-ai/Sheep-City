@@ -89,3 +89,36 @@ export function traySequence(loadMessage: string | null, birthdayLine: string | 
   if (birthdayLine !== null) seq.push(birthdayLine);
   return seq;
 }
+
+/**
+ * What main.ts reads off the tray (and the deity `call` prompt) before a deferred birthday line is
+ * allowed to write to it — round 2 on #117, Opus verifier blocker B1. Every field independently
+ * blocks the write; none is inferred from another, so a gap in one signal does not fall through the
+ * others.
+ */
+export interface TrayFreeState {
+  /** Something other than the load message this reminder is trailing has been said since — the
+   * player's own feedback (a tap, a weather chip, a verb) or another `adopt`. That message is live
+   * and must not be silently replaced. */
+  liveMessage: boolean;
+  /** A deity `call` verb is still waiting on a stage tap (`awaitingCall`, main.ts). */
+  awaitingCall: boolean;
+  /** The tray's own "waiting" cue is lit (`tray.say(text, true)` — a dispatched intent whose sim
+   * reaction has not landed yet). Kept as its own check alongside `liveMessage`, which already
+   * implies it, so a caller wiring only this one still gets the protection. */
+  waitingCue: boolean;
+  /** The storybook card is covering the tray (#117 round 2 finding F3): the player cannot see the
+   * tray to read anything written to it right now. */
+  storybookVisible: boolean;
+}
+
+/**
+ * Whether the tray is free for the birthday reminder to write to right now: nothing live on it,
+ * no pending deity prompt, no waiting cue, and no storybook card in the way. Pure, so main.ts polls
+ * it every animation frame instead of writing unconditionally after a fixed delay — the fixed
+ * 4-second timer the round-1 guard used could and did land on top of a player's own tap feedback,
+ * or on a still-open "tap the stage for Digital Luna to walk to" prompt, silently.
+ */
+export function trayIsFree(state: TrayFreeState): boolean {
+  return !state.liveMessage && !state.awaitingCall && !state.waitingCue && !state.storybookVisible;
+}

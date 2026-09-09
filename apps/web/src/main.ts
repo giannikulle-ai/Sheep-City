@@ -19,7 +19,7 @@ import {
 import { catchUp, chronicleBetween, realMsOf, SaveError, type SimState } from '@sheepcliff/sim';
 import type { SheepcliffApi } from './api';
 import { BACKGROUND_URLS, SHEET_META_URL, SHEET_URL } from './assets';
-import { birthdayReminder, traySequence } from './birthday';
+import { birthdayReminder, trayIsFree, traySequence } from './birthday';
 import { buildFixture } from './fixture';
 import { Game, MAX_FRAME_MS } from './game';
 import { hitTest, type SpriteSizes } from './hit';
@@ -43,11 +43,11 @@ import { buildTray } from './tray';
 /** Frame length under the QA virtual clock. */
 const QA_FRAME_MS = 1000 / 60;
 
-/** The real-day key the birthday reminder was last shown on (#117), so it shows once per real day. */
+/** The real-day key the birthday reminder was last shown on (#117), so it shows once per real day.
+ * The player's real world's alone (round 2, finding F1): a scratch/pinned world (`saving` false)
+ * neither reads nor writes it, so `?realNow=` stays reproducible rather than depending on, or
+ * consuming, whatever the player's own real farm already saw today. */
 const BIRTHDAY_REMINDER_KEY = 'sheepcliff-birthday-reminder-shown';
-/** How long a load-time tray message (e.g. "restored: back after …") gets to be read before the
- * birthday reminder is allowed to replace it — the reminder must never overwrite it outright. */
-const BIRTHDAY_REMINDER_DELAY_MS = 4_000;
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -510,17 +510,43 @@ async function main(): Promise<void> {
   // directly, so a scratch world pinned by the URL shows nothing unless `?realNow=` puts it in the
   // window — see birthday.ts. The event itself is the sim's (#84); this only tells.
   {
-    const r = birthdayReminder(realMsOf(game.sim.season), storage.get(BIRTHDAY_REMINDER_KEY));
+    // A scratch/pinned world (`saving` false) neither reads nor writes the once-per-day key: it is
+    // the player's real world's alone (round 2, finding F1). Otherwise a `?realNow=` visit could
+    // silently consume — or be silenced by — whatever the player's own real farm already saw today,
+    // breaking query.ts's own promise that a pinned scene is identical every time it is opened.
+    const lastShownDayKey = saving ? storage.get(BIRTHDAY_REMINDER_KEY) : null;
+    const r = birthdayReminder(realMsOf(game.sim.season), lastShownDayKey);
     if (r.line !== null) {
-      storage.set(BIRTHDAY_REMINDER_KEY, r.dayKey);
-      const seq = traySequence(loadMessage, r.line);
+      if (saving) storage.set(BIRTHDAY_REMINDER_KEY, r.dayKey);
+      const line = r.line;
+      const seq = traySequence(loadMessage, line);
       if (seq.length === 1) {
         // nothing else said on this open — the tray is free, say it now
-        tray.say(r.line);
+        tray.say(line);
       } else {
-        // a load message is already on the tray (said synchronously above): let it be read first,
-        // rather than overwrite it at the same instant the world was adopted
-        setTimeout(() => tray.say(r.line as string), BIRTHDAY_REMINDER_DELAY_MS);
+        // A load message is already on the tray (said synchronously above). Round 1 gave it a
+        // fixed 4-second read before an unconditional write — Opus verifier round 2, blocker B1:
+        // that write landed on whatever the tray held four seconds later regardless, wiping a
+        // player's own tap feedback, or a still-open "tap the stage for Digital Luna to walk to"
+        // deity `call` prompt, silently. There is no substitute fixed wait here: the line is polled
+        // in every animation frame against `trayIsFree` (birthday.ts) and written the first frame
+        // the tray holds nothing live, no pending call, no waiting cue, and the storybook card
+        // (round 2 finding F3) is not covering it — however long, or short, that turns out to be.
+        const sayCountAtLoad = tray.sayCount();
+        const tryShow = (): void => {
+          const free = trayIsFree({
+            liveMessage: tray.sayCount() !== sayCountAtLoad,
+            awaitingCall: awaitingCall !== null,
+            waitingCue: tray.isWaiting(),
+            storybookVisible: storybook.visible,
+          });
+          if (!free) {
+            requestAnimationFrame(tryShow);
+            return;
+          }
+          tray.say(line);
+        };
+        requestAnimationFrame(tryShow);
       }
     }
   }

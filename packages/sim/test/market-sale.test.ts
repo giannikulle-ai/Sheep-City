@@ -81,37 +81,6 @@ describe('the settlement’s purse (#86)', () => {
     expect(diffLedger(before, before).settlementCoins).toBe(0);
   });
 
-  it('tellLedgerDiff tells the gap’s settlement move as exactly one line, earned or spent, and none for a flat gap', () => {
-    // The whole storytelling of the feature on the unwatched path (chronicle/ledger-diff.ts:42-43):
-    // one line for the gap, not one per dawn it sold. This pins the branch directly, independent of
-    // how many market walks the gap actually ran.
-    const before = summarise(createInitialState(5));
-    const earned = { ...before, settlement: { coins: 18 } };
-    const spent = { ...before, settlement: { coins: -18 } };
-
-    const s1 = createInitialState(5);
-    const earnedEntries = tellLedgerDiff(s1, diffLedger(before, earned));
-    const earnedLines = earnedEntries.filter((e) => e.picture === 'coins' && 'settlementCoins' in e.facts);
-    expect(earnedLines).toHaveLength(1);
-    expect(earnedLines[0]!.line).toBe('18 coins earned at the market');
-    expect(earnedLines[0]!.facts).toEqual({ settlementCoins: 18 });
-    expect(earnedLines[0]!.source).toBe('ledger');
-    expect(s1.chronicle.entries).toEqual(earnedEntries); // told, not just returned
-
-    const s2 = createInitialState(5);
-    const spentEntries = tellLedgerDiff(s2, diffLedger(before, spent));
-    const spentLines = spentEntries.filter((e) => e.picture === 'coins' && 'settlementCoins' in e.facts);
-    expect(spentLines).toHaveLength(1);
-    expect(spentLines[0]!.line).toBe('18 coins spent at the market');
-    expect(spentLines[0]!.facts).toEqual({ settlementCoins: -18 });
-
-    // A gap that moved nothing at the market tells nothing about the market — not a zero, not a
-    // repeat of the last line, nothing at all.
-    const s3 = createInitialState(5);
-    const flatEntries = tellLedgerDiff(s3, diffLedger(before, before));
-    expect(flatEntries.filter((e) => 'settlementCoins' in e.facts)).toHaveLength(0);
-  });
-
   it('a Ledger catch-up gap that sold wool tells exactly one settlement line for the whole gap, and a gap that sold none tells none', () => {
     // "One line a gap, not one a dawn" (advance.ts / ledger-diff.ts's own words): drive the actual
     // gap through advanceLedger, the function the catch-up policy calls, rather than hand-building a

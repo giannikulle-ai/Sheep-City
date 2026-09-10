@@ -50,7 +50,14 @@ export const RULES = {
   rideManualMs: b.rideManualMs.value,
   farmer: { visitsAt: pair(b.farmer.visitsAt.value), shearAt: b.farmer.shearAt.value }, // clock.t fractions when he comes; shears sheep at this wool
   merchant: { everyMs: b.merchant.everyMs.value, stayMs: b.merchant.stayMs.value, woolPrice: b.merchant.woolPrice.value },
-  /** The merchant auto-buys these in order: farm/upgrades.json, which balance/farm.json points at. */
+  /**
+   * The farm's three builds and their costs, from farm/upgrades.json (which balance/farm.json
+   * points at). **Unread by any gameplay path since #126** (plan decision 19): `buyUpgrades`, the
+   * only thing that ever spent against these costs, is retired — the flowerbed, hay2, and the
+   * scarecrow are on the farm from a world's first day now (`FARM_BUILDS`, state.ts), nothing buys
+   * them. Kept as reference data for tests and for the owner's own future build table (plan
+   * section 3); the content file itself is untouched.
+   */
   upgrades: upgrades.upgrades.map((u) => [u.id, u.cost] as const) as readonly (readonly [string, number])[],
 
   petTagMs: b.petTagMs.value,

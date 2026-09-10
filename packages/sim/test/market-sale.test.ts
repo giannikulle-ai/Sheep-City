@@ -162,8 +162,11 @@ describe('the market walk sells the bank (#86)', () => {
     run(s, 400); // long enough to walk there, stand his job time, and go
     expect(s.banks.wool).toBe(0);
     expect(s.banks.coins).toBe(0); // never the farm's
-    expect(s.settlement.coins).toBe(7 * PRICE - 12); // 21 coins, less the flower bed it can now afford
-    expect(s.banks.owned).toEqual(['flowerbed']);
+    // PIN MOVED (#126): was `7 * PRICE - 12` (the flower bed bought straight back out of the same
+    // purse). `buyUpgrades` is retired — the farm's three builds are on the farm from the start now
+    // — so the sale only ever earns.
+    expect(s.settlement.coins).toBe(7 * PRICE);
+    expect(s.banks.owned).toEqual(['flowerbed', 'hay2', 'scarecrow']); // owned from the start, unmoved by the sale
     const sales = s.chronicle.entries.filter((e) => e.source === 'category' && e.picture === 'coins');
     expect(sales).toHaveLength(1);
     expect(sales[0]!.line).toBe('The farmer sold 7 wool at the market.');
@@ -189,9 +192,11 @@ describe('the market walk sells the bank (#86)', () => {
     const after = advanceLedger(L, 0.75 * day, createRng(9));
     expect(after.banks.wool).toBe(0);
     expect(after.banks.coins).toBe(0);
-    // 4 x woolPrice = 12 in, and the flower bed (12) straight back out of the same purse.
-    expect(after.settlement.coins).toBe(4 * PRICE - 12);
-    expect(after.banks.owned).toEqual(['flowerbed']);
+    // PIN MOVED (#126): was `4 * PRICE - 12` (the flower bed bought straight back out of the same
+    // purse). `buyUpgrades` is retired, so 4 x woolPrice = 12 goes into the settlement's purse and
+    // stays there; `L.banks.owned` was explicitly reset to `[]` above and nothing fills it back in.
+    expect(after.settlement.coins).toBe(4 * PRICE);
+    expect(after.banks.owned).toEqual([]);
     expect(after.lastVisitKey).toBe(Math.floor(RULES.clock.phases.dawn * 100) * 1000 + L.clock.dayCount);
   });
 
@@ -208,9 +213,11 @@ describe('the market walk sells the bank (#86)', () => {
     const sliver = 0.02 * L.clock.periodSec * 1000;
     const after = advanceLedger(L, sliver, createRng(9));
     expect(after.banks.wool).toBe(0);
-    // 6 x woolPrice = 18 in, and the flower bed (12) straight back out of the same purse.
-    expect(after.settlement.coins).toBe(6 * PRICE - 12);
-    expect(after.banks.owned).toEqual(['flowerbed']);
+    // PIN MOVED (#126): was `6 * PRICE - 12` (the flower bed bought straight back out of the same
+    // purse). `buyUpgrades` is retired, so 6 x woolPrice = 18 goes into the settlement's purse and
+    // stays there; `L.banks.owned` was explicitly reset to `[]` above and nothing fills it back in.
+    expect(after.settlement.coins).toBe(6 * PRICE);
+    expect(after.banks.owned).toEqual([]);
     expect(after.lastVisitKey).toBe(MARKET_VISIT_K * 1000 + L.clock.dayCount);
 
     // The watched world, at the same instant, is due to sell too.
@@ -297,28 +304,32 @@ describe('a week away sells as often as a week watched (#86)', () => {
     return world.settlement.coins + world.banks.owned.reduce((n, id) => n + (cost.get(id) ?? 0), 0);
   }
 
-  it('seven dawns each way, and the wool sold agrees to within a tenth — with the one real difference named', () => {
+  it('seven dawns each way, and the wool sold agrees within a wider band now that hay2 is owned from tick zero (#126)', () => {
     // Measured on this head, eight seeds, a seven-farm-day week, each seed with a farm day of
     // watched life behind it so the engine is past its warm-up:
     //
     //   seed   1    2    3    4    5    6    7    8
-    //   walks  7    7    6    7    7    7    7    7     (watched)
-    //   wool  56   47   49   60   52   59   57   53     (watched)
-    //   wool  51   48   57   59   57   58   55   56     (a week away, same seeds)
+    //   walks  7    7    7    7    7    7    7    7     (watched)
+    //   wool  50   50   47   48   40   60   48   54     (watched)
+    //   wool  57   54   57   56   51   58   57   35     (a week away, same seeds)
     //
-    // **The one real difference is seed 3's missing walk, and it is not the Ledger's fault.** The
-    // watched `farmerMarketWalk.due` holds off while the farmer is already on the field, and on
-    // seed 3, day 5 dawn arrived with him still mid-`shear` from his afternoon visit (checked: his
-    // plan at that instant was `pat, leave, leave, gone`). The Ledger has no actors to be busy, so
-    // it never skips: a week away takes all seven walks. That is the honest statement of "the same
-    // number of times" — the same seven dawns, and the watched path can lose one to its own farmer
-    // being late, never the other way round.
+    // PIN MOVED (#126). Before this ticket, seed 3 lost its watched walk to the farmer still being
+    // mid-`shear` at dawn (checked: his plan at that instant was `pat, leave, leave, gone`), and the
+    // away/watched ratio held within roughly -9% to +16% (asserted 0.8 to 1.25) — see PR #121's own
+    // body for that measurement. The farm's three builds, hay2 among them, are owned from a world's
+    // first day now, so every world's grass starts regrowing under hay2's bonus from tick zero
+    // instead of only after a farm had earned enough to buy it. That moves every seed's grass level
+    // from the first tick, and (as PR #121's own body already found for the event deck's
+    // `ledger.grass`-weighted card draws) a different grass level shifts the whole event schedule —
+    // and with it exactly when each dawn's fleece crosses the shearing line.
     //
-    // The wool totals differ by a few per cent for two smaller reasons, both seams rather than
-    // rules: the watched walk sells about eight sim-seconds after dawn (he has to walk up the lane
-    // and stand at the gate) where the Ledger sells on the dawn boundary itself, and the actors'
-    // shearing rounds differently from the Ledger's (a fleece just under the line when the farmer
-    // arrives can still be shorn by hand, `advance.ts`'s own header says so).
+    // The practical effect: all eight seeds now take all seven walks (seed 3's old miss is gone),
+    // but the two paths' pre-existing chaos — sheep and Digital Luna choose tufts by grass level,
+    // and the Ledger has never modelled DL's own nibbling (PR #98's weak spots) — now compounds from
+    // a higher, universally-shared grass baseline, and the spread between the two paths is wider:
+    // seed 8 sells noticeably less away than watched (ratio 0.65), seed 5 noticeably more (ratio
+    // 1.28). The band below is widened, with margin, to hold what is actually measured now, rather
+    // than narrowed to a number this ticket made untrue.
     const watchedWalks: number[] = [];
     const awayDays: number[] = [];
     for (let seed = 1; seed <= 8; seed++) {
@@ -342,17 +353,20 @@ describe('a week away sells as often as a week watched (#86)', () => {
       const awayWool = (everEarned(away.after) - base) / PRICE;
       expect(watchedWool, `seed ${seed}: a watched week sold nothing`).toBeGreaterThan(30);
       expect(awayWool, `seed ${seed}: an unwatched week sold nothing`).toBeGreaterThan(30);
-      // Within a tenth of each other: measured spread above is -9 % to +16 %, and seed 3's +16 %
-      // is the seed that lost a watched walk, so the band is stated against the walks it did take.
+      // PIN MOVED (#126): was 0.8 to 1.25 ("within a tenth", against a measured -9% to +16%).
+      // Measured now: 0.65 to 1.28 (seeds 8 and 5); widened with margin, see the header comment.
       const ratio = awayWool / watchedWool;
-      expect(ratio, `seed ${seed}: watched ${watchedWool}, away ${awayWool}`).toBeGreaterThan(0.8);
-      expect(ratio, `seed ${seed}: watched ${watchedWool}, away ${awayWool}`).toBeLessThan(1.25);
+      expect(ratio, `seed ${seed}: watched ${watchedWool}, away ${awayWool}`).toBeGreaterThan(0.55);
+      expect(ratio, `seed ${seed}: watched ${watchedWool}, away ${awayWool}`).toBeLessThan(1.35);
       // And neither week put a coin on the farm.
       expect(away.diff.coins, `seed ${seed}`).toBe(0);
       expect(watched.banks.coins, `seed ${seed}`).toBe(start.banks.coins);
     }
-    // Seven walks on seven of the eight seeds, six on the one whose farmer was still shearing.
+    // PIN MOVED (#126): was `[7, 7, 6, 7, 7, 7, 7, 7]` on `watchedWalks` (seed 3 used to lose its
+    // watched walk to a farmer still shearing at dawn — see the header comment). All eight seeds
+    // take all seven walks on both paths now.
     expect(awayDays).toEqual([7, 7, 7, 7, 7, 7, 7, 7]);
+    expect(watchedWalks).toEqual([7, 7, 7, 7, 7, 7, 7, 7]);
     expect(watchedWalks.filter((n) => n === 7).length, `watched walks: ${watchedWalks.join(', ')}`).toBeGreaterThanOrEqual(7);
     expect(Math.min(...watchedWalks), `watched walks: ${watchedWalks.join(', ')}`).toBeGreaterThanOrEqual(6);
   }, 900_000);
@@ -389,11 +403,14 @@ describe('the v9 migration', () => {
     expect(up.world['settlement']).toEqual({ coins: 0 });
     expect((up.world['ledger'] as Record<string, unknown>)['settlement']).toEqual({ coins: 0 });
     // The farm's own coins are untouched: they were earned under the old rule and they stay put.
-    expect(up.world['banks']).toEqual({ wool: 3, coins: 44, owned: ['flowerbed'] });
+    // PIN MOVED (#126): `owned` was `['flowerbed']` — the v10 migration (chained after v9 here,
+    // since this loads all the way to `SAVE_VERSION`) fills in `hay2` and `scarecrow` too.
+    expect(up.world['banks']).toEqual({ wool: 3, coins: 44, owned: ['flowerbed', 'hay2', 'scarecrow'] });
 
     const loaded = fromSave(v8);
     expect(loaded.settlement).toEqual({ coins: 0 });
     expect(loaded.banks.coins).toBe(44);
+    expect(loaded.banks.owned).toEqual(['flowerbed', 'hay2', 'scarecrow']);
     expect(loaded.ledger.settlement).toEqual({ coins: 0 });
   });
 
@@ -405,18 +422,24 @@ describe('the v9 migration', () => {
     expect(up.world['settlement']).toEqual({ coins: 5 });
   });
 
-  it('a v8 world stops buying farm builds until the settlement can pay, and keeps what it owns', () => {
-    // The consequence worth stating out loud: `buyUpgrades` reads the settlement's purse now, so a
-    // loaded world's own coins — however many — buy nothing. Nothing already owned is lost.
+  it('a v8 world gets all three farm builds on load, whatever its coins are (#126)', () => {
+    // Before #126 this asserted a v8 world "stops buying farm builds until the settlement can pay,
+    // and keeps what it owns": `buyUpgrades` read the settlement's purse, so a loaded world's own
+    // coins bought nothing more until the market earned enough. Plan decision 19 retired the
+    // earn-and-buy model entirely — the flowerbed, hay2, and the scarecrow are the farm's own
+    // furniture from a world's first day now — so the v10 migration gives a v8 (or v9) load all
+    // three immediately, whether or not the settlement, or the farm's own frozen purse, ever held a
+    // coin.
     const s = createInitialState(33);
-    s.banks = { wool: 0, coins: 1000, owned: ['flowerbed'] };
+    s.banks = { wool: 0, coins: 1000, owned: [] };
     const doc = toSave(s) as unknown as Record<string, unknown>;
     const world8 = { ...(doc['world'] as Record<string, unknown>) };
     delete world8['settlement'];
     const loaded = fromSave({ ...doc, version: 8, world: world8 });
+    expect(loaded.banks.owned).toEqual(['flowerbed', 'hay2', 'scarecrow']);
     const t = advance(loaded, 3 * TICKS_PER_FARM_DAY);
-    expect(t.banks.owned).toContain('flowerbed');
-    expect(t.banks.coins).toBe(1000); // its thousand coins bought nothing, because they are not the market's
+    expect(t.banks.owned).toEqual(['flowerbed', 'hay2', 'scarecrow']); // still all three; nothing ever removes them
+    expect(t.banks.coins).toBe(1000); // still frozen, still nobody's
   });
 });
 
@@ -447,12 +470,12 @@ describe('the v8 view: the new field on its own moves nothing', () => {
   // test/deity.test.ts, and the v7 view) run past dawn, where this head sells and trunk did not.
   // Each of those pins carries its pre-#86 value in a comment beside it.
   const NO_SALE_OFF: readonly { seed: number; sheep: number; hash: string }[] = [
-    { seed: 6, sheep: 5, hash: '86b1d16056221c5c' },
-    { seed: 6, sheep: 40, hash: '6561ee5571ead1e4' },
-    { seed: 7, sheep: 5, hash: '0282fcc3bdb08b5c' },
-    { seed: 7, sheep: 40, hash: 'b1fb67cfa5ab67a2' },
-    { seed: 11, sheep: 5, hash: '81e94e230aacac6f' },
-    { seed: 11, sheep: 40, hash: '207c8200357f8c8a' },
+    { seed: 6, sheep: 5, hash: '34c0627aa538ad58' /* PIN MOVED (#126): was '86b1d16056221c5c' */ },
+    { seed: 6, sheep: 40, hash: 'f894d9555b5fad2b' /* PIN MOVED (#126): was '6561ee5571ead1e4' */ },
+    { seed: 7, sheep: 5, hash: '94a01d165655fa74' /* PIN MOVED (#126): was '0282fcc3bdb08b5c' */ },
+    { seed: 7, sheep: 40, hash: '0939470d57594788' /* PIN MOVED (#126): was 'b1fb67cfa5ab67a2' */ },
+    { seed: 11, sheep: 5, hash: '5bf0f3e4f350e44b' /* PIN MOVED (#126): was '81e94e230aacac6f' */ },
+    { seed: 11, sheep: 40, hash: '29442021e3329bac' /* PIN MOVED (#126): was '207c8200357f8c8a' */ },
   ];
 
   for (const { seed, sheep, hash } of NO_SALE_OFF) {
@@ -467,12 +490,12 @@ describe('the v8 view: the new field on its own moves nothing', () => {
   it('Digital Luna’s day up to its first dawn (seed 11, 1,300 ticks) hashes as trunk did on the v8 view', () => {
     const s = advance(createInitialState(11), 1300);
     expect(s.settlement.coins).toBe(0);
-    expect(hashState(v8View(s))).toBe('f15abfa9ab8fa0c2');
+    expect(hashState(v8View(s))).toBe('9f497a5e9b188546' /* PIN MOVED (#126): was 'f15abfa9ab8fa0c2' */);
   });
 
   it('the sheep’s day up to its first dawn (seed 71, 1,300 ticks) hashes as trunk did on the v8 view', () => {
     const s = advance(createInitialState(71), 1300);
     expect(s.settlement.coins).toBe(0);
-    expect(hashState(v8View(s))).toBe('c8de869dbe82ce27');
+    expect(hashState(v8View(s))).toBe('e249faf77ab1c212' /* PIN MOVED (#126): was 'c8de869dbe82ce27' */);
   });
 });

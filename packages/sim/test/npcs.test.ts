@@ -10,9 +10,9 @@
 import { describe, expect, it } from 'vitest';
 import { NPC_SIZE, SFOOT, SPOT } from '../src/geometry';
 import { applyIntent } from '../src/intents';
-import { NPC_FOOT, buyUpgrades, makeNpc, npcStep, summonFarmer, summonMerchant, tickNpcs } from '../src/npcs';
+import { NPC_FOOT, makeNpc, npcStep, summonFarmer, summonMerchant, tickNpcs } from '../src/npcs';
 import { RULES, TICK_MS, TICK_SEC } from '../src/rules';
-import { createInitialState, type Npc, type SimState } from '../src/state';
+import { createInitialState, FARM_BUILDS, type Npc, type SimState } from '../src/state';
 import { tickInPlace } from '../src/tick';
 import { run, runUntil, world } from './luna-helpers';
 import { settle } from './sheep-helpers';
@@ -284,6 +284,9 @@ describe('the merchant’s visit', () => {
     // `m.sold` was 15 with a coin bubble. The owner's decision 12 retired the transaction, so the
     // same visit is now asserted to move nothing at all. Everything about the *beat* is unchanged
     // and still pinned: the plan, the spot, the pose, the stay, and the next visit's timer.
+    // `owned` was `[]` before #126 (plan decision 19): the farm's three builds are on the farm from
+    // the start now, so `calm()`'s world already carries all three and this visit still moves none
+    // of them.
     const s = calm();
     s.banks.wool = 5;
     summonMerchant(s);
@@ -296,7 +299,7 @@ describe('the merchant’s visit', () => {
     expect(Math.hypot(footOf(m).x - (SPOT.gateOut.x + 10), footOf(m).y - SPOT.gateOut.y)).toBeLessThan(1.2);
     expect(m.outside).toBe(true);
     // Nothing changed hands, and nothing is owed to anyone.
-    expect(s.banks).toEqual({ wool: 5, coins: 0, owned: [] });
+    expect(s.banks).toEqual({ wool: 5, coins: 0, owned: [...FARM_BUILDS] });
     expect(s.settlement).toEqual({ coins: 0 });
     expect(m.sold).toBe(0);
     expect(m.icon).toBeNull();
@@ -310,29 +313,18 @@ describe('the merchant’s visit', () => {
     run(s, 1);
     runUntil(s, (w) => w.npcs.merchant!.job === 'trade' && w.npcs.merchant!.anim === 'work', 200);
     expect(s.npcs.merchant!.icon).toBeNull();
-    expect(s.banks).toEqual({ wool: 5, coins: 0, owned: [] });
+    expect(s.banks).toEqual({ wool: 5, coins: 0, owned: [...FARM_BUILDS] });
     expect(s.settlement).toEqual({ coins: 0 });
   });
 
-  it('auto-upgrades buy in list order whenever coins cover the cost, never twice', () => {
-    // The purse is a parameter since #86 (`buyUpgrades(purse, owned)`), because the settlement's
-    // coins pay for the farm's builds now. The arithmetic is the prototype's, unchanged; this runs
-    // it on the settlement's purse, which is the one the world itself uses.
+  it('a fresh world owns all three builds already, and RULES.upgrades still carries their costs as reference data (#126)', () => {
+    // `buyUpgrades` is retired: the flowerbed, hay2, and the scarecrow are on the farm from a
+    // world's first day now (plan decision 19), so there is nothing left to auto-buy in list
+    // order. `RULES.upgrades` is unread by any gameplay path since this ticket, but stays as the
+    // reference cost table (state.ts's `FARM_BUILDS` doc comment, rules.ts's own).
     const s = calm();
-    s.settlement.coins = 100;
-    buyUpgrades(s.settlement, s.banks.owned);
-    expect(s.banks.owned).toEqual(['flowerbed', 'hay2']);
-    expect(s.settlement.coins).toBe(100 - 12 - 30);
-    s.settlement.coins += 2;
-    buyUpgrades(s.settlement, s.banks.owned);
     expect(s.banks.owned).toEqual(['flowerbed', 'hay2', 'scarecrow']);
-    expect(s.settlement.coins).toBe(0);
-    s.settlement.coins = 500;
-    buyUpgrades(s.settlement, s.banks.owned);
-    expect(s.banks.owned).toEqual(['flowerbed', 'hay2', 'scarecrow']);
-    expect(s.settlement.coins).toBe(500);
-    // The farm's own coins were never touched by any of it.
-    expect(s.banks.coins).toBe(0);
+    expect(s.banks.owned).toEqual([...FARM_BUILDS]);
     expect(RULES.upgrades).toEqual([
       ['flowerbed', 12],
       ['hay2', 30],
@@ -340,15 +332,15 @@ describe('the merchant’s visit', () => {
     ]);
   });
 
-  it('the coins action adds 50 to the settlement and buys at once; the farm\'s own purse never moves (#120)', () => {
-    // Before #120 this asserted `s.banks` came out `{ wool: 0, coins: 50 - 12 - 30, owned:
-    // ['flowerbed', 'hay2'] }` — the owner's tray paid the farm's own purse. The Foreman's grant on
-    // issue #120 moved it to match the market sale: the settlement pays, and buys, same as #86 left
-    // everything else doing.
+  it("the coins action adds 50 to the settlement and buys nothing — there is nothing left to buy (#120, #126)", () => {
+    // Before #126 this asserted `s.settlement` came out `{ coins: 50 - 12 - 30 }` and `s.banks`
+    // `{ wool: 0, coins: 0, owned: ['flowerbed', 'hay2'] }`: the tray's fifty coins bought the
+    // first two builds on the spot. Plan decision 19 retired the purchase entirely — the farm's
+    // three builds are on the farm from the start, so the button now only ever earns.
     const s = calm();
     applyIntent(s, { type: 'farmAction', action: 'coins' });
-    expect(s.settlement).toEqual({ coins: 50 - 12 - 30 });
-    expect(s.banks).toEqual({ wool: 0, coins: 0, owned: ['flowerbed', 'hay2'] });
+    expect(s.settlement).toEqual({ coins: 50 });
+    expect(s.banks).toEqual({ wool: 0, coins: 0, owned: [...FARM_BUILDS] });
     summonMerchant(s);
     const m = s.npcs.merchant;
     summonMerchant(s);

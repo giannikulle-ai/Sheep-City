@@ -28,7 +28,10 @@ import { createWeather, type Weather } from './weather';
  * calendar is read from — see clock.ts and calendar.ts; v9 (#86) adds `settlement` (the
  * settlement's coin stand-in, on the world and on the `ledger` snapshot), which is where the wool
  * the farmer walks to market is paid for now that nothing on the farm sells anything — see
- * `Settlement` below.
+ * `Settlement` below; v10 (#126, plan decision 19) fills `banks.owned` (on the world and on the
+ * `ledger` snapshot) with any of `FARM_BUILDS` a document does not already have — every world owns
+ * the flowerbed, hay2, and the scarecrow from its first day now, nothing buys them, and
+ * `buyUpgrades` is retired.
  *
  * PR #43 (deity intents) adds `actCmd` to `Sheep` and `Luna`, and `holdUntilMs` / `foggy` to
  * `Weather`, all as optional fields with no stored default: absent means what it always meant
@@ -36,7 +39,7 @@ import { createWeather, type Weather } from './weather';
  * this pattern for a field that needs a real default; it works here only because "absent" was
  * already the correct old behaviour.
  */
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 /** Stable actor ids. Sheep are `sheep-<n>`; Digital Luna is `luna`. */
 export type ActorId = string;
@@ -185,6 +188,19 @@ export interface Banks {
   coins: number;
   owned: string[];
 }
+
+/**
+ * The farm's three builds, in the order the prototype's `buyUpgrades` used to buy them
+ * (`packages/content/farm/upgrades.json`'s own order; its cost data stays in `RULES.upgrades` for
+ * reference, unread by any gameplay path since #126 retired the only thing that read it). Plan
+ * decision 19, 2026-09-09 22:50 UTC (the owner, asked whether they should keep buying themselves
+ * from the settlement's purse or wait for the owner's hand): "Just leave them on Luna farm. Like
+ * keep them there from start." So every world's `banks.owned` starts with all three — nothing buys
+ * them, on the farm or from the settlement — and the v10 migration (`save/migrations`) fills them
+ * into an older save. Section 3's "farm builds are the owner's" stands: these three are the farm's
+ * furniture, not growth.
+ */
+export const FARM_BUILDS = ['flowerbed', 'hay2', 'scarecrow'] as const;
 
 /**
  * The settlement's ledger, as a stand-in (#86; plan decision 12, "the economy is not the farm's").
@@ -453,7 +469,7 @@ export function createInitialState(seed: number, options: InitialStateOptions = 
     sheep,
     luna,
     npcs: { farmer: null, merchant: null, merchantAtMs: RULES.merchantFirstAtMs, lastVisitKey: -1 },
-    banks: { wool: 0, coins: 0, owned: [] },
+    banks: { wool: 0, coins: 0, owned: [...FARM_BUILDS] },
     settlement: { coins: 0 },
     life: { rabbit: null, bird: null, bflies, flies },
     ground: { prints: [], mud: [], wasSnowy: false },

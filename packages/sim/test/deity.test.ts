@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { LUNA_ID } from '../src/actors';
 import { hashState } from '../src/hash';
 import { ACT_VERBS, DEITY_WEATHER_KINDS, INTENT_TYPES, type DeityWeatherKind, type Intent } from '../src/intents';
-import { RULES, TICK_MS } from '../src/rules';
+import { hay2RegrowMult, RULES, TICK_MS } from '../src/rules';
 import { SaveError } from '../src/save/doc';
 import { fromSave, toSave } from '../src/save/serialize';
 import { createInitialState, type SimState } from '../src/state';
@@ -233,7 +233,9 @@ describe('act intent: a sheep', () => {
     expect(a.sheep[0]!.tagUntilMs).toBe(TICK_MS + RULES.petTagMs);
     // No tuft level moved beyond the ordinary regrowth every tuft gets every tick (tick.ts),
     // treat or no treat: the old per-tap bump is gone.
-    const grown = before.map((lvl) => Math.min(1, lvl + (TICK_MS / 1000) * RULES.tuftRegrowPerSec));
+    // PIN MOVED (#126): was plain `RULES.tuftRegrowPerSec` — `hay2` is owned from the start now,
+    // so every tuft's ordinary regrowth already carries its bonus.
+    const grown = before.map((lvl) => Math.min(1, lvl + (TICK_MS / 1000) * RULES.tuftRegrowPerSec * hay2RegrowMult(s.banks.owned)));
     a.tufts.forEach((t, i) => expect(t.level).toBeCloseTo(grown[i]!, 9));
   });
 
@@ -286,7 +288,9 @@ describe('act intent: Digital Luna', () => {
     expect(a.luna.icon).toBe('heart');
     expect(a.luna.tagUntilMs).toBe(TICK_MS + 1800);
     // No tuft level moved beyond the ordinary regrowth every tuft gets every tick (tick.ts).
-    const grown = before.map((lvl) => Math.min(1, lvl + (TICK_MS / 1000) * RULES.tuftRegrowPerSec));
+    // PIN MOVED (#126): was plain `RULES.tuftRegrowPerSec` — `hay2` is owned from the start now,
+    // so every tuft's ordinary regrowth already carries its bonus.
+    const grown = before.map((lvl) => Math.min(1, lvl + (TICK_MS / 1000) * RULES.tuftRegrowPerSec * hay2RegrowMult(s.banks.owned)));
     a.tufts.forEach((t, i) => expect(t.level).toBeCloseTo(grown[i]!, 9));
   });
 
@@ -553,12 +557,12 @@ describe('parity: no deity intent moves the pin', () => {
   it('luna-day.test.ts, seed 11: the end-of-day hash is unchanged', () => {
     let s = createInitialState(11);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('72b482515856e681'); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 16cca63404b910fb
+    expect(hashState(s)).toBe('c5a73b7b67dc560d' /* PIN MOVED (#126): was '72b482515856e681' */); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 16cca63404b910fb
   });
 
   it('sheep-day.test.ts, seed 71: the end-of-day hash is unchanged', () => {
     let s = createInitialState(71);
     for (let i = 0; i < 1800; i++) s = tick(s);
-    expect(hashState(s)).toBe('8971628f989ca315'); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 7cbfaceab05ef214
+    expect(hashState(s)).toBe('8f7b8a0e2b15e9e2' /* PIN MOVED (#126): was '8971628f989ca315' */); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 7cbfaceab05ef214
   });
 });

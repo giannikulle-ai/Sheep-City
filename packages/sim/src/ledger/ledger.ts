@@ -38,7 +38,10 @@ export interface Ledger {
   /**
    * The settlement's coin stand-in, as the state's `settlement` (#86). A district's numbers with
    * no actors in the room have to carry it, or a catch-up would sell the wool into nothing: the
-   * dawn market walk `advanceLedger` schedules pays into this, and `buyUpgrades` spends from it.
+   * dawn market walk `advanceLedger` schedules pays into this. Nothing spends from it yet — the
+   * farm's three builds are on the farm from the start (#126, `FARM_BUILDS` in state.ts) and
+   * `buyUpgrades` is retired — so it is left accruing for the owner's own future build table (plan
+   * section 3).
    */
   settlement: Settlement;
   /** Sim time of the merchant's next visit. */

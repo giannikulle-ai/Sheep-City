@@ -82,7 +82,7 @@ describe('sheep grow wool: moved, not changed', () => {
     const s = advance(createInitialState(11, { events: false }), 1800);
     const season = { ...s.season, realEpochMs: undefined, seed: undefined };
     const ledger = { ...s.ledger, season: { ...s.ledger.season, realEpochMs: undefined, seed: undefined }, settlement: undefined };
-    expect(hashState({ ...s, version: 6, events: undefined, season, ledger, settlement: undefined })).toBe('c69b538ba6cd2e56');
+    expect(hashState({ ...s, version: 6, events: undefined, season, ledger, settlement: undefined })).toBe('d153203a23e1f2e2' /* PIN MOVED (#126): was 'c69b538ba6cd2e56' */);
   });
 });
 
@@ -175,9 +175,11 @@ describe('the farmer walks to the market at dawn', () => {
     expect(sales[0]!.atMs).toBeGreaterThan(walks[0]!.atMs); // he stops, looks the flock over, then goes
     expect(s.banks.wool).toBe(0);
     expect(s.banks.coins).toBe(0); // the farm's own coins never move any more
-    // 5 x woolPrice = 15 into the settlement's purse, and the flower bed (12) bought straight out
-    // of it, which is the whole of the Foreman's proposal working end to end on one farm day.
-    expect(s.settlement.coins).toBe(5 * RULES.merchant.woolPrice - 12);
-    expect(s.banks.owned).toEqual(['flowerbed']);
+    // PIN MOVED (#126): was `5 * RULES.merchant.woolPrice - 12` (the flower bed bought straight
+    // back out of the same purse). `buyUpgrades` is retired — the farm's three builds are on the
+    // farm from the start now — so the sale only ever earns: 5 x woolPrice = 15 into the
+    // settlement's purse, and nothing spent back out of it.
+    expect(s.settlement.coins).toBe(5 * RULES.merchant.woolPrice);
+    expect(s.banks.owned).toEqual(['flowerbed', 'hay2', 'scarecrow']); // owned from the start, unmoved by the sale
   });
 });

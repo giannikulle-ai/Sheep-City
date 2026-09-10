@@ -40,11 +40,17 @@ export interface LedgerDiff {
   coins: number;
   /**
    * The settlement's coins now minus then (#86): what the market paid for the wool the farmer
-   * walked out at dawn, less whatever `buyUpgrades` spent on the farm's builds. This is the stock
-   * that actually moves now, and it is diffed like any other.
+   * walked out at dawn. This is the stock that actually moves now, and it is diffed like any
+   * other; nothing spends it back out any more (#126 retired `buyUpgrades`).
    */
   settlementCoins: number;
-  /** Upgrades owned now that were not then, in purchase order. */
+  /**
+   * Upgrades owned now that were not then, in purchase order. Always empty for any span the sim
+   * itself runs since #126: the farm's three builds are on the farm from the start (`FARM_BUILDS`,
+   * state.ts) and nothing ever adds to `banks.owned` after that. Kept generic — a hand-edited
+   * state, or a future owner's build table (plan section 3), can still grow the list and have it
+   * diffed and told the same way.
+   */
   upgrades: string[];
   weather: LedgerChange<WeatherKind>;
   season: LedgerChange<SeasonName>;

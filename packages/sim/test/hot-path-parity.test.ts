@@ -77,12 +77,12 @@ const BEFORE: readonly { seed: number; sheep: number; hash: string }[] = [
   // earned. Each line carries its own pre-#86 value. The one-sim-day worlds elsewhere (1,800 ticks,
   // test/engine-category.test.ts and the v4/v5/v6 views) did **not** move: at 45 s the bank is
   // still empty, so his visit moved nothing there before this ticket either.
-  { seed: 6, sheep: 5, hash: '68404d03511174b4' }, // moved in #86: the caravan stopped buying the wool bank; was 8b4c7ff08f37275e
-  { seed: 6, sheep: 40, hash: '9bc0115dfb5e251b' }, // moved in #86: the caravan stopped buying the wool bank; was d637ce8f1cf1d3ff
-  { seed: 7, sheep: 5, hash: '67604959187a3213' }, // moved in #86: the caravan stopped buying the wool bank; was de7c876e352c18ce
-  { seed: 7, sheep: 40, hash: '17e5d609b817fb49' }, // moved in #86: the caravan stopped buying the wool bank; was 8d66f001c3c251a0
-  { seed: 11, sheep: 5, hash: 'c4e83cd70257a118' }, // moved in #86: the caravan stopped buying the wool bank; was f35b857536c259a8
-  { seed: 11, sheep: 40, hash: '97950c3f9edbc3dd' }, // moved in #86: the caravan stopped buying the wool bank; was e6ff3ff1b1edd3b1
+  { seed: 6, sheep: 5, hash: 'f185fb70ec31942e' /* PIN MOVED (#126): was '68404d03511174b4' */ }, // moved in #86: the caravan stopped buying the wool bank; was 8b4c7ff08f37275e
+  { seed: 6, sheep: 40, hash: 'dd54cab128c641db' /* PIN MOVED (#126): was '9bc0115dfb5e251b' */ }, // moved in #86: the caravan stopped buying the wool bank; was d637ce8f1cf1d3ff
+  { seed: 7, sheep: 5, hash: '3cdb2b384ac6213e' /* PIN MOVED (#126): was '67604959187a3213' */ }, // moved in #86: the caravan stopped buying the wool bank; was de7c876e352c18ce
+  { seed: 7, sheep: 40, hash: '065b5bf142de78ef' /* PIN MOVED (#126): was '17e5d609b817fb49' */ }, // moved in #86: the caravan stopped buying the wool bank; was 8d66f001c3c251a0
+  { seed: 11, sheep: 5, hash: 'ae26081dd08f05ff' /* PIN MOVED (#126): was 'c4e83cd70257a118' */ }, // moved in #86: the caravan stopped buying the wool bank; was f35b857536c259a8
+  { seed: 11, sheep: 40, hash: '8b6be395eaf5361e' /* PIN MOVED (#126): was '97950c3f9edbc3dd' */ }, // moved in #86: the caravan stopped buying the wool bank; was e6ff3ff1b1edd3b1
 ];
 
 describe('hot path parity (#27)', () => {

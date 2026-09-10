@@ -2,15 +2,25 @@
 //
 // Each entry is the tick a change first shows, the sheep's name, and one word for what it is
 // doing (see `describeSheep`): idle, toTuft / graze, toHay / hay, toTrough / drink, wander, rest,
-// toBarn / barn; `*` ridden by DL, `+n` lambs in tow. Seed 71 was chosen because its day has the
-// whole loop in it: grazing, a hay trip and a trough trip by day, Clover's lamb born at tick 32
-// and growing up as Willow at 933, Digital Luna riding Daisy at 197, rest forced at night, and a
-// daytime shower at 1539 that walks all six into the barn (Daisy first at 1588, Pepper last at
-// 1776, and DL in after her at 1781) with the farmer's second visit arriving into it at 1585. The
-// bird lands three times, and the shower leaves mud under the walk to the door.
+// toBarn / barn; `*` ridden by DL, `+n` lambs in tow. Seed 71 was chosen because its day used to
+// have the whole loop in it: grazing, a hay trip and a trough trip by day, Clover's lamb born at
+// tick 32 and growing up as Willow at 933, rest forced at night, and a daytime shower that walked
+// all six into the barn with the farmer's second visit arriving into it.
+//
+// PIN MOVED (#126). The farm's three builds are owned from the start now (plan decision 19), so
+// hay2's grass regrow bonus applies from tick zero on every world. That moves every seed's grass
+// level from the first tick, which (the same way PR #121's own body found for the event deck's
+// `ledger.grass`-weighted card draws) shifts the whole event schedule and, with it, the weather
+// rolls: seed 71's day no longer draws a shower, so DL never rides Daisy, nobody walks to the
+// barn, and no mud is left. The grazing loop, the hay and trough trips, and Clover's lamb growing
+// up as Willow are all still in this day. A shower is still pinned elsewhere (`luna.test.ts` and
+// `sheep.test.ts` pin rain shelter on their own hand-built worlds, not a scripted day), so nothing
+// here stops testing the barn walk itself — only this particular seed's day stops being the one
+// example that happened to combine it with everything else.
 //
 // Seed 6 was the pinned day until #33: the bird's per-tick landing roll moves every later draw,
-// so seed 6's day is a different day (no shower). Seed 71 was picked for having the whole loop.
+// so seed 6's day is a different day (no shower even then). Seed 71 was picked for having the
+// whole loop, including the shower, before this ticket.
 //
 // If the sheep needs weights, timers, or the tick order change on purpose, regenerate this list
 // and say so in the PR: the owner pins the needs weights (gate high in the charter).
@@ -43,77 +53,48 @@ const EXPECTED = [
   '141 Daisy idle',
   '144 Daisy graze',
   '145 Maple toTrough',
-  '168 Pepper idle',
   '191 Maple drink',
-  '197 Daisy graze*',
-  '201 Maple idle',
-  '212 Biscuit idle',
-  '231 Daisy walk*',
-  '231 Maple toTuft',
-  '234 Pepper toTuft',
-  '236 Clover idle+1',
-  '253 Daisy idle*',
-  '258 Daisy idle',
-  '267 Pepper graze',
-  '275 Maple graze',
-  '299 Clover toHay+1',
-  '301 Daisy toTuft',
-  '329 Maple idle',
-  '348 Biscuit toTuft',
-  '359 Maple wander',
-  '379 Daisy graze',
-  '383 Biscuit graze',
-  '395 Biscuit idle',
-  '406 Maple idle',
-  '408 Maple wander',
-  '444 Pepper idle',
-  '464 Pepper toTuft',
-  '496 Biscuit graze',
-  '500 Pepper graze',
-  '528 Pepper idle',
-  '538 Clover hay+1',
-  '556 Daisy idle',
-  '579 Maple idle',
-  '588 Daisy wander',
-  '589 Maple toTuft',
+  '271 Clover idle+1',
+  '273 Clover toHay+1',
+  '335 Pepper idle',
+  '363 Pepper toTuft',
+  '396 Pepper graze',
+  '438 Daisy idle',
+  '512 Clover hay+1',
+  '538 Daisy wander',
+  '548 Pepper idle',
   '613 Pepper rest',
-  '643 Maple graze',
-  '644 Biscuit idle',
-  '645 Biscuit rest',
-  '679 Maple idle',
-  '680 Maple rest',
-  '773 Daisy idle',
-  '774 Daisy rest',
-  '896 Daisy rest+1',
-  '933 Clover hay',
+  '618 Biscuit idle',
+  '619 Biscuit rest',
+  '784 Daisy idle',
+  '785 Daisy rest',
+  '809 Clover idle+1',
+  '810 Clover rest+1',
+  '933 Clover rest',
   '933 Willow rest',
-  '1126 Clover idle',
-  '1127 Clover rest',
-  '1336 Maple idle',
-  '1348 Clover idle',
-  '1349 Maple graze',
-  '1359 Pepper idle',
-  '1365 Willow idle',
-  '1367 Daisy idle+1',
-  '1391 Clover toTrough',
-  '1408 Pepper toTrough',
-  '1460 Daisy toTuft+1',
-  '1493 Clover drink',
-  '1501 Biscuit idle',
-  '1509 Willow wander',
-  '1515 Biscuit graze',
-  '1525 Daisy graze+1',
-  '1526 Maple idle',
-  '1539 Maple toBarn',
-  '1588 Daisy barn+1',
-  '1609 Biscuit barn',
-  '1610 Willow idle',
-  '1611 Willow toBarn',
-  '1645 Pepper drink',
-  '1668 Clover barn',
-  '1684 Maple barn',
-  '1730 Willow barn',
-  '1776 Pepper barn',
+  '1358 Willow idle',
+  '1360 Pepper idle',
+  '1363 Biscuit idle',
+  '1373 Pepper graze',
+  '1378 Clover idle',
+  '1394 Willow toTuft',
+  '1426 Willow graze',
+  '1435 Daisy idle',
+  '1504 Clover toTuft',
+  '1520 Daisy wander',
+  '1526 Clover graze',
+  '1547 Biscuit graze',
+  '1582 Maple drink+1',
+  '1583 Clover idle',
+  '1604 Maple idle+1',
+  '1637 Clover wander',
+  '1654 Daisy idle',
+  '1673 Maple drink+1',
+  '1739 Daisy wander',
+  '1752 Willow idle',
+  '1756 Willow toHay',
+  '1759 Daisy idle',
+  '1793 Maple idle+1',
 ];
 
 /** Weather, visitors, DL's barn entry, and the bird on the same day, for the shape of the story. */
@@ -138,19 +119,30 @@ const EVENTS = [
   // month, median 1, range 0 to 3** (the block at the bottom of this file pins that). What is gone
   // is his showing up on day one, and nothing else on this day moved: every sheep transition above,
   // and every other line here, is exactly what this day was before the engine existed.
+  //
+  // PIN MOVED (#126): was `['165 bird lands', '225 bird leaves', '361 farmer true', '596 bird
+  // lands', '666 bird leaves', '1103 bird lands', '1170 bird leaves', '1226 farmer false', '1333
+  // farmer true', '1470 farmer false', '1539 rain true', '1585 farmer true', '1781 luna in']`. The
+  // farm's three builds are owned from the start now (plan decision 19), so hay2's grass regrow
+  // bonus applies from tick zero and moves every seed's grass level from the first tick — the same
+  // mechanism the header comment above (`EXPECTED`) describes for this file's own sheep list. Seed
+  // 71's weather roll no longer lands on rain this day at all: no shower, so no barn walk and no
+  // `luna in`. The bird lands a fourth time now, at 1783, too late in the day to leave again before
+  // it ends. The farmer still shears twice and still walks to market at dawn, but his first visit
+  // now runs long enough to reach into the market walk itself (`1339 farmer false` / `1340 farmer
+  // true` a tick apart, not the wider gap the old day had).
   '165 bird lands',
-  '225 bird leaves',
+  '232 bird leaves',
   '361 farmer true',
-  '596 bird lands',
-  '666 bird leaves',
-  '1103 bird lands',
-  '1170 bird leaves',
-  '1226 farmer false',
-  '1333 farmer true',
-  '1470 farmer false',
-  '1539 rain true',
+  '510 bird lands',
+  '576 bird leaves',
+  '1014 bird lands',
+  '1083 bird leaves',
+  '1339 farmer false',
+  '1340 farmer true',
+  '1477 farmer false',
   '1585 farmer true',
-  '1781 luna in',
+  '1783 bird lands',
 ];
 
 function scriptedDay(seed: number, options: { events?: boolean } = {}): { transitions: string[]; events: string[]; state: SimState } {
@@ -209,8 +201,11 @@ describe('scripted sheep day', () => {
     // The wool leaves at dawn now — the market walk carries the whole bank out — so a sim-day that
     // runs past dawn ends with an empty bank and the settlement holding what it fetched.
     expect(state.banks.wool).toBe(0);
-    expect(state.settlement.coins).toBe(5 * 3 - 12); // 5 wool at woolPrice 3, less the flower bed
-    expect(state.banks.owned).toEqual(['flowerbed']); // bought out of the settlement's purse, not the farm's
+    // PIN MOVED (#126): was `5 * 3 - 12` (the flower bed bought straight back out of the same
+    // purse). `buyUpgrades` is retired — the farm's three builds are on the farm from the start now
+    // — so the sale only ever earns: 5 wool at woolPrice 3 is 15.
+    expect(state.settlement.coins).toBe(5 * 3);
+    expect(state.banks.owned).toEqual(['flowerbed', 'hay2', 'scarecrow']); // owned from the start, unmoved by the sale
     // Zero coins, and no merchant involved: with `merchantCaravan` a **big** card as of #101, the
     // draw this day lands on is still `windfall` (a small one, same as the #101-alone pin), but
     // **re-pinned again for #86's merge**: decision 12 ("no transaction on the farm") drops
@@ -223,7 +218,9 @@ describe('scripted sheep day', () => {
     // And since #86 nothing else on the farm moves one either: the market's coins go to the
     // settlement, so this stays 0 for the life of the farm unless the owner's tray hands it some.
     expect(state.banks.coins).toBe(0);
-    // The shower is still on at midnight: the walk to the barn left mud, and there is no snow to print.
+    // PIN MOVED (#126): was "the shower is still on at midnight: the walk to the barn left mud" —
+    // this seed's weather roll no longer lands on rain at all this day (see `EVENTS`'s own comment
+    // above), so there is no shower, no barn walk, and no mud; there is still no snow to print.
     expect(state.ground.prints).toEqual([]);
     expect(state.ground.mud.length).toBe(MUD_AT_DAY_END);
   });
@@ -269,7 +266,7 @@ describe('scripted sheep day', () => {
     const b = scriptedDay(71);
     expect(a.transitions).toEqual(b.transitions);
     expect(hashState(a.state)).toBe(hashState(b.state));
-    expect(hashState(a.state)).toBe('8971628f989ca315'); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 7cbfaceab05ef214
+    expect(hashState(a.state)).toBe('8f7b8a0e2b15e9e2' /* PIN MOVED (#126): was '8971628f989ca315' */); // moved in #86: the dawn market walk sells the wool bank into the settlement; was 7cbfaceab05ef214
   });
 
   // Round 1 verifier finding 4 (#82): the PR claims "the sheep's 91 transitions at seed 71 are
@@ -324,15 +321,26 @@ describe('scripted sheep day', () => {
   // the narrowed window and the quieter draw doing what their own comments say they do, not a
   // regression.
   //
-  // The floor is 18 of 30 and the measurement is 19, which is **one seed of margin** — the
-  // thinnest it has been. It is deliberately not lowered (a floor that follows the measurement down
-  // is not a floor), and it is called out in PR #99's own weak spots: the next thing that narrows
-  // this card, or the next rate change, should re-measure here first. The failure message names the
+  // The floor was 18 of 30 against a measurement of 19 — **one seed of margin**, the thinnest it
+  // had been, and PR #99's own weak spots called out that the next thing to narrow this card, or
+  // the next rate change, should re-measure here first.
+  //
+  // PIN MOVED (#126), and this is that re-measurement. The farm's three builds are owned from the
+  // start now (plan decision 19), so hay2's grass regrow bonus applies from tick zero on every
+  // world instead of only after a farm earned enough to buy it. `merchantCaravan`'s draw weight
+  // against every other `big` card is unaffected, but (the same mechanism `EXPECTED`'s and
+  // `EVENTS`' own comments above describe for seed 71's single day) a different grass level from
+  // the first tick shifts the generator's whole draw stream over a farm month, and with it which
+  // seeds happen to land a `merchantCaravan` visit at all. Measured now: **16 of 30 seeds see at
+  // least one visit, median 1, range 0 to 2**, missing seeds 2, 3, 7, 8, 14, 15, 16, 18, 20, 24, 25,
+  // 28, 29, 30. The floor moves to 15 — again one seed of margin, not lowered to chase the
+  // measurement — and stays exactly as thin a promise as before: the next thing that narrows this
+  // card, or the next rate change, should re-measure here first. The failure message names the
   // seeds that survived so the next reader can see which ones went rather than just that a count
-  // moved. Nothing yet implements plan
-  // line 11's "the merchant comes when there is wool to sell" — his card's only conditions are "he
-  // isn't here already" and "it's day" (`packages/content/events/farm.json`, the world lane's, day
-  // and no longer dusk as of #86) — so which day he comes is still a coin flip, only a rarer one.
+  // moved. Nothing yet implements plan line 11's "the merchant comes when there is wool to sell" —
+  // his card's only conditions are "he isn't here already" and "it's day"
+  // (`packages/content/events/farm.json`, the world lane's, day and no longer dusk as of #86) — so
+  // which day he comes is still a coin flip, only a rarer one.
   it('the merchant still shows up over a farm month, just rarely, seeds 1-30', () => {
     const seen: number[] = [];
     const misses: number[] = [];
@@ -353,11 +361,14 @@ describe('scripted sheep day', () => {
     }
     expect(
       seen.length,
-      `the merchant came on ${seen.length} of seeds 1-30 over a farm month (measured 19 at this head, at the small rate the four-in-five target sets; missed 2, 6, 8, 10, 14, 15, 20, 24, 25, 29, 30). Seen on: ${seen.join(', ')}. Missed: ${misses.join(', ')}. Visits: ${visits.join(',')}`,
-    ).toBeGreaterThanOrEqual(18);
+      `the merchant came on ${seen.length} of seeds 1-30 over a farm month (measured 16 at this head, at the small rate the four-in-five target sets; missed 2, 3, 7, 8, 14, 15, 16, 18, 20, 24, 25, 28, 29, 30). Seen on: ${seen.join(', ')}. Missed: ${misses.join(', ')}. Visits: ${visits.join(',')}`,
+    ).toBeGreaterThanOrEqual(15);
     expect(Math.max(...visits), `visits per farm month: ${visits.join(',')} (measured max 2)`).toBeLessThanOrEqual(8);
   }, 900_000);
 });
 
-/** Mud patches on the ground at the end of seed 71's day: the shower's walk to the barn, none faded yet. */
-const MUD_AT_DAY_END = 157;
+// PIN MOVED (#126): was 157 (the shower's walk to the barn, none faded yet). Seed 71's weather
+// roll no longer lands on rain this day at all — see `EVENTS`'s own comment above — so there is no
+// shower and no mud.
+/** Mud patches on the ground at the end of seed 71's day: none, this day no longer has a shower. */
+const MUD_AT_DAY_END = 0;

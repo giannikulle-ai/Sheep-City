@@ -11,7 +11,7 @@ import { LFOOT, LUNA_SIZE, SFOOT, SHEEP_SIZE, SPOT, insideField, randomFoot } fr
 import { landBird } from './life';
 import { nextFloat } from './rng';
 import { RULES, TICK_MS } from './rules';
-import { buyUpgrades, summonFarmer, summonMerchant } from './npcs';
+import { summonFarmer, summonMerchant } from './npcs';
 import type { ActorId, Luna, Sheep, SimState } from './state';
 import { setWeather, type WeatherKind, type WeatherMode } from './weather';
 
@@ -491,11 +491,12 @@ function farmAction(state: SimState, act: FarmAction): void {
       return;
     case 'coins':
       // The owner's tray (#120, Foreman grant on issue #120): fifty coins into the **settlement's**
-      // purse and a buy out of it, same as the market sale does. `banks.coins` is untouched — since
-      // #86 nothing on the farm moves it, this button included, and the owner's own future build
-      // table (plan section 3) still finds it exactly where it was.
+      // purse, same as the market sale earns into it. `buyUpgrades` used to spend straight back out
+      // of it here; retired since #126 (plan decision 19) — the farm's three builds are on the farm
+      // from the start now, so there is nothing left for this button to buy. `banks.coins` is
+      // untouched — since #86 nothing on the farm moves it, this button included, and the owner's
+      // own future build table (plan section 3) still finds it exactly where it was.
       state.settlement.coins += 50;
-      buyUpgrades(state.settlement, state.banks.owned);
       return;
     default: {
       const never: never = act;

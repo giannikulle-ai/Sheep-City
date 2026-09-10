@@ -83,7 +83,9 @@ describe('save text', () => {
     it('a v7 save loaded with a real time lands on that real date', () => {
       const text = v7Envelope(advance(createInitialState(5), 200), 1_700_000_000_000);
       const r = restore(text, { realNowMs: DECEMBER_15 });
-      expect(r.sim.version).toBe(9); // the save-version pin: was 8; #86 bumps the schema for `settlement`
+      // PIN MOVED (#126, Foreman grant): was 9; #126 bumps the schema again, filling `banks.owned`
+      // with the farm's three builds. Before that: was 8; #86 bumped it for `settlement`.
+      expect(r.sim.version).toBe(10); // the save-version pin
       // The world's own real date is the time the host passed: the migration anchors the epoch so
       // that `realEpochMs + elapsedMs` comes out at exactly `realNowMs` on this first load.
       expect(realMsOf(r.sim.season)).toBe(DECEMBER_15);

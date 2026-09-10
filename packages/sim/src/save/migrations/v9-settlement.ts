@@ -13,9 +13,11 @@
 // fills from the world's next dawn — the first market walk after the load — while `banks.coins`
 // keeps whatever it held, untouched, for the owner's own build table (plan section 3).
 //
-// The practical consequence, stated rather than hidden: a loaded v8 world stops buying farm builds
-// until the settlement has earned enough for the next one, because `buyUpgrades` reads the
-// settlement's purse now (npcs.ts). Nothing already owned is lost — `banks.owned` is untouched.
+// The practical consequence, stated rather than hidden at the time: a loaded v8 world stopped
+// buying farm builds until the settlement had earned enough for the next one, because
+// `buyUpgrades` read the settlement's purse (npcs.ts). Nothing already owned was lost —
+// `banks.owned` stayed untouched. (As of v10, #126: `buyUpgrades` is retired and every world owns
+// all three builds outright, so this paragraph is v9's history, not v10's present.)
 //
 // **It never throws.** Every field is read defensively; a document with no world, or a world with
 // no ledger, is `validateWorld`'s to refuse with a real message, not this file's to blow up on. A

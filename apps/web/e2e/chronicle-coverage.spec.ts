@@ -199,9 +199,13 @@ for (const c of CASES) {
 // The "earlier pages" reopen (issue #49): dismiss the page a real gap opened, reopen it from the
 // farm bar's list, and check every invariant above holds again — a page read back off the store
 // must trace to the chronicle exactly as freshly-shown one does. Uses a *running* world (no
-// `freeze`), the same seed 17 / gap 120 pair `storybook.spec.ts`'s "and N more" test measures at
-// 5 shown + 10 more = 15 rows (#113: this gap's raw chronicle is 52 entries, but every repeated
-// card collapses into one row before the page is built, so "and N more" is 10 rows, not 47).
+// `freeze`), the same seed 17 / gap 120 pair `storybook.spec.ts`'s "and N more" test measures.
+// PIN MOVED (#126): was 5 shown + 10 more = 15 rows (this gap's raw chronicle was 52 entries).
+// The farm's three builds are owned from the start now (plan decision 19), so hay2's grass regrow
+// bonus applies from tick zero and shifts this gap's whole catch-up draw stream — see
+// `storybook.spec.ts`'s own comment on the same case for the mechanism. Measured on this head: 5
+// shown + 7 more = 12 rows (this gap's raw chronicle is 49 entries; #113 collapses every repeated
+// card into one row before the page is built, so "and N more" is 7 rows, not 44).
 // Either way the reopened card is exercised with plenty behind "and N more".
 test('reopening a page from "earlier pages" traces to the chronicle exactly as the first showing did', async ({ page }) => {
   const errors: string[] = [];
@@ -237,16 +241,17 @@ test('reopening a page from "earlier pages" traces to the chronicle exactly as t
   expect(reopened.title).toBe(firstShowing.title);
   expect(reopened.subtitle).toBe(firstShowing.subtitle);
   expect(reopened.shownCount).toBe(5);
-  // Measured on this head: 15 rows (5 shown + 10 more) — #113 collapses this gap's 52 raw entries
-  // (`app.sim().chronicle.entries.length`) into 15 distinct lines, several of them a collapsed "N
+  // PIN MOVED (#126): was 15 (5 shown + 10 more), see the header comment above. Measured on this
+  // head: 12 rows (5 shown + 7 more) — #113 collapses this gap's 49 raw entries
+  // (`app.sim().chronicle.entries.length`) into 12 distinct lines, several of them a collapsed "N
   // times" row; `expectCardTracesToChronicle` above already checked every raw entry is accounted
   // for by exactly one row's backing set.
-  expect(reopened.apiLines.length).toBe(15);
+  expect(reopened.apiLines.length).toBe(12);
 
   // and the same holds once "and N more" is opened on the reopened card too
   await expect(page.locator('#storyMore')).toHaveCount(1);
   await page.locator('#storyMore').click();
   const reopenedExpanded = await readCardCoverage(page);
   expectCardTracesToChronicle(reopenedExpanded);
-  expect(reopenedExpanded.domRows.length).toBe(15); // 5 shown + the gap's own 10 collapsed rows
+  expect(reopenedExpanded.domRows.length).toBe(12); // PIN MOVED (#126): was 15; 5 shown + the gap's own 7 collapsed rows
 });
